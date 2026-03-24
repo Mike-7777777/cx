@@ -25,6 +25,8 @@ func main() {
 		runSync()
 	case "status":
 		runStatus()
+	case "usage":
+		runUsage()
 	case "--version", "version":
 		printVersion()
 	case "--help", "help":
@@ -52,6 +54,7 @@ Commands:
   switch        Switch active Claude Code account
   sync          Sync account state
   status        Show full account status
+  usage         Analyze token usage and costs
 
   version       Print version information
   help          Show this help message

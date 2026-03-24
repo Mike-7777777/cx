@@ -1,0 +1,97 @@
+package config
+
+import (
+	"encoding/json"
+	"errors"
+	"fmt"
+	"os"
+	"path/filepath"
+)
+
+// Account represents a single named Claude Code account in the registry.
+type Account struct {
+	ConfigDir string `json:"config_dir"`
+}
+
+// Registry holds all known accounts and tracks which is primary.
+// The path field is intentionally unexported so it is never serialised.
+type Registry struct {
+	Version  int                `json:"version"`
+	Primary  string             `json:"primary"`
+	Accounts map[string]Account `json:"accounts"`
+	path     string
+}
+
+// LoadOrCreateRegistry loads the registry from path, or returns a new empty
+// registry if the file does not yet exist.
+func LoadOrCreateRegistry(path string) (*Registry, error) {
+	r := &Registry{
+		Version:  1,
+		Accounts: make(map[string]Account),
+		path:     path,
+	}
+
+	data, err := os.ReadFile(path)
+	if errors.Is(err, os.ErrNotExist) {
+		return r, nil
+	}
+	if err != nil {
+		return nil, fmt.Errorf("reading registry %q: %w", path, err)
+	}
+
+	if err := json.Unmarshal(data, r); err != nil {
+		return nil, fmt.Errorf("parsing registry %q: %w", path, err)
+	}
+
+	// Ensure the map is always non-nil after unmarshalling.
+	if r.Accounts == nil {
+		r.Accounts = make(map[string]Account)
+	}
+	r.path = path
+	return r, nil
+}
+
+// AddAccount inserts or replaces the account identified by name.
+func (r *Registry) AddAccount(name, configDir string) {
+	r.Accounts[name] = Account{ConfigDir: configDir}
+}
+
+// ResolveConfigDir returns the config directory for the named account.
+// When the stored config_dir is empty, it falls back to DetectConfigDir.
+// Returns an error when the account does not exist.
+func (r *Registry) ResolveConfigDir(name string) (string, error) {
+	acc, ok := r.Accounts[name]
+	if !ok {
+		return "", fmt.Errorf("account %q not found in registry", name)
+	}
+	if acc.ConfigDir != "" {
+		return acc.ConfigDir, nil
+	}
+	return DetectConfigDir()
+}
+
+// Save writes the registry to its path with mode 0600.
+func (r *Registry) Save() error {
+	if err := os.MkdirAll(filepath.Dir(r.path), 0o700); err != nil {
+		return fmt.Errorf("creating registry directory: %w", err)
+	}
+
+	data, err := json.MarshalIndent(r, "", "  ")
+	if err != nil {
+		return fmt.Errorf("serialising registry: %w", err)
+	}
+
+	if err := os.WriteFile(r.path, data, 0o600); err != nil {
+		return fmt.Errorf("writing registry %q: %w", r.path, err)
+	}
+	return nil
+}
+
+// RegistryPath returns the default registry file location (~/.cc-monitor.json).
+func RegistryPath() (string, error) {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return "", fmt.Errorf("resolving home directory: %w", err)
+	}
+	return filepath.Join(home, ".cc-monitor.json"), nil
+}

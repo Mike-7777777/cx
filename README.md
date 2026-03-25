@@ -11,10 +11,10 @@ can't coexist with custom statusline logic. Neither supports multi-account. cc-m
 ## Install
 
 ```bash
-go install github.com/MasaYan24/cc-monitor@latest
+go install github.com/Mike-7777777/cc-monitor@latest
 ```
 
-Or download a pre-built binary from [Releases](https://github.com/MasaYan24/cc-monitor/releases).
+Or download a pre-built binary from [Releases](https://github.com/Mike-7777777/cc-monitor/releases).
 
 ## Quick Start
 

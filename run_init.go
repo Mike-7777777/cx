@@ -5,8 +5,8 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/MasaYan24/cc-monitor/internal/config"
-	"github.com/MasaYan24/cc-monitor/internal/platform"
+	"github.com/Mike-7777777/cc-monitor/internal/config"
+	"github.com/Mike-7777777/cc-monitor/internal/platform"
 )
 
 // sharedLinkDirs are subdirectories that are junctioned/symlinked from the

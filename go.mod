@@ -1,4 +1,4 @@
-module github.com/MasaYan24/cc-monitor
+module github.com/Mike-7777777/cc-monitor
 
 go 1.24.0
 

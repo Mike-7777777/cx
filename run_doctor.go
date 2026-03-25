@@ -156,35 +156,16 @@ func runDoctor() {
 	}
 
 	// Check for project-level statusLine overrides in the current directory.
-	// A .claude/settings.json with a statusLine key overrides the global config,
-	// which is a common source of "statusline not working" issues.
+	// These override global config and are a common "statusline not working" cause.
 	cwd, cwdErr := os.Getwd()
 	if cwdErr == nil {
-		projSettingsPath := filepath.Join(cwd, ".claude", "settings.json")
-		if projData, readErr := os.ReadFile(projSettingsPath); readErr == nil {
-			var projSettings map[string]any
-			if json.Unmarshal(projData, &projSettings) == nil {
-				if sl, hasSL := projSettings["statusLine"]; hasSL {
-					slMap, _ := sl.(map[string]any)
-					cmd, _ := slMap["command"].(string)
-					if cmd != "" && !strings.Contains(cmd, "cx") {
-						results = append(results, checkResult{
-							warn: true, label: "project statusline override",
-							detail: fmt.Sprintf(".claude/settings.json overrides global statusline: %s", cmd),
-						})
-					} else if strings.Contains(cmd, "cc-monitor") {
-						results = append(results, checkResult{
-							label: "project statusline override",
-							detail: ".claude/settings.json points to old cc-monitor path",
-						})
-					} else {
-						results = append(results, checkResult{
-							ok: true, label: "project statusline",
-							detail: "ok",
-						})
-					}
-				}
-			}
+		projDir := filepath.Join(cwd, ".claude")
+		if _, statErr := os.Stat(filepath.Join(projDir, "settings.json")); statErr == nil {
+			pOk, pMsg := checkStatuslinePath(projDir)
+			results = append(results, checkResult{
+				ok: pOk, warn: !pOk, label: "project statusline",
+				detail: pMsg,
+			})
 		}
 	}
 
@@ -265,8 +246,10 @@ func checkSettingsSync(primaryDir, accDir string) (bool, string) {
 	return false, "differs from primary (run sync)"
 }
 
-// checkStatuslinePath verifies the statusLine command in settings.json uses
-// forward slashes. Backslash paths break Git Bash stdin piping on Windows.
+// checkStatuslinePath verifies the statusLine command in settings.json is valid:
+// - No backslash paths (breaks on some shells)
+// - Binary at the path actually exists
+// - Auto-fixes stale paths when possible
 func checkStatuslinePath(configDir string) (bool, string) {
 	settingsPath := filepath.Join(configDir, "settings.json")
 	data, err := os.ReadFile(settingsPath)
@@ -297,24 +280,46 @@ func checkStatuslinePath(configDir string) (bool, string) {
 		return false, "no command field"
 	}
 
+	needsWrite := false
+
+	// Fix 1: backslash paths.
 	if strings.Contains(cmd, "\\") {
-		// Auto-fix: rewrite with forward slashes.
-		fixed := strings.ReplaceAll(cmd, "\\", "/")
-		slMap["command"] = fixed
+		cmd = strings.ReplaceAll(cmd, "\\", "/")
+		slMap["command"] = cmd
+		needsWrite = true
+	}
+
+	// Fix 2: verify the binary exists (skip bare commands like "cx statusline").
+	if !strings.HasPrefix(cmd, "cx ") {
+		// Extract binary path from command (first space-separated token, unquoted).
+		binPath := cmd
+		if idx := strings.Index(cmd, " statusline"); idx > 0 {
+			binPath = strings.Trim(cmd[:idx], "\"'")
+		}
+		if _, statErr := os.Stat(binPath); os.IsNotExist(statErr) {
+			// Binary not found — try to auto-fix with current cx binary.
+			if self, exeErr := os.Executable(); exeErr == nil {
+				fixed := resolveStatuslineCommand(self)
+				slMap["command"] = fixed
+				needsWrite = true
+				cmd = fixed
+			} else {
+				return false, fmt.Sprintf("binary not found: %s", binPath)
+			}
+		}
+	}
+
+	if needsWrite {
 		settings["statusLine"] = slMap
 		out, mErr := json.MarshalIndent(settings, "", "  ")
 		if mErr == nil {
 			if wErr := os.WriteFile(settingsPath, out, 0o600); wErr == nil {
-				return true, fmt.Sprintf("auto-fixed backslash path → %s", fixed)
+				return true, fmt.Sprintf("auto-fixed → %s", cmd)
 			}
 		}
-		return false, fmt.Sprintf("backslash in path breaks Git Bash piping: %s", cmd)
 	}
 
-	if strings.Contains(cmd, "cx") || strings.Contains(cmd, "cc-monitor") {
-		return true, "ok"
-	}
-	return true, fmt.Sprintf("custom: %s", cmd)
+	return true, "ok"
 }
 
 func printResults(results []checkResult, useColor bool) {

@@ -29,6 +29,12 @@ func main() {
 		runStatus()
 	case "usage":
 		runUsage()
+	case "completion":
+		runCompletion()
+	case "doctor":
+		runDoctor()
+	case "watch":
+		runWatch()
 	case "--version", "version":
 		printVersion()
 	case "--help", "help":
@@ -58,6 +64,9 @@ Commands:
   sync          Sync account state
   status        Show full account status
   usage         Analyze token usage and costs
+  completion    Output shell completion script (bash, fish, powershell)
+  doctor        Run health checks on all accounts
+  watch         Poll and auto-sync config changes to secondary accounts
 
   version       Print version information
   help          Show this help message

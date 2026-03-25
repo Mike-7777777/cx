@@ -38,6 +38,7 @@ func runUsage() {
 	mode := "daily"
 	var accountName string
 	var scanAll bool
+	var allTools bool
 	var sinceStr string
 	var noCache bool
 	var breakdown bool
@@ -112,6 +113,8 @@ func runUsage() {
 			accountName = args[i]
 		case "--all":
 			scanAll = true
+		case "--all-tools":
+			allTools = true
 		case "--since":
 			if i+1 >= len(args) {
 				fmt.Fprintln(os.Stderr, "cc-monitor usage: --since requires a YYYY-MM-DD value")
@@ -151,18 +154,33 @@ func runUsage() {
 	cachePath := usageCachePath()
 
 	// Daily mode with caching (only when format is table/json and no breakdown/project/compare/subagent needed).
-	if mode == "daily" && !noCache && !breakdown && !byProject && !compare && !subagents && outputFormat != "csv" && outputFormat != "md" {
+	// --all-tools bypasses the cache because other CLIs are not tracked there.
+	if mode == "daily" && !noCache && !allTools && !breakdown && !byProject && !compare && !subagents && outputFormat != "csv" && outputFormat != "md" {
 		runUsageDailyCached(configDirs, cachePath, sinceTime, outputFormat, showROI)
 		return
 	}
 
 	// All other modes require full scan for individual Entry structs.
 	var entries []usage.Entry
-	for _, dir := range configDirs {
-		if err := usage.ScanDir(dir, func(e usage.Entry) {
+	if allTools {
+		// --all-tools: scan the primary config dir plus all other CLI tool dirs.
+		primaryDir, err := config.DetectConfigDir()
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "cc-monitor usage: detecting primary config dir: %v\n", err)
+			os.Exit(1)
+		}
+		if err := usage.ScanAllCLIs(primaryDir, func(e usage.Entry) {
 			entries = append(entries, e)
 		}); err != nil {
-			fmt.Fprintf(os.Stderr, "cc-monitor usage: scanning %s: %v\n", dir, err)
+			fmt.Fprintf(os.Stderr, "cc-monitor usage: scanning all CLIs: %v\n", err)
+		}
+	} else {
+		for _, dir := range configDirs {
+			if err := usage.ScanDir(dir, func(e usage.Entry) {
+				entries = append(entries, e)
+			}); err != nil {
+				fmt.Fprintf(os.Stderr, "cc-monitor usage: scanning %s: %v\n", dir, err)
+			}
 		}
 	}
 
@@ -215,6 +233,15 @@ func runUsage() {
 				printJSON(bd)
 			} else {
 				fmt.Print(usage.FormatSubagentBreakdown(bd, useColor))
+			}
+		}
+
+		if allTools {
+			toolReports := usage.AggregateByCLITool(entries)
+			if isJSON {
+				printJSON(toolReports)
+			} else {
+				fmt.Print(usage.FormatCLIToolTable(toolReports, useColor))
 			}
 		}
 

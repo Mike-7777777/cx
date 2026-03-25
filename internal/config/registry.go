@@ -27,7 +27,6 @@ type StatuslineConfig struct {
 	ShowRate7d       *bool  `json:"show_rate_7d,omitempty"`
 	ShowOtherAccount *bool  `json:"show_other_account,omitempty"`
 	ShowSwitchHint   *bool  `json:"show_switch_hint,omitempty"`
-	Locale           string `json:"locale,omitempty"` // "en" (default), "zh", "ja", "ko"
 }
 
 // IsEnabled returns the value of a *bool field, defaulting to true when nil.

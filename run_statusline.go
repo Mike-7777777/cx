@@ -295,7 +295,6 @@ func renderAndPrint(input *statusline.Input, other *statusline.OtherAccount, acc
 				ShowOtherAccount: sc.ShowOtherAccount,
 				ShowSwitchHint:   sc.ShowSwitchHint,
 			}
-			opts.Locale = sc.Locale
 		}
 	}
 

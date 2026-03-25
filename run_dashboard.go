@@ -193,7 +193,7 @@ func renderAccountsSection(useColor bool) string {
 		if rl.FiveHour.IsReset() {
 			fivePct = 0
 			fiveBar = format.ProgressBar(0, 5)
-			fiveReset = "reset"
+			fiveReset = format.LabelReset
 		} else {
 			fivePct = rl.FiveHour.UsedPercentage
 			fiveBar = format.ProgressBar(fivePct, 5)

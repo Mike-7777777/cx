@@ -286,7 +286,7 @@ func installShellWrapper(shell platform.Shell) bool {
 		fmt.Fprintf(os.Stderr, "  Failed to open %s: %v\n", profilePath, err)
 		return false
 	}
-	defer f.Close()
+	defer func() { _ = f.Close() }()
 
 	if _, err := f.WriteString("\n" + wrapper + "\n"); err != nil {
 		fmt.Fprintf(os.Stderr, "  Failed to write to %s: %v\n", profilePath, err)

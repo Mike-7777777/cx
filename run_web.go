@@ -129,10 +129,10 @@ func runWeb() {
 	case <-ctx.Done():
 		fmt.Fprintln(os.Stderr, "shutting down...")
 		shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-		defer cancel()
 		if err := srv.Shutdown(shutdownCtx); err != nil {
 			fmt.Fprintf(os.Stderr, "cx web: shutdown error: %v\n", err)
 		}
+		cancel()
 	case err := <-errCh:
 		if err != nil && err != http.ErrServerClosed {
 			fmt.Fprintf(os.Stderr, "cx web: %v\n", err)

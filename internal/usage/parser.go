@@ -61,7 +61,7 @@ func ParseFile(path string, fn func(Entry)) error {
 	if err != nil {
 		return err
 	}
-	defer f.Close()
+	defer func() { _ = f.Close() }()
 
 	reader := bufio.NewReaderSize(f, 256*1024) // 256KB read buffer
 	for {
@@ -126,7 +126,7 @@ func ParseFileFrom(path string, offset int64, fn func(Entry)) (int64, error) {
 	if err != nil {
 		return 0, err
 	}
-	defer f.Close()
+	defer func() { _ = f.Close() }()
 
 	if offset > 0 {
 		if _, err := f.Seek(offset, io.SeekStart); err != nil {

@@ -9,6 +9,9 @@ linters:
       - path: _test\.go
         linters:
           - errcheck
+      - linters:
+          - staticcheck
+        text: "QF"
   settings:
     gocritic:
       enabled-tags:
@@ -18,6 +21,7 @@ linters:
         - rangeValCopy
         - commentedOutCode
         - ifElseChain
+        - exitAfterDefer
     errcheck:
       exclude-functions:
         - (io.Closer).Close

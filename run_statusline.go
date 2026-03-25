@@ -335,7 +335,7 @@ func withLogFile(fn func(*log.Logger)) {
 	if err != nil {
 		return
 	}
-	defer f.Close()
+	defer func() { _ = f.Close() }()
 	fn(log.New(f, "", log.LstdFlags))
 }
 

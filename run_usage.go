@@ -17,14 +17,31 @@ import (
 // user's config directory (next to the registry).
 const usageCacheFilename = "cc-monitor-usage-cache.json"
 
+// subscriptionCosts maps plan names to monthly costs in USD.
+var subscriptionCosts = map[string]float64{
+	"Max 20x": 200.0,
+	"Max 5x":  100.0,
+}
+
+// totalSubscriptionCost returns the combined monthly subscription cost.
+func totalSubscriptionCost() float64 {
+	var total float64
+	for _, cost := range subscriptionCosts {
+		total += cost
+	}
+	return total
+}
+
 func runUsage() {
-	// Parse subcommand: cc-monitor usage [daily|session|blocks] [flags]
+	// Parse subcommand: cc-monitor usage [daily|session|blocks|monthly|weekly] [flags]
 	mode := "daily"
-	var jsonOutput bool
 	var accountName string
 	var scanAll bool
 	var sinceStr string
 	var noCache bool
+	var breakdown bool
+	var showROI bool
+	outputFormat := "table" // table, json, csv, md
 
 	args := os.Args[2:]
 	flagStart := 0
@@ -32,11 +49,11 @@ func runUsage() {
 	// First positional arg is mode if it doesn't start with "--".
 	if len(args) > 0 && !strings.HasPrefix(args[0], "--") {
 		switch args[0] {
-		case "daily", "session", "blocks":
+		case "daily", "session", "blocks", "monthly", "weekly":
 			mode = args[0]
 			flagStart = 1
 		default:
-			fmt.Fprintf(os.Stderr, "cc-monitor usage: unknown mode %q (expected daily, session, blocks)\n", args[0])
+			fmt.Fprintf(os.Stderr, "cc-monitor usage: unknown mode %q (expected daily, session, blocks, monthly, weekly)\n", args[0])
 			os.Exit(1)
 		}
 	}
@@ -45,7 +62,24 @@ func runUsage() {
 	for i := flagStart; i < len(args); i++ {
 		switch args[i] {
 		case "--json":
-			jsonOutput = true
+			outputFormat = "json"
+		case "--format":
+			if i+1 >= len(args) {
+				fmt.Fprintln(os.Stderr, "cc-monitor usage: --format requires a value (table, json, csv, md)")
+				os.Exit(1)
+			}
+			i++
+			switch args[i] {
+			case "table", "json", "csv", "md":
+				outputFormat = args[i]
+			default:
+				fmt.Fprintf(os.Stderr, "cc-monitor usage: unknown format %q (expected table, json, csv, md)\n", args[i])
+				os.Exit(1)
+			}
+		case "--breakdown":
+			breakdown = true
+		case "--roi":
+			showROI = true
 		case "--account":
 			if i+1 >= len(args) {
 				fmt.Fprintln(os.Stderr, "cc-monitor usage: --account requires a value")
@@ -81,6 +115,8 @@ func runUsage() {
 		sinceTime = t
 	}
 
+	isJSON := outputFormat == "json"
+
 	// Determine which config directories to scan.
 	configDirs, err := resolveConfigDirs(accountName, scanAll)
 	if err != nil {
@@ -91,14 +127,13 @@ func runUsage() {
 	// Resolve cache file path (next to the registry, in home dir).
 	cachePath := usageCachePath()
 
-	// Daily mode with caching: fully incremental via cached daily map.
-	if mode == "daily" && !noCache {
-		runUsageDailyCached(configDirs, cachePath, sinceTime, jsonOutput)
+	// Daily mode with caching (only when format is table/json and no breakdown needed).
+	if mode == "daily" && !noCache && !breakdown && outputFormat != "csv" && outputFormat != "md" {
+		runUsageDailyCached(configDirs, cachePath, sinceTime, outputFormat, showROI)
 		return
 	}
 
-	// Session/block modes (or --no-cache daily): full scan required because
-	// we need individual Entry structs with session IDs and timestamps.
+	// All other modes require full scan for individual Entry structs.
 	var entries []usage.Entry
 	for _, dir := range configDirs {
 		if err := usage.ScanDir(dir, func(e usage.Entry) {
@@ -124,28 +159,49 @@ func runUsage() {
 		os.Exit(0)
 	}
 
-	// Color is disabled when --json is set (machine output) or terminal doesn't support it.
-	useColor := !jsonOutput && platform.ANSIEnabled()
+	// Color is disabled for machine-readable output or when terminal doesn't support it.
+	useColor := outputFormat == "table" && !isJSON && platform.ANSIEnabled()
 
 	switch mode {
 	case "daily":
-		// Only reachable with --no-cache.
 		reports := usage.AggregateDailies(entries)
-		if jsonOutput {
+		outputDailyReports(reports, outputFormat, useColor, breakdown, showROI)
+
+	case "monthly":
+		reports := usage.AggregateMonthly(entries)
+		if isJSON {
 			printJSON(reports)
 		} else {
-			fmt.Print(usage.FormatDailyTable(reports, useColor))
+			fmt.Print(usage.FormatMonthlyTable(reports, useColor))
 		}
+		if showROI {
+			totalCost := sumMonthlyReportsCost(reports)
+			fmt.Print(usage.FormatROI(totalCost, totalSubscriptionCost(), useColor))
+		}
+
+	case "weekly":
+		reports := usage.AggregateWeekly(entries)
+		if isJSON {
+			printJSON(reports)
+		} else {
+			fmt.Print(usage.FormatWeeklyTable(reports, useColor))
+		}
+		if showROI {
+			totalCost := sumWeeklyReportsCost(reports)
+			fmt.Print(usage.FormatROI(totalCost, totalSubscriptionCost(), useColor))
+		}
+
 	case "session":
 		reports := usage.AggregateSessions(entries)
-		if jsonOutput {
+		if isJSON {
 			printJSON(reports)
 		} else {
 			fmt.Print(usage.FormatSessionTable(reports, useColor))
 		}
+
 	case "blocks":
 		reports := usage.AggregateBlocks(entries)
-		if jsonOutput {
+		if isJSON {
 			printJSON(reports)
 		} else {
 			fmt.Print(usage.FormatBlockTable(reports, useColor))
@@ -153,10 +209,33 @@ func runUsage() {
 	}
 }
 
+// outputDailyReports handles rendering daily reports in all supported formats.
+func outputDailyReports(reports []usage.DailyReport, outputFormat string, useColor, breakdown, showROI bool) {
+	switch outputFormat {
+	case "json":
+		printJSON(reports)
+	case "csv":
+		fmt.Print(usage.FormatDailyCSV(reports))
+	case "md":
+		fmt.Print(usage.FormatDailyMarkdown(reports))
+	default: // "table"
+		if breakdown {
+			fmt.Print(usage.FormatDailyTableWithBreakdown(reports, useColor))
+		} else {
+			fmt.Print(usage.FormatDailyTable(reports, useColor))
+		}
+	}
+
+	if showROI {
+		totalCost := sumDailyReportsCost(reports)
+		fmt.Print(usage.FormatROI(totalCost, totalSubscriptionCost(), useColor))
+	}
+}
+
 // runUsageDailyCached implements the fully incremental daily report path.
 // It loads the cache, scans only changed files, merges new entries into the
 // cached daily map, saves the cache, and outputs the report.
-func runUsageDailyCached(configDirs []string, cachePath string, sinceTime time.Time, jsonOutput bool) {
+func runUsageDailyCached(configDirs []string, cachePath string, sinceTime time.Time, outputFormat string, showROI bool) {
 	cache, err := usage.LoadUsageCache(cachePath)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "cc-monitor usage: loading cache: %v\n", err)
@@ -202,13 +281,46 @@ func runUsageDailyCached(configDirs []string, cachePath string, sinceTime time.T
 		os.Exit(0)
 	}
 
-	useColor := !jsonOutput && platform.ANSIEnabled()
+	isJSON := outputFormat == "json"
+	useColor := !isJSON && platform.ANSIEnabled()
 
-	if jsonOutput {
+	if isJSON {
 		printJSON(reports)
 	} else {
 		fmt.Print(usage.FormatDailyTable(reports, useColor))
 	}
+
+	if showROI {
+		totalCost := sumDailyReportsCost(reports)
+		fmt.Print(usage.FormatROI(totalCost, totalSubscriptionCost(), useColor))
+	}
+}
+
+// sumDailyReportsCost sums up the total API cost across all daily reports.
+func sumDailyReportsCost(reports []usage.DailyReport) float64 {
+	var total float64
+	for _, r := range reports {
+		total += r.Summary.CostUSD
+	}
+	return total
+}
+
+// sumMonthlyReportsCost sums up the total API cost across all monthly reports.
+func sumMonthlyReportsCost(reports []usage.MonthlyReport) float64 {
+	var total float64
+	for _, r := range reports {
+		total += r.Summary.CostUSD
+	}
+	return total
+}
+
+// sumWeeklyReportsCost sums up the total API cost across all weekly reports.
+func sumWeeklyReportsCost(reports []usage.WeeklyReport) float64 {
+	var total float64
+	for _, r := range reports {
+		total += r.Summary.CostUSD
+	}
+	return total
 }
 
 // usageCachePath returns the path for the usage cache file.

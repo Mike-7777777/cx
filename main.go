@@ -35,6 +35,10 @@ func main() {
 		runDoctor()
 	case "watch":
 		runWatch()
+	case "dashboard":
+		runDashboard()
+	case "web":
+		runWeb()
 	case "--version", "version":
 		printVersion()
 	case "--help", "help":
@@ -67,6 +71,8 @@ Commands:
   completion    Output shell completion script (bash, fish, powershell)
   doctor        Run health checks on all accounts
   watch         Poll and auto-sync config changes to secondary accounts
+  dashboard     Real-time TUI dashboard with accounts, usage, and sessions
+  web           Open browser-based dashboard (localhost HTTP server)
 
   version       Print version information
   help          Show this help message

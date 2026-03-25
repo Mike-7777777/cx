@@ -8,14 +8,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 ## [Unreleased]
 
 ### Added
+- `cx sessions` command: list recent CC sessions across all accounts
+- `cx resume` command: resume a session by fuzzy match, picker, or `--last`
 - `cx config` command: show/main/rename/set email|alias
 - Auto-read identity from `.claude.json` (email, displayName, tier, CC version, session count)
-- `cx status` shows subscription tier column and main marker
-- `cx doctor` auto-fixes backslash paths in statusline config
+- `cx status` shows subscription tier column, main marker, and 7d reset date
+- 7d daily budget indicator in statusline: `~14%/d` (green/yellow/red)
+- `cx doctor` auto-fixes stale statusline paths and project-level overrides
 - Graceful statusline fallback when CC doesn't pipe stdin data
+- Smart statusline path: uses `cx statusline` if in PATH, else absolute path
 - GoReleaser config for Homebrew tap and Scoop bucket
 - golangci-lint configuration and CI lint job
-- CONTRIBUTING.md, SECURITY.md, Makefile
+- CONTRIBUTING.md, SECURITY.md, CHANGELOG.md, Makefile
 
 ### Fixed
 - Statusline broken on Windows: backslash paths break Git Bash stdin pipe
@@ -27,9 +31,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - Shell wrapper not updating on re-run of `cx setup`
 
 ### Changed
+- Renamed "primary" to "main" across entire codebase (CLI, JSON, docs)
+- Other-account statusline line is now opt-in (default off)
+- UI labels centralized in `format/labels.go`
 - `ResolveConfigDir` uses `DefaultConfigDir` for empty config_dir (ignores env override)
 - `DetectConfigDir` delegates to `DefaultConfigDir` (DRY)
 - Consolidated `readAccountInfo` replaces separate credential/identity readers
-- Unused `fallbackScores` and `writeJSONError` removed
+- Unused code removed (`fallbackScores`, `writeJSONError`)
 - `interface{}` modernized to `any`
 - Unused HTTP handler parameters replaced with `_`

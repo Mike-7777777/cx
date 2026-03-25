@@ -185,7 +185,9 @@ cx completion powershell | Out-String | Invoke-Expression
 | `run [-- claude-args]` | Auto-select best account and launch `claude` |
 | `run --prefer <name>` | Prefer a specific account (fall back if >80% usage) |
 | `run --balance` | Round-robin across accounts for max throughput |
-| `status` | All accounts: auth, tier, rate limits, routing recommendation |
+| `status` | All accounts: auth, tier, rate limits, 7d reset date |
+| `sessions [--all]` | List recent CC sessions across all accounts |
+| `resume [term\|--last]` | Resume a session by fuzzy match or picker |
 | `config` | Show full config: email, tier, CC version, session count |
 | `config main <name>` | Change main account |
 | `config rename <old> <new>` | Rename an account |

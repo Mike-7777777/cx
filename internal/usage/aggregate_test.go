@@ -483,6 +483,283 @@ func TestFormatBlockTable(t *testing.T) {
 	}
 }
 
+// --- U4: Per-message table tests ---
+
+func TestFormatMessagesTable(t *testing.T) {
+	entries := loadSampleEntries(t)
+	table := FormatMessagesTable(entries, false)
+
+	for _, col := range []string{"Timestamp", "Model", "Input", "Output", "Cache Read", "Cache Create", "Total", "Cost"} {
+		if !strings.Contains(table, col) {
+			t.Errorf("messages table missing column header %q", col)
+		}
+	}
+	if !strings.Contains(table, "claude-opus-4-6") {
+		t.Error("messages table missing model name")
+	}
+	if !strings.Contains(table, "$") {
+		t.Error("messages table missing cost")
+	}
+	if !strings.Contains(table, "3 msgs") {
+		t.Errorf("messages table missing entry count in total row")
+	}
+}
+
+// --- U5: Per-project aggregation tests ---
+
+func TestAggregateByProject(t *testing.T) {
+	entries := []Entry{
+		{
+			Model:       "claude-opus-4-6",
+			Timestamp:   time.Date(2026, 3, 24, 10, 0, 0, 0, time.UTC),
+			Usage:       TokenUsage{InputTokens: 100, OutputTokens: 200},
+			ProjectPath: "project-alpha",
+		},
+		{
+			Model:       "claude-opus-4-6",
+			Timestamp:   time.Date(2026, 3, 24, 11, 0, 0, 0, time.UTC),
+			Usage:       TokenUsage{InputTokens: 300, OutputTokens: 400},
+			ProjectPath: "project-alpha",
+		},
+		{
+			Model:       "claude-sonnet-4-6",
+			Timestamp:   time.Date(2026, 3, 24, 12, 0, 0, 0, time.UTC),
+			Usage:       TokenUsage{InputTokens: 50, OutputTokens: 100},
+			ProjectPath: "project-beta",
+		},
+	}
+
+	reports := AggregateByProject(entries)
+	if len(reports) != 2 {
+		t.Fatalf("expected 2 project reports, got %d", len(reports))
+	}
+
+	// project-alpha has higher cost (opus model), should be first.
+	if reports[0].Project != "project-alpha" {
+		t.Errorf("first project: got %q, want %q", reports[0].Project, "project-alpha")
+	}
+	if reports[0].Summary.EntryCount != 2 {
+		t.Errorf("project-alpha entry count: got %d, want 2", reports[0].Summary.EntryCount)
+	}
+	if reports[0].Summary.InputTokens != 400 {
+		t.Errorf("project-alpha input: got %d, want 400", reports[0].Summary.InputTokens)
+	}
+	if reports[1].Project != "project-beta" {
+		t.Errorf("second project: got %q, want %q", reports[1].Project, "project-beta")
+	}
+	if reports[1].Summary.EntryCount != 1 {
+		t.Errorf("project-beta entry count: got %d, want 1", reports[1].Summary.EntryCount)
+	}
+}
+
+func TestFormatProjectTable(t *testing.T) {
+	reports := []ProjectReport{
+		{
+			Project: "project-alpha",
+			Summary: UsageSummary{TotalTokens: 1000, CostUSD: 1.50, EntryCount: 5},
+		},
+		{
+			Project: "project-beta",
+			Summary: UsageSummary{TotalTokens: 500, CostUSD: 0.50, EntryCount: 3},
+		},
+	}
+
+	table := FormatProjectTable(reports, false)
+	for _, col := range []string{"Project", "Tokens", "Cost", "Msgs"} {
+		if !strings.Contains(table, col) {
+			t.Errorf("project table missing column header %q", col)
+		}
+	}
+	if !strings.Contains(table, "project-alpha") {
+		t.Error("project table missing project-alpha")
+	}
+	if !strings.Contains(table, "Total") {
+		t.Error("project table missing Total row")
+	}
+}
+
+// --- U7: Trend comparison tests ---
+
+func TestAggregateTrend(t *testing.T) {
+	since := time.Date(2026, 3, 22, 0, 0, 0, 0, time.UTC)
+
+	entries := []Entry{
+		// Previous period: 2026-03-20 and 2026-03-21
+		{
+			Model:     "claude-opus-4-6",
+			Timestamp: time.Date(2026, 3, 20, 10, 0, 0, 0, time.UTC),
+			Usage:     TokenUsage{InputTokens: 100, OutputTokens: 200},
+		},
+		{
+			Model:     "claude-opus-4-6",
+			Timestamp: time.Date(2026, 3, 21, 10, 0, 0, 0, time.UTC),
+			Usage:     TokenUsage{InputTokens: 150, OutputTokens: 250},
+		},
+		// Current period: 2026-03-22 and 2026-03-23
+		{
+			Model:     "claude-opus-4-6",
+			Timestamp: time.Date(2026, 3, 22, 10, 0, 0, 0, time.UTC),
+			Usage:     TokenUsage{InputTokens: 200, OutputTokens: 300},
+		},
+		{
+			Model:     "claude-opus-4-6",
+			Timestamp: time.Date(2026, 3, 23, 10, 0, 0, 0, time.UTC),
+			Usage:     TokenUsage{InputTokens: 250, OutputTokens: 350},
+		},
+	}
+
+	pairs := AggregateTrend(entries, since)
+	if len(pairs) == 0 {
+		t.Fatal("expected at least one trend pair")
+	}
+
+	// Last pair should be the Total row.
+	total := pairs[len(pairs)-1]
+	if total.Date != "Total" {
+		t.Errorf("last pair should be Total, got %q", total.Date)
+	}
+	if total.CurrentTokens == 0 {
+		t.Error("total current tokens should not be zero")
+	}
+	if total.PreviousTokens == 0 {
+		t.Error("total previous tokens should not be zero")
+	}
+}
+
+func TestFormatTrendTable(t *testing.T) {
+	pairs := []TrendPair{
+		{Date: "2026-03-22", CurrentTokens: 1000, PreviousTokens: 800, ChangePercent: 25.0, CurrentCost: 0.10, PreviousCost: 0.08, CostChangePct: 25.0},
+		{Date: "Total", CurrentTokens: 1000, PreviousTokens: 800, ChangePercent: 25.0, CurrentCost: 0.10, PreviousCost: 0.08, CostChangePct: 25.0},
+	}
+
+	table := FormatTrendTable(pairs, false)
+	if !strings.Contains(table, "current") {
+		t.Error("trend table missing 'current' header")
+	}
+	if !strings.Contains(table, "previous") {
+		t.Error("trend table missing 'previous' header")
+	}
+	if !strings.Contains(table, "Change") {
+		t.Error("trend table missing 'Change' header")
+	}
+	if !strings.Contains(table, "Total") {
+		t.Error("trend table missing Total row")
+	}
+	if !strings.Contains(table, "+25.0%") {
+		t.Error("trend table missing percentage change")
+	}
+}
+
+// --- U10: Subagent cost tracking tests ---
+
+func TestAggregateSubagents(t *testing.T) {
+	entries := []Entry{
+		{
+			Model:      "claude-opus-4-6",
+			Timestamp:  time.Date(2026, 3, 24, 10, 0, 0, 0, time.UTC),
+			Usage:      TokenUsage{InputTokens: 100, OutputTokens: 200},
+			IsSubagent: false,
+		},
+		{
+			Model:      "claude-opus-4-6",
+			Timestamp:  time.Date(2026, 3, 24, 11, 0, 0, 0, time.UTC),
+			Usage:      TokenUsage{InputTokens: 300, OutputTokens: 400},
+			IsSubagent: false,
+		},
+		{
+			Model:      "claude-haiku-4-5-20251001",
+			Timestamp:  time.Date(2026, 3, 24, 12, 0, 0, 0, time.UTC),
+			Usage:      TokenUsage{InputTokens: 50, OutputTokens: 100},
+			IsSubagent: true,
+		},
+	}
+
+	bd := AggregateSubagents(entries)
+
+	if bd.MainCount != 2 {
+		t.Errorf("main count: got %d, want 2", bd.MainCount)
+	}
+	if bd.SubagentCount != 1 {
+		t.Errorf("subagent count: got %d, want 1", bd.SubagentCount)
+	}
+	if bd.MainTokens != 1000 { // (100+200) + (300+400)
+		t.Errorf("main tokens: got %d, want 1000", bd.MainTokens)
+	}
+	if bd.SubagentTokens != 150 { // 50+100
+		t.Errorf("subagent tokens: got %d, want 150", bd.SubagentTokens)
+	}
+	if bd.MainCost <= 0 {
+		t.Error("main cost should be positive")
+	}
+	if bd.SubagentCost <= 0 {
+		t.Error("subagent cost should be positive")
+	}
+}
+
+func TestFormatSubagentBreakdown(t *testing.T) {
+	bd := SubagentBreakdown{
+		MainCost:       1500.00,
+		SubagentCost:   243.32,
+		MainTokens:     10000000,
+		SubagentTokens: 1500000,
+		MainCount:      500,
+		SubagentCount:  100,
+	}
+
+	text := FormatSubagentBreakdown(bd, false)
+	if !strings.Contains(text, "Subagent Breakdown") {
+		t.Error("missing header")
+	}
+	if !strings.Contains(text, "Main sessions") {
+		t.Error("missing main sessions line")
+	}
+	if !strings.Contains(text, "Subagents") {
+		t.Error("missing subagents line")
+	}
+	if !strings.Contains(text, "$1500.00") {
+		t.Error("missing main cost")
+	}
+	if !strings.Contains(text, "$243.32") {
+		t.Error("missing subagent cost")
+	}
+}
+
+// --- U5: extractPathMeta tests ---
+
+func TestExtractPathMeta(t *testing.T) {
+	tests := []struct {
+		relPath     string
+		wantProject string
+		wantSub     bool
+	}{
+		{
+			relPath:     "I--google_drive-homebase/abc123.jsonl",
+			wantProject: "I--google_drive-homebase",
+			wantSub:     false,
+		},
+		{
+			relPath:     "I--google_drive-homebase/abc123/subagents/agent-xyz.jsonl",
+			wantProject: "I--google_drive-homebase",
+			wantSub:     true,
+		},
+		{
+			relPath:     "simple-project/session.jsonl",
+			wantProject: "simple-project",
+			wantSub:     false,
+		},
+	}
+
+	for _, tc := range tests {
+		proj, isSub := extractPathMeta(tc.relPath)
+		if proj != tc.wantProject {
+			t.Errorf("extractPathMeta(%q) project: got %q, want %q", tc.relPath, proj, tc.wantProject)
+		}
+		if isSub != tc.wantSub {
+			t.Errorf("extractPathMeta(%q) subagent: got %v, want %v", tc.relPath, isSub, tc.wantSub)
+		}
+	}
+}
+
 func TestFormatJSON(t *testing.T) {
 	entries := loadSampleEntries(t)
 	reports := AggregateDailies(entries)

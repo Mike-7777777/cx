@@ -206,6 +206,177 @@ func AggregateWeekly(entries []Entry) []WeeklyReport {
 	return reports
 }
 
+// ProjectReport summarizes usage for a single project directory.
+type ProjectReport struct {
+	Project string       `json:"Project"`
+	Summary UsageSummary `json:"Summary"`
+}
+
+// AggregateByProject groups entries by their ProjectPath.
+// Returns sorted by cost descending (heaviest project first).
+func AggregateByProject(entries []Entry) []ProjectReport {
+	byProject := make(map[string]*UsageSummary)
+
+	for _, e := range entries {
+		proj := e.ProjectPath
+		if proj == "" {
+			proj = "(unknown)"
+		}
+		s, ok := byProject[proj]
+		if !ok {
+			s = &UsageSummary{}
+			byProject[proj] = s
+		}
+		addEntry(s, e)
+	}
+
+	reports := make([]ProjectReport, 0, len(byProject))
+	for proj, s := range byProject {
+		reports = append(reports, ProjectReport{Project: proj, Summary: *s})
+	}
+	sort.Slice(reports, func(i, j int) bool {
+		return reports[i].Summary.CostUSD > reports[j].Summary.CostUSD
+	})
+	return reports
+}
+
+// TrendPair holds current and previous period values for trend comparison.
+type TrendPair struct {
+	Date            string  `json:"Date"`
+	CurrentTokens   int64   `json:"CurrentTokens"`
+	PreviousTokens  int64   `json:"PreviousTokens"`
+	CurrentCost     float64 `json:"CurrentCost"`
+	PreviousCost    float64 `json:"PreviousCost"`
+	ChangePercent   float64 `json:"ChangePercent"`   // token change %
+	CostChangePct   float64 `json:"CostChangePct"`   // cost change %
+}
+
+// AggregateTrend compares the current period (since to now) with the previous
+// period of equal length. Returns day-by-day pairs plus an overall total pair.
+// If since is zero, defaults to 7 days ago.
+func AggregateTrend(entries []Entry, since time.Time) []TrendPair {
+	now := time.Now().UTC()
+	if since.IsZero() {
+		since = now.AddDate(0, 0, -7)
+	}
+	since = since.UTC()
+
+	// Current period: [since, now]
+	// Period length in days.
+	days := int(now.Sub(since).Hours()/24) + 1
+	if days < 1 {
+		days = 1
+	}
+
+	// Previous period: [since - days, since - 1 day]
+	prevStart := since.AddDate(0, 0, -days)
+
+	// Build daily maps for both periods.
+	currentByDay := make(map[string]UsageSummary)
+	previousByDay := make(map[string]UsageSummary)
+
+	for _, e := range entries {
+		ts := e.Timestamp.UTC()
+		dateKey := ts.Format("2006-01-02")
+
+		if !ts.Before(since) && !ts.After(now) {
+			s := currentByDay[dateKey]
+			addEntry(&s, e)
+			currentByDay[dateKey] = s
+		} else if !ts.Before(prevStart) && ts.Before(since) {
+			s := previousByDay[dateKey]
+			addEntry(&s, e)
+			previousByDay[dateKey] = s
+		}
+	}
+
+	// Build day-indexed pairs.
+	var pairs []TrendPair
+	var totalCurrent, totalPrevious int64
+	var totalCostCurrent, totalCostPrevious float64
+
+	for i := 0; i < days; i++ {
+		curDate := since.AddDate(0, 0, i).Format("2006-01-02")
+		prevDate := prevStart.AddDate(0, 0, i).Format("2006-01-02")
+
+		cur := currentByDay[curDate]
+		prev := previousByDay[prevDate]
+
+		var changePct, costChangePct float64
+		if prev.TotalTokens > 0 {
+			changePct = float64(cur.TotalTokens-prev.TotalTokens) / float64(prev.TotalTokens) * 100
+		}
+		if prev.CostUSD > 0 {
+			costChangePct = (cur.CostUSD - prev.CostUSD) / prev.CostUSD * 100
+		}
+
+		pairs = append(pairs, TrendPair{
+			Date:           curDate,
+			CurrentTokens:  cur.TotalTokens,
+			PreviousTokens: prev.TotalTokens,
+			CurrentCost:    cur.CostUSD,
+			PreviousCost:   prev.CostUSD,
+			ChangePercent:  changePct,
+			CostChangePct:  costChangePct,
+		})
+
+		totalCurrent += cur.TotalTokens
+		totalPrevious += prev.TotalTokens
+		totalCostCurrent += cur.CostUSD
+		totalCostPrevious += prev.CostUSD
+	}
+
+	// Append a total row.
+	var totalChange, totalCostChange float64
+	if totalPrevious > 0 {
+		totalChange = float64(totalCurrent-totalPrevious) / float64(totalPrevious) * 100
+	}
+	if totalCostPrevious > 0 {
+		totalCostChange = (totalCostCurrent - totalCostPrevious) / totalCostPrevious * 100
+	}
+	pairs = append(pairs, TrendPair{
+		Date:           "Total",
+		CurrentTokens:  totalCurrent,
+		PreviousTokens: totalPrevious,
+		CurrentCost:    totalCostCurrent,
+		PreviousCost:   totalCostPrevious,
+		ChangePercent:  totalChange,
+		CostChangePct:  totalCostChange,
+	})
+
+	return pairs
+}
+
+// SubagentBreakdown holds the main vs subagent cost split.
+type SubagentBreakdown struct {
+	MainCost       float64 `json:"MainCost"`
+	SubagentCost   float64 `json:"SubagentCost"`
+	MainTokens     int64   `json:"MainTokens"`
+	SubagentTokens int64   `json:"SubagentTokens"`
+	MainCount      int     `json:"MainCount"`
+	SubagentCount  int     `json:"SubagentCount"`
+}
+
+// AggregateSubagents splits entries into main session vs subagent totals.
+func AggregateSubagents(entries []Entry) SubagentBreakdown {
+	var b SubagentBreakdown
+	for _, e := range entries {
+		cost := CalculateCost(e.Model, e.Usage)
+		total := e.Usage.InputTokens + e.Usage.OutputTokens +
+			e.Usage.CacheCreationInputTokens + e.Usage.CacheReadInputTokens
+		if e.IsSubagent {
+			b.SubagentCost += cost
+			b.SubagentTokens += total
+			b.SubagentCount++
+		} else {
+			b.MainCost += cost
+			b.MainTokens += total
+			b.MainCount++
+		}
+	}
+	return b
+}
+
 // AggregateBlocks groups entries into 5-hour blocks aligned to midnight UTC.
 // Returns sorted by block start time.
 func AggregateBlocks(entries []Entry) []BlockReport {

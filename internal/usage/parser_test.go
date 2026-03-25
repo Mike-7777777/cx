@@ -213,4 +213,34 @@ func TestScanDir(t *testing.T) {
 	if len(entries) != 2 {
 		t.Errorf("expected 2 entries (main + subagent), got %d", len(entries))
 	}
+
+	// Verify ProjectPath and IsSubagent are populated.
+	var mainEntry, subEntry *Entry
+	for i := range entries {
+		if entries[i].IsSubagent {
+			subEntry = &entries[i]
+		} else {
+			mainEntry = &entries[i]
+		}
+	}
+
+	if mainEntry == nil {
+		t.Fatal("missing main session entry")
+	}
+	if mainEntry.ProjectPath != "test-project" {
+		t.Errorf("main entry ProjectPath: got %q, want %q", mainEntry.ProjectPath, "test-project")
+	}
+	if mainEntry.IsSubagent {
+		t.Error("main entry should not be flagged as subagent")
+	}
+
+	if subEntry == nil {
+		t.Fatal("missing subagent entry")
+	}
+	if subEntry.ProjectPath != "test-project" {
+		t.Errorf("subagent entry ProjectPath: got %q, want %q", subEntry.ProjectPath, "test-project")
+	}
+	if !subEntry.IsSubagent {
+		t.Error("subagent entry should be flagged as subagent")
+	}
 }

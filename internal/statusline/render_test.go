@@ -3,6 +3,7 @@ package statusline
 import (
 	"strings"
 	"testing"
+	"time"
 )
 
 func ptrF64(v float64) *float64 { return &v }
@@ -384,6 +385,119 @@ func TestRender_CompactNoOtherLine(t *testing.T) {
 	// Compact mode always outputs exactly 1 line, even with other account.
 	if len(lines) != 1 {
 		t.Fatalf("compact mode should produce 1 line even with other account, got %d", len(lines))
+	}
+}
+
+func TestRender_DailyBudget(t *testing.T) {
+	now := time.Now()
+
+	tests := []struct {
+		name       string
+		usedPct    float64
+		daysLeft   float64
+		wantBudget string // expected ~N%/d substring
+		wantColor  string // "green", "yellow", or "red"
+	}{
+		{
+			name:       "high usage, 2 days left -> yellow budget",
+			usedPct:    80,
+			daysLeft:   2,
+			wantBudget: "~10%/d",
+			wantColor:  "green", // perDay=10, >= 10 -> green
+		},
+		{
+			name:       "low usage, 5 days left -> green budget",
+			usedPct:    20,
+			daysLeft:   5,
+			wantBudget: "~16%/d",
+			wantColor:  "green", // perDay=16
+		},
+		{
+			name:       "very high usage, 2 days left -> yellow budget",
+			usedPct:    90,
+			daysLeft:   2,
+			wantBudget: "~5%/d",
+			wantColor:  "yellow", // perDay=5, < 10
+		},
+		{
+			name:       "zero usage, 7 days left -> green budget",
+			usedPct:    0,
+			daysLeft:   7,
+			wantBudget: "~14%/d",
+			wantColor:  "green", // perDay=14.28
+		},
+		{
+			name:       "critical usage, 2 days left -> red budget",
+			usedPct:    96,
+			daysLeft:   2,
+			wantBudget: "~2%/d",
+			wantColor:  "red", // perDay=2, < 5
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			resetAt := now.Add(time.Duration(tt.daysLeft * 24 * float64(time.Hour)))
+
+			input := &Input{
+				Model:         Model{ID: "claude-opus-4-6", DisplayName: "Opus 4.6"},
+				ContextWindow: ContextWindow{UsedPercentage: ptrF64(10.0)},
+				RateLimits: &InputRateLimits{
+					SevenDay: &RateWindow{
+						UsedPercentage: tt.usedPct,
+						ResetsAt:       resetAt.Unix(),
+					},
+				},
+			}
+
+			// Render without color to check the budget value.
+			lines := Render(input, nil, false)
+			if len(lines) != 1 {
+				t.Fatalf("got %d lines, want 1", len(lines))
+			}
+
+			if !strings.Contains(lines[0], tt.wantBudget) {
+				t.Errorf("line missing budget %q: %q", tt.wantBudget, lines[0])
+			}
+
+			// Render with color to verify the budget color.
+			colorLines := Render(input, nil, true)
+			colorLine := colorLines[0]
+
+			// The budget string is wrapped in a color code.
+			var wantCode string
+			switch tt.wantColor {
+			case "green":
+				wantCode = "\033[32m" + tt.wantBudget
+			case "yellow":
+				wantCode = "\033[33m" + tt.wantBudget
+			case "red":
+				wantCode = "\033[31m" + tt.wantBudget
+			}
+			if !strings.Contains(colorLine, wantCode) {
+				t.Errorf("budget color mismatch: want %q in %q", wantCode, colorLine)
+			}
+		})
+	}
+}
+
+func TestRender_DailyBudgetNotShownWhenDaysLow(t *testing.T) {
+	// When daysLeft <= 0.1, no budget string should appear.
+	resetAt := time.Now().Add(1 * time.Hour) // ~0.04 days
+	input := &Input{
+		Model:         Model{ID: "claude-opus-4-6", DisplayName: "Opus 4.6"},
+		ContextWindow: ContextWindow{UsedPercentage: ptrF64(10.0)},
+		RateLimits: &InputRateLimits{
+			SevenDay: &RateWindow{
+				UsedPercentage: 99,
+				ResetsAt:       resetAt.Unix(),
+			},
+		},
+	}
+
+	lines := Render(input, nil, false)
+	if strings.Contains(lines[0], "%/d") {
+		t.Errorf("budget should not appear when daysLeft <= 0.1: %q", lines[0])
 	}
 }
 

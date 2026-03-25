@@ -45,7 +45,7 @@ func runSync() {
 		if targetDir == "" {
 			continue
 		}
-		fmt.Printf("syncing %q → %q\n", name, targetDir)
+		fmt.Fprintf(os.Stderr, "syncing %q → %q\n", name, targetDir)
 		if err := syncFiles(primaryDir, targetDir, force); err != nil {
 			fmt.Fprintf(os.Stderr, "cc-monitor sync: %v\n", err)
 			os.Exit(1)
@@ -80,23 +80,23 @@ func syncFiles(srcDir, dstDir string, force bool) error {
 			if statErr == nil && dstInfo.ModTime().After(srcInfo.ModTime()) {
 				srcBase := filepath.Base(srcDir)
 				dstBase := filepath.Base(dstDir)
-				fmt.Printf("[cc-monitor] %s in %s is newer than %s.\n", rel, dstBase, srcBase)
-				fmt.Printf("  %s: %s (%.1fKB)\n",
+				fmt.Fprintf(os.Stderr, "[cc-monitor] %s in %s is newer than %s.\n", rel, dstBase, srcBase)
+				fmt.Fprintf(os.Stderr, "  %s: %s (%.1fKB)\n",
 					dstBase,
 					dstInfo.ModTime().Format("2006-01-02 15:04:05"),
 					float64(dstInfo.Size())/1024,
 				)
-				fmt.Printf("  %s: %s (%.1fKB)\n",
+				fmt.Fprintf(os.Stderr, "  %s: %s (%.1fKB)\n",
 					srcBase,
 					srcInfo.ModTime().Format("2006-01-02 15:04:05"),
 					float64(srcInfo.Size())/1024,
 				)
-				fmt.Printf("  Overwrite %s with %s? [y/N] ", dstBase, srcBase)
+				fmt.Fprintf(os.Stderr, "  Overwrite %s with %s? [y/N] ", dstBase, srcBase)
 
 				line, _ := reader.ReadString('\n')
 				line = strings.TrimSpace(line)
 				if line != "y" && line != "Y" {
-					fmt.Printf("  skipped %s\n", rel)
+					fmt.Fprintf(os.Stderr, "  skipped %s\n", rel)
 					continue
 				}
 			}
@@ -113,7 +113,7 @@ func syncFiles(srcDir, dstDir string, force bool) error {
 		if err := os.WriteFile(dst, data, 0o600); err != nil {
 			return fmt.Errorf("writing %q: %w", dst, err)
 		}
-		fmt.Printf("  synced %s\n", rel)
+		fmt.Fprintf(os.Stderr, "  synced %s\n", rel)
 	}
 	return nil
 }

@@ -77,7 +77,7 @@ func runInit() {
 			fmt.Fprintf(os.Stderr, "cc-monitor init: linking %q → %q: %v\n", dst, src, err)
 			os.Exit(1)
 		}
-		fmt.Printf("  linked %s\n", rel)
+		fmt.Fprintf(os.Stderr, "  linked %s\n", rel)
 	}
 
 	// Sync shared config files.
@@ -112,8 +112,8 @@ func runInit() {
 		os.Exit(1)
 	}
 
-	fmt.Printf("initialized account %q at %s\n", name, targetDir)
-	fmt.Printf("next step: CLAUDE_CONFIG_DIR=%s claude auth login\n", targetDir)
+	fmt.Fprintf(os.Stderr, "initialized account %q at %s\n", name, targetDir)
+	fmt.Fprintf(os.Stderr, "next step: CLAUDE_CONFIG_DIR=%s claude auth login\n", targetDir)
 }
 
 // hasFlag reports whether flag appears verbatim in os.Args[3:].

@@ -122,6 +122,7 @@ function cc {
 | `status`      | Print all accounts with rate-limit bars and recommendations |         |
 | `usage [daily\|session\|blocks]` | Analyze token usage and costs (incremental cache) | |
 | `watch`       | Poll primary config dir and auto-sync changes to secondaries |        |
+| `web [--port N]` | Browser-based dashboard on localhost (default :8099)     |          |
 | `completion`  | Generate shell completion script (bash/zsh/fish/powershell) |         |
 | `doctor`      | Diagnose configuration and environment issues              |          |
 | `version`     | Print version information                                  |          |

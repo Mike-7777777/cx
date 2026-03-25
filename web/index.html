@@ -1,0 +1,800 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>cc-monitor</title>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --bg: #12121a;
+    --bg-card: #1a1a2e;
+    --bg-hover: #22223a;
+    --border: #2a2a44;
+    --text: #e0e0e8;
+    --text-dim: #888899;
+    --green: #4ade80;
+    --yellow: #facc15;
+    --red: #f87171;
+    --cyan: #22d3ee;
+    --blue: #60a5fa;
+    --purple: #a78bfa;
+    --bar-bg: #2a2a44;
+  }
+
+  body {
+    font-family: 'SF Mono', 'Cascadia Code', 'Consolas', 'Fira Code', monospace;
+    background: var(--bg);
+    color: var(--text);
+    min-height: 100vh;
+    line-height: 1.5;
+  }
+
+  .container {
+    max-width: 1100px;
+    margin: 0 auto;
+    padding: 24px 20px;
+  }
+
+  /* Header */
+  .header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 28px;
+    padding-bottom: 16px;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .header h1 {
+    font-size: 1.3rem;
+    font-weight: 600;
+    color: var(--cyan);
+  }
+
+  .refresh-indicator {
+    font-size: 0.78rem;
+    color: var(--text-dim);
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .refresh-dot {
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    background: var(--green);
+    transition: background 0.3s;
+  }
+
+  .refresh-dot.fetching { background: var(--yellow); }
+  .refresh-dot.error { background: var(--red); }
+
+  /* Cards grid */
+  .cards {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 16px;
+    margin-bottom: 28px;
+  }
+
+  .card {
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 18px 20px;
+  }
+
+  .card-label {
+    font-size: 0.72rem;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--text-dim);
+    margin-bottom: 8px;
+  }
+
+  .card-value {
+    font-size: 1.6rem;
+    font-weight: 700;
+    color: var(--cyan);
+  }
+
+  .card-sub {
+    font-size: 0.78rem;
+    color: var(--text-dim);
+    margin-top: 6px;
+  }
+
+  /* Account status cards */
+  .account-cards {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+    gap: 16px;
+    margin-bottom: 28px;
+  }
+
+  .account-card {
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 18px 20px;
+  }
+
+  .account-name {
+    font-size: 1rem;
+    font-weight: 600;
+    color: var(--cyan);
+    margin-bottom: 12px;
+  }
+
+  .account-note {
+    font-size: 0.72rem;
+    color: var(--text-dim);
+    margin-left: 8px;
+    font-weight: 400;
+  }
+
+  .rate-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 8px;
+    font-size: 0.82rem;
+  }
+
+  .rate-label {
+    width: 48px;
+    color: var(--text-dim);
+    flex-shrink: 0;
+  }
+
+  .rate-bar-bg {
+    flex: 1;
+    height: 10px;
+    background: var(--bar-bg);
+    border-radius: 5px;
+    overflow: hidden;
+  }
+
+  .rate-bar-fill {
+    height: 100%;
+    border-radius: 5px;
+    transition: width 0.5s ease;
+  }
+
+  .rate-pct {
+    width: 44px;
+    text-align: right;
+    font-weight: 600;
+    flex-shrink: 0;
+  }
+
+  .rate-reset {
+    width: 60px;
+    font-size: 0.72rem;
+    color: var(--text-dim);
+    text-align: right;
+    flex-shrink: 0;
+  }
+
+  /* Section */
+  .section {
+    margin-bottom: 28px;
+  }
+
+  .section-title {
+    font-size: 0.9rem;
+    font-weight: 600;
+    margin-bottom: 14px;
+    color: var(--text);
+  }
+
+  /* Bar chart */
+  .bar-chart {
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 20px;
+    overflow-x: auto;
+  }
+
+  .bar-chart-inner {
+    display: flex;
+    align-items: flex-end;
+    gap: 4px;
+    height: 180px;
+    min-width: fit-content;
+  }
+
+  .bar-col {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    flex: 1;
+    min-width: 22px;
+    max-width: 32px;
+    height: 100%;
+    justify-content: flex-end;
+  }
+
+  .bar-rect {
+    width: 100%;
+    border-radius: 3px 3px 0 0;
+    min-height: 2px;
+    transition: height 0.4s ease;
+    cursor: default;
+    position: relative;
+  }
+
+  .bar-rect:hover {
+    filter: brightness(1.2);
+  }
+
+  .bar-date {
+    font-size: 0.58rem;
+    color: var(--text-dim);
+    margin-top: 6px;
+    white-space: nowrap;
+    writing-mode: vertical-lr;
+    transform: rotate(180deg);
+    max-height: 50px;
+    overflow: hidden;
+  }
+
+  .bar-tooltip {
+    display: none;
+    position: absolute;
+    bottom: calc(100% + 8px);
+    left: 50%;
+    transform: translateX(-50%);
+    background: #2a2a44;
+    border: 1px solid #3a3a5e;
+    border-radius: 6px;
+    padding: 6px 10px;
+    font-size: 0.7rem;
+    white-space: nowrap;
+    z-index: 10;
+    pointer-events: none;
+  }
+
+  .bar-rect:hover .bar-tooltip {
+    display: block;
+  }
+
+  /* Model breakdown (stacked bar) */
+  .model-breakdown {
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 20px;
+  }
+
+  .stacked-bar-container {
+    margin-bottom: 14px;
+  }
+
+  .stacked-bar {
+    display: flex;
+    height: 28px;
+    border-radius: 6px;
+    overflow: hidden;
+    background: var(--bar-bg);
+  }
+
+  .stacked-segment {
+    height: 100%;
+    transition: width 0.4s ease;
+    position: relative;
+    cursor: default;
+  }
+
+  .stacked-segment:hover {
+    filter: brightness(1.15);
+  }
+
+  .model-legend {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 16px;
+    font-size: 0.78rem;
+  }
+
+  .legend-item {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+
+  .legend-dot {
+    width: 10px;
+    height: 10px;
+    border-radius: 3px;
+    flex-shrink: 0;
+  }
+
+  .legend-label {
+    color: var(--text-dim);
+  }
+
+  .legend-value {
+    font-weight: 600;
+  }
+
+  /* Sessions table */
+  .sessions-table {
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    overflow: hidden;
+  }
+
+  .sessions-table table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.8rem;
+  }
+
+  .sessions-table th {
+    text-align: left;
+    padding: 10px 14px;
+    font-weight: 600;
+    color: var(--text-dim);
+    font-size: 0.72rem;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .sessions-table td {
+    padding: 8px 14px;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .sessions-table tr:last-child td {
+    border-bottom: none;
+  }
+
+  .sessions-table tr:hover td {
+    background: var(--bg-hover);
+  }
+
+  .empty-state {
+    text-align: center;
+    padding: 32px;
+    color: var(--text-dim);
+    font-size: 0.82rem;
+  }
+
+  /* ROI card highlight */
+  .roi-positive { color: var(--green); }
+  .roi-negative { color: var(--red); }
+
+  /* Utility */
+  .color-green { color: var(--green); }
+  .color-yellow { color: var(--yellow); }
+  .color-red { color: var(--red); }
+
+  @media (max-width: 600px) {
+    .cards { grid-template-columns: 1fr; }
+    .account-cards { grid-template-columns: 1fr; }
+    .bar-chart-inner { height: 120px; }
+    .bar-date { display: none; }
+  }
+</style>
+</head>
+<body>
+
+<div class="container">
+
+  <!-- Header -->
+  <div class="header">
+    <h1>cc-monitor</h1>
+    <div class="refresh-indicator">
+      <span id="refresh-text">Auto-refresh 30s</span>
+      <div class="refresh-dot" id="refresh-dot"></div>
+    </div>
+  </div>
+
+  <!-- Account status cards -->
+  <div class="account-cards" id="account-cards">
+    <div class="empty-state">Loading accounts...</div>
+  </div>
+
+  <!-- Summary cards -->
+  <div class="cards" id="summary-cards">
+    <div class="card">
+      <div class="card-label">Total Cost (30d)</div>
+      <div class="card-value" id="total-cost">--</div>
+      <div class="card-sub" id="total-messages">-- messages</div>
+    </div>
+    <div class="card">
+      <div class="card-label">This Week</div>
+      <div class="card-value" id="week-cost">--</div>
+      <div class="card-sub" id="week-messages">-- messages</div>
+    </div>
+    <div class="card">
+      <div class="card-label">ROI Savings</div>
+      <div class="card-value" id="roi-savings">--</div>
+      <div class="card-sub" id="roi-detail">--</div>
+    </div>
+  </div>
+
+  <!-- Daily usage chart -->
+  <div class="section">
+    <div class="section-title">Daily Usage (last 30 days)</div>
+    <div class="bar-chart">
+      <div class="bar-chart-inner" id="daily-chart">
+        <div class="empty-state">Loading...</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Model breakdown -->
+  <div class="section">
+    <div class="section-title">Model Breakdown</div>
+    <div class="model-breakdown">
+      <div class="stacked-bar-container">
+        <div class="stacked-bar" id="model-bar"></div>
+      </div>
+      <div class="model-legend" id="model-legend">
+        <div class="empty-state">Loading...</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Active sessions -->
+  <div class="section">
+    <div class="section-title">Active Sessions</div>
+    <div class="sessions-table">
+      <table>
+        <thead>
+          <tr>
+            <th>Session</th>
+            <th>Project</th>
+            <th>Started</th>
+            <th>Tokens</th>
+            <th>Cost</th>
+          </tr>
+        </thead>
+        <tbody id="sessions-body">
+          <tr><td colspan="5" class="empty-state">Loading...</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+</div>
+
+<script>
+(function() {
+  'use strict';
+
+  // Model color palette (deterministic by model name).
+  const MODEL_COLORS = [
+    '#a78bfa', '#60a5fa', '#22d3ee', '#4ade80',
+    '#facc15', '#fb923c', '#f87171', '#e879f9',
+    '#34d399', '#38bdf8'
+  ];
+
+  function modelColor(name, idx) {
+    return MODEL_COLORS[idx % MODEL_COLORS.length];
+  }
+
+  function usageColor(pct) {
+    if (pct > 80) return 'var(--red)';
+    if (pct >= 50) return 'var(--yellow)';
+    return 'var(--green)';
+  }
+
+  function formatCost(v) {
+    if (v == null || isNaN(v)) return '--';
+    return '$' + v.toFixed(2);
+  }
+
+  function formatTokens(n) {
+    if (n == null) return '--';
+    return n.toLocaleString();
+  }
+
+  function timeAgo(ts) {
+    if (!ts) return '--';
+    var d = new Date(ts);
+    var now = new Date();
+    var diffMs = now - d;
+    if (diffMs < 0) return 'just now';
+    var mins = Math.floor(diffMs / 60000);
+    if (mins < 1) return 'just now';
+    if (mins < 60) return mins + 'm ago';
+    var hours = Math.floor(mins / 60);
+    if (hours < 24) return hours + 'h ago';
+    var days = Math.floor(hours / 24);
+    return days + 'd ago';
+  }
+
+  function formatDuration(seconds) {
+    if (!seconds || seconds < 60) return '< 1m';
+    var h = Math.floor(seconds / 3600);
+    var m = Math.floor((seconds % 3600) / 60);
+    if (h > 0) return h + 'h ' + m + 'm';
+    return m + 'm';
+  }
+
+  function shortModel(name) {
+    if (!name) return 'unknown';
+    // Shorten "claude-opus-4-6" to "opus-4.6", etc.
+    var s = name.replace(/^claude-/, '');
+    // Shorten dated versions
+    s = s.replace(/-\d{8}$/, '');
+    return s;
+  }
+
+  function shortDate(dateStr) {
+    // "2026-03-15" -> "03-15"
+    if (!dateStr || dateStr.length < 10) return dateStr || '';
+    return dateStr.substring(5);
+  }
+
+  var dot = document.getElementById('refresh-dot');
+  var refreshText = document.getElementById('refresh-text');
+
+  function setFetching() {
+    dot.className = 'refresh-dot fetching';
+  }
+
+  function setDone() {
+    dot.className = 'refresh-dot';
+    refreshText.textContent = 'Updated ' + new Date().toLocaleTimeString();
+  }
+
+  function setError() {
+    dot.className = 'refresh-dot error';
+    refreshText.textContent = 'Fetch error';
+  }
+
+  // Fetch helper with timeout.
+  function fetchJSON(url) {
+    return fetch(url, { signal: AbortSignal.timeout(10000) })
+      .then(function(r) {
+        if (!r.ok) throw new Error(r.status);
+        return r.json();
+      });
+  }
+
+  // --- Renderers ---
+
+  function renderAccounts(data) {
+    var container = document.getElementById('account-cards');
+    if (!data || !data.accounts || data.accounts.length === 0) {
+      container.innerHTML = '<div class="empty-state">No accounts configured</div>';
+      return;
+    }
+
+    container.innerHTML = '';
+    data.accounts.forEach(function(acc) {
+      var card = document.createElement('div');
+      card.className = 'account-card';
+
+      var noteHtml = acc.note ? '<span class="account-note">(' + esc(acc.note) + ')</span>' : '';
+      var html = '<div class="account-name">' + esc(acc.name) + noteHtml + '</div>';
+
+      // 5h rate
+      html += renderRateRow('5h', acc.five_hour_pct, acc.five_hour_reset);
+      // 7d rate
+      html += renderRateRow('7d', acc.seven_day_pct, null);
+
+      card.innerHTML = html;
+      container.appendChild(card);
+    });
+  }
+
+  function renderRateRow(label, pct, resetStr) {
+    if (pct == null || pct < 0) {
+      return '<div class="rate-row"><span class="rate-label">' + label +
+        '</span><span style="color:var(--text-dim)">no data</span></div>';
+    }
+    var color = usageColor(pct);
+    var resetHtml = resetStr
+      ? '<span class="rate-reset">' + esc(resetStr) + '</span>'
+      : '<span class="rate-reset"></span>';
+    return '<div class="rate-row">' +
+      '<span class="rate-label">' + label + '</span>' +
+      '<div class="rate-bar-bg"><div class="rate-bar-fill" style="width:' +
+        Math.min(100, Math.max(0, pct)).toFixed(1) + '%;background:' + color + '"></div></div>' +
+      '<span class="rate-pct" style="color:' + color + '">' + pct.toFixed(0) + '%</span>' +
+      resetHtml +
+      '</div>';
+  }
+
+  function renderDaily(reports) {
+    var container = document.getElementById('daily-chart');
+    if (!reports || reports.length === 0) {
+      container.innerHTML = '<div class="empty-state">No usage data</div>';
+      updateSummaryFromDaily([]);
+      return;
+    }
+
+    // Find max cost for scaling.
+    var maxCost = 0;
+    reports.forEach(function(r) {
+      if (r.Summary.CostUSD > maxCost) maxCost = r.Summary.CostUSD;
+    });
+    if (maxCost === 0) maxCost = 1;
+
+    container.innerHTML = '';
+    reports.forEach(function(r) {
+      var col = document.createElement('div');
+      col.className = 'bar-col';
+
+      var heightPct = (r.Summary.CostUSD / maxCost * 100).toFixed(1);
+      var color = r.Summary.CostUSD > 100 ? 'var(--red)' :
+                  r.Summary.CostUSD > 30 ? 'var(--yellow)' : 'var(--cyan)';
+
+      col.innerHTML =
+        '<div class="bar-rect" style="height:' + heightPct + '%;background:' + color + '">' +
+          '<div class="bar-tooltip">' + esc(r.Date) + '<br>' + formatCost(r.Summary.CostUSD) +
+          '<br>' + formatTokens(r.Summary.TotalTokens) + ' tokens</div>' +
+        '</div>' +
+        '<div class="bar-date">' + shortDate(r.Date) + '</div>';
+
+      container.appendChild(col);
+    });
+
+    updateSummaryFromDaily(reports);
+  }
+
+  function updateSummaryFromDaily(reports) {
+    var totalCost = 0;
+    var totalMsgs = 0;
+    var weekCost = 0;
+    var weekMsgs = 0;
+
+    var now = new Date();
+    var weekAgo = new Date(now);
+    weekAgo.setDate(weekAgo.getDate() - 7);
+    var weekStr = weekAgo.toISOString().substring(0, 10);
+
+    reports.forEach(function(r) {
+      totalCost += r.Summary.CostUSD;
+      totalMsgs += r.Summary.EntryCount;
+      if (r.Date >= weekStr) {
+        weekCost += r.Summary.CostUSD;
+        weekMsgs += r.Summary.EntryCount;
+      }
+    });
+
+    document.getElementById('total-cost').textContent = formatCost(totalCost);
+    document.getElementById('total-messages').textContent = totalMsgs.toLocaleString() + ' messages';
+    document.getElementById('week-cost').textContent = formatCost(weekCost);
+    document.getElementById('week-messages').textContent = weekMsgs.toLocaleString() + ' messages';
+
+    // Collect model breakdown from all daily reports.
+    var modelTotals = {};
+    reports.forEach(function(r) {
+      if (!r.Models) return;
+      Object.keys(r.Models).forEach(function(model) {
+        if (!modelTotals[model]) modelTotals[model] = { cost: 0, tokens: 0 };
+        modelTotals[model].cost += r.Models[model].CostUSD;
+        modelTotals[model].tokens += r.Models[model].TotalTokens;
+      });
+    });
+
+    renderModelBreakdown(modelTotals, totalCost);
+  }
+
+  function renderModelBreakdown(modelTotals, totalCost) {
+    var bar = document.getElementById('model-bar');
+    var legend = document.getElementById('model-legend');
+
+    var models = Object.keys(modelTotals).sort(function(a, b) {
+      return modelTotals[b].cost - modelTotals[a].cost;
+    });
+
+    if (models.length === 0) {
+      bar.innerHTML = '';
+      legend.innerHTML = '<div class="empty-state">No model data</div>';
+      return;
+    }
+
+    bar.innerHTML = '';
+    legend.innerHTML = '';
+
+    models.forEach(function(model, idx) {
+      var pct = totalCost > 0 ? (modelTotals[model].cost / totalCost * 100) : 0;
+      var color = modelColor(model, idx);
+
+      // Stacked bar segment
+      var seg = document.createElement('div');
+      seg.className = 'stacked-segment';
+      seg.style.width = pct.toFixed(2) + '%';
+      seg.style.background = color;
+      seg.title = shortModel(model) + ': ' + formatCost(modelTotals[model].cost) + ' (' + pct.toFixed(1) + '%)';
+      bar.appendChild(seg);
+
+      // Legend item
+      var item = document.createElement('div');
+      item.className = 'legend-item';
+      item.innerHTML =
+        '<div class="legend-dot" style="background:' + color + '"></div>' +
+        '<span class="legend-label">' + esc(shortModel(model)) + '</span> ' +
+        '<span class="legend-value">' + formatCost(modelTotals[model].cost) + '</span> ' +
+        '<span class="legend-label">(' + pct.toFixed(1) + '%)</span>';
+      legend.appendChild(item);
+    });
+  }
+
+  function renderROI(data) {
+    var el = document.getElementById('roi-savings');
+    var detail = document.getElementById('roi-detail');
+
+    if (!data || data.equivalent_api_cost == null) {
+      el.textContent = '--';
+      detail.textContent = 'No data';
+      return;
+    }
+
+    var savings = data.savings;
+    var pct = data.savings_pct;
+
+    el.textContent = formatCost(savings);
+    el.className = 'card-value ' + (savings >= 0 ? 'roi-positive' : 'roi-negative');
+    detail.textContent = formatCost(data.subscription_cost) + '/mo sub vs ' +
+      formatCost(data.equivalent_api_cost) + ' API (' + pct.toFixed(1) + '% saved)';
+  }
+
+  function renderSessions(data) {
+    var tbody = document.getElementById('sessions-body');
+    if (!data || !data.sessions || data.sessions.length === 0) {
+      tbody.innerHTML = '<tr><td colspan="5" class="empty-state">No active sessions</td></tr>';
+      return;
+    }
+
+    tbody.innerHTML = '';
+    data.sessions.forEach(function(s) {
+      var tr = document.createElement('tr');
+      tr.innerHTML =
+        '<td style="color:var(--cyan)">' + esc(s.session_id || '--') + '</td>' +
+        '<td>' + esc(s.project || '--') + '</td>' +
+        '<td>' + esc(timeAgo(s.start_time)) + '</td>' +
+        '<td>' + formatTokens(s.total_tokens) + '</td>' +
+        '<td>' + formatCost(s.cost_usd) + '</td>';
+      tbody.appendChild(tr);
+    });
+  }
+
+  function esc(s) {
+    if (!s) return '';
+    var d = document.createElement('div');
+    d.textContent = s;
+    return d.innerHTML;
+  }
+
+  // --- Data fetching ---
+
+  function fetchAll() {
+    setFetching();
+
+    Promise.all([
+      fetchJSON('/api/status').catch(function() { return null; }),
+      fetchJSON('/api/daily').catch(function() { return null; }),
+      fetchJSON('/api/roi').catch(function() { return null; }),
+      fetchJSON('/api/sessions').catch(function() { return null; })
+    ]).then(function(results) {
+      if (results[0]) renderAccounts(results[0]);
+      if (results[1]) renderDaily(results[1]);
+      if (results[2]) renderROI(results[2]);
+      if (results[3]) renderSessions(results[3]);
+      setDone();
+    }).catch(function() {
+      setError();
+    });
+  }
+
+  // Initial fetch + auto-refresh every 30 seconds.
+  fetchAll();
+  setInterval(fetchAll, 30000);
+})();
+</script>
+</body>
+</html>

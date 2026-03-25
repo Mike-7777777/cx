@@ -244,7 +244,7 @@ func checkStatuslinePath(configDir string) (bool, string) {
 		return false, fmt.Sprintf("read error: %v", err)
 	}
 
-	var settings map[string]interface{}
+	var settings map[string]any
 	if err := json.Unmarshal(data, &settings); err != nil {
 		return false, fmt.Sprintf("parse error: %v", err)
 	}
@@ -254,7 +254,7 @@ func checkStatuslinePath(configDir string) (bool, string) {
 		return true, "not configured"
 	}
 
-	slMap, ok := sl.(map[string]interface{})
+	slMap, ok := sl.(map[string]any)
 	if !ok {
 		return false, "invalid format"
 	}

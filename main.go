@@ -15,6 +15,8 @@ func main() {
 	}
 
 	switch os.Args[1] {
+	case "run":
+		runRun()
 	case "statusline":
 		runStatusline()
 	case "init":
@@ -49,6 +51,7 @@ Usage:
   cc-monitor <command> [options]
 
 Commands:
+  run           Auto-select best account and launch claude
   statusline    Print a compact status line (for shell prompts / tmux)
   init          Initialize cc-monitor configuration
   switch        Switch active Claude Code account

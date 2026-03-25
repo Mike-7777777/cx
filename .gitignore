@@ -4,3 +4,4 @@ cx.exe
 dist/
 *.old
 coverage.out
+cx.exe~

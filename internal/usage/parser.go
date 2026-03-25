@@ -21,10 +21,12 @@ type TokenUsage struct {
 
 // Entry represents a single parsed assistant response with usage data.
 type Entry struct {
-	Model     string
-	Usage     TokenUsage
-	Timestamp time.Time
-	SessionID string
+	Model       string
+	Usage       TokenUsage
+	Timestamp   time.Time
+	SessionID   string
+	ProjectPath string // project directory name extracted from JSONL file path
+	IsSubagent  bool   // true if parsed from a subagents/ directory
 }
 
 // jsonEntry is the internal struct for partial JSON parsing of JSONL lines.
@@ -143,8 +145,26 @@ func ParseFileFrom(path string, offset int64, fn func(Entry)) (int64, error) {
 	return pos, nil
 }
 
+// extractPathMeta derives the project directory name and subagent status
+// from a JSONL file path relative to the projects root.
+// Example paths:
+//
+//	"I--google_drive-homebase/abc123.jsonl"           → project="I--google_drive-homebase", subagent=false
+//	"I--google_drive-homebase/abc123/subagents/x.jsonl" → project="I--google_drive-homebase", subagent=true
+func extractPathMeta(relPath string) (project string, isSubagent bool) {
+	// Normalize to forward slashes.
+	rel := filepath.ToSlash(relPath)
+	parts := strings.Split(rel, "/")
+	if len(parts) > 0 {
+		project = parts[0]
+	}
+	isSubagent = strings.Contains(rel, "/subagents/")
+	return
+}
+
 // ScanDir walks <configDir>/projects/**/*.jsonl and calls ParseFile on each.
 // Includes subagent directories (they contain real token usage).
+// Populates ProjectPath and IsSubagent on each Entry from the file path.
 // Skips files that fail to parse and continues with remaining files.
 func ScanDir(configDir string, fn func(Entry)) error {
 	root := filepath.Join(configDir, "projects")
@@ -159,8 +179,16 @@ func ScanDir(configDir string, fn func(Entry)) error {
 		if !strings.HasSuffix(d.Name(), ".jsonl") {
 			return nil
 		}
+
+		relPath, _ := filepath.Rel(root, path)
+		project, isSubagent := extractPathMeta(relPath)
+
 		// Per-file errors are non-fatal: skip and continue.
-		_ = ParseFile(path, fn)
+		_ = ParseFile(path, func(e Entry) {
+			e.ProjectPath = project
+			e.IsSubagent = isSubagent
+			fn(e)
+		})
 		return nil
 	})
 }
@@ -168,6 +196,7 @@ func ScanDir(configDir string, fn func(Entry)) error {
 // ScanDirCached walks the same directory tree as ScanDir but uses the cache
 // to skip unchanged files. Changed files are parsed from their cached offset
 // (or from zero if new/truncated). The cache is updated in place.
+// Populates ProjectPath and IsSubagent on each Entry from the file path.
 // fn receives entries only from newly parsed data.
 func ScanDirCached(configDir string, cache *UsageCache, fn func(Entry)) error {
 	root := filepath.Join(configDir, "projects")
@@ -198,6 +227,8 @@ func ScanDirCached(configDir string, cache *UsageCache, fn func(Entry)) error {
 			return nil // file unchanged, skip
 		}
 
+		project, isSubagent := extractPathMeta(relPath)
+
 		// Determine starting offset. If the file is new or was truncated,
 		// parse from the beginning. Otherwise resume from the cached offset.
 		var startOffset int64
@@ -205,7 +236,11 @@ func ScanDirCached(configDir string, cache *UsageCache, fn func(Entry)) error {
 			startOffset = fs.Offset
 		}
 
-		newOffset, parseErr := ParseFileFrom(path, startOffset, fn)
+		newOffset, parseErr := ParseFileFrom(path, startOffset, func(e Entry) {
+			e.ProjectPath = project
+			e.IsSubagent = isSubagent
+			fn(e)
+		})
 		if parseErr != nil {
 			// Non-fatal: skip this file but don't update cache for it.
 			return nil

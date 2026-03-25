@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 
@@ -33,7 +34,7 @@ func totalSubscriptionCost() float64 {
 }
 
 func runUsage() {
-	// Parse subcommand: cc-monitor usage [daily|session|blocks|monthly|weekly] [flags]
+	// Parse subcommand: cc-monitor usage [daily|session|blocks|monthly|weekly|messages] [flags]
 	mode := "daily"
 	var accountName string
 	var scanAll bool
@@ -41,6 +42,10 @@ func runUsage() {
 	var noCache bool
 	var breakdown bool
 	var showROI bool
+	var byProject bool
+	var compare bool
+	var subagents bool
+	var limit int
 	outputFormat := "table" // table, json, csv, md
 
 	args := os.Args[2:]
@@ -49,11 +54,11 @@ func runUsage() {
 	// First positional arg is mode if it doesn't start with "--".
 	if len(args) > 0 && !strings.HasPrefix(args[0], "--") {
 		switch args[0] {
-		case "daily", "session", "blocks", "monthly", "weekly":
+		case "daily", "session", "blocks", "monthly", "weekly", "messages":
 			mode = args[0]
 			flagStart = 1
 		default:
-			fmt.Fprintf(os.Stderr, "cc-monitor usage: unknown mode %q (expected daily, session, blocks, monthly, weekly)\n", args[0])
+			fmt.Fprintf(os.Stderr, "cc-monitor usage: unknown mode %q (expected daily, session, blocks, monthly, weekly, messages)\n", args[0])
 			os.Exit(1)
 		}
 	}
@@ -80,6 +85,24 @@ func runUsage() {
 			breakdown = true
 		case "--roi":
 			showROI = true
+		case "--by-project":
+			byProject = true
+		case "--compare":
+			compare = true
+		case "--subagents":
+			subagents = true
+		case "--limit":
+			if i+1 >= len(args) {
+				fmt.Fprintln(os.Stderr, "cc-monitor usage: --limit requires a numeric value")
+				os.Exit(1)
+			}
+			i++
+			n, err := strconv.Atoi(args[i])
+			if err != nil || n < 1 {
+				fmt.Fprintf(os.Stderr, "cc-monitor usage: --limit must be a positive integer, got %q\n", args[i])
+				os.Exit(1)
+			}
+			limit = n
 		case "--account":
 			if i+1 >= len(args) {
 				fmt.Fprintln(os.Stderr, "cc-monitor usage: --account requires a value")
@@ -127,8 +150,8 @@ func runUsage() {
 	// Resolve cache file path (next to the registry, in home dir).
 	cachePath := usageCachePath()
 
-	// Daily mode with caching (only when format is table/json and no breakdown needed).
-	if mode == "daily" && !noCache && !breakdown && outputFormat != "csv" && outputFormat != "md" {
+	// Daily mode with caching (only when format is table/json and no breakdown/project/compare/subagent needed).
+	if mode == "daily" && !noCache && !breakdown && !byProject && !compare && !subagents && outputFormat != "csv" && outputFormat != "md" {
 		runUsageDailyCached(configDirs, cachePath, sinceTime, outputFormat, showROI)
 		return
 	}
@@ -143,8 +166,11 @@ func runUsage() {
 		}
 	}
 
-	// Apply --since filter.
-	if !sinceTime.IsZero() {
+	// Keep unfiltered entries for --compare mode (AggregateTrend needs previous period data).
+	allEntries := entries
+
+	// Apply --since filter (skipped for compare mode which handles its own time ranges).
+	if !sinceTime.IsZero() && !compare {
 		filtered := entries[:0]
 		for _, e := range entries {
 			if !e.Timestamp.Before(sinceTime) {
@@ -154,7 +180,7 @@ func runUsage() {
 		entries = filtered
 	}
 
-	if len(entries) == 0 {
+	if len(entries) == 0 && !compare {
 		fmt.Fprintln(os.Stderr, "cc-monitor usage: no usage entries found")
 		os.Exit(0)
 	}
@@ -164,8 +190,54 @@ func runUsage() {
 
 	switch mode {
 	case "daily":
-		reports := usage.AggregateDailies(entries)
-		outputDailyReports(reports, outputFormat, useColor, breakdown, showROI)
+		if byProject {
+			reports := usage.AggregateByProject(entries)
+			if isJSON {
+				printJSON(reports)
+			} else {
+				fmt.Print(usage.FormatProjectTable(reports, useColor))
+			}
+		} else if compare {
+			pairs := usage.AggregateTrend(allEntries, sinceTime)
+			if isJSON {
+				printJSON(pairs)
+			} else {
+				fmt.Print(usage.FormatTrendTable(pairs, useColor))
+			}
+		} else {
+			reports := usage.AggregateDailies(entries)
+			outputDailyReports(reports, outputFormat, useColor, breakdown, showROI)
+		}
+
+		if subagents {
+			bd := usage.AggregateSubagents(entries)
+			if isJSON {
+				printJSON(bd)
+			} else {
+				fmt.Print(usage.FormatSubagentBreakdown(bd, useColor))
+			}
+		}
+
+	case "messages":
+		// Sort by timestamp descending (newest first).
+		sort.Slice(entries, func(i, j int) bool {
+			return entries[i].Timestamp.After(entries[j].Timestamp)
+		})
+		// Apply limit (default 50).
+		msgLimit := limit
+		if msgLimit == 0 {
+			msgLimit = 50
+		}
+		if msgLimit > len(entries) {
+			msgLimit = len(entries)
+		}
+		entries = entries[:msgLimit]
+
+		if isJSON {
+			printJSON(entries)
+		} else {
+			fmt.Print(usage.FormatMessagesTable(entries, useColor))
+		}
 
 	case "monthly":
 		reports := usage.AggregateMonthly(entries)

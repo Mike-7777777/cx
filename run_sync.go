@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/Mike-7777777/cc-monitor/internal/config"
+	"github.com/Mike-7777777/cc-monitor/internal/platform"
 )
 
 var syncFileList = []string{
@@ -53,7 +54,8 @@ func runSync() {
 	}
 }
 
-// syncFiles copies each file in syncFileList from srcDir to dstDir.
+// syncFiles copies each file in syncFileList from srcDir to dstDir,
+// then syncs memory and teams directories.
 // Missing source files are silently skipped.
 // When force is false and the destination file is newer than the source,
 // the user is prompted to confirm the overwrite. When force is true, the
@@ -115,5 +117,77 @@ func syncFiles(srcDir, dstDir string, force bool) error {
 		}
 		fmt.Fprintf(os.Stderr, "  synced %s\n", rel)
 	}
+
+	// Sync project memory files from primary to secondary.
+	if err := syncMemory(srcDir, dstDir); err != nil {
+		return fmt.Errorf("syncing memory: %w", err)
+	}
+
+	// Sync teams directory from primary to secondary.
+	if err := syncTeams(srcDir, dstDir); err != nil {
+		return fmt.Errorf("syncing teams: %w", err)
+	}
+
+	return nil
+}
+
+// syncMemory copies project memory files (projects/*/memory/MEMORY.md)
+// from srcDir to dstDir. Only syncs memory dirs that exist in the primary.
+// Silently skips if projects/ doesn't exist in srcDir.
+func syncMemory(srcDir, dstDir string) error {
+	projectsDir := filepath.Join(srcDir, "projects")
+	entries, err := os.ReadDir(projectsDir)
+	if os.IsNotExist(err) {
+		return nil
+	}
+	if err != nil {
+		return fmt.Errorf("reading projects dir %q: %w", projectsDir, err)
+	}
+
+	for _, entry := range entries {
+		if !entry.IsDir() {
+			continue
+		}
+		memFile := filepath.Join(projectsDir, entry.Name(), "memory", "MEMORY.md")
+		if _, err := os.Stat(memFile); os.IsNotExist(err) {
+			continue
+		} else if err != nil {
+			return fmt.Errorf("stating %q: %w", memFile, err)
+		}
+
+		data, err := os.ReadFile(memFile)
+		if err != nil {
+			return fmt.Errorf("reading %q: %w", memFile, err)
+		}
+
+		dstFile := filepath.Join(dstDir, "projects", entry.Name(), "memory", "MEMORY.md")
+		if err := os.MkdirAll(filepath.Dir(dstFile), 0o700); err != nil {
+			return fmt.Errorf("creating parent for %q: %w", dstFile, err)
+		}
+		if err := os.WriteFile(dstFile, data, 0o600); err != nil {
+			return fmt.Errorf("writing %q: %w", dstFile, err)
+		}
+
+		rel := filepath.Join("projects", entry.Name(), "memory", "MEMORY.md")
+		fmt.Fprintf(os.Stderr, "  synced %s\n", rel)
+	}
+	return nil
+}
+
+// syncTeams copies the entire teams/ directory tree from srcDir to dstDir.
+// Silently skips if teams/ doesn't exist in srcDir.
+func syncTeams(srcDir, dstDir string) error {
+	teamsDir := filepath.Join(srcDir, "teams")
+	if _, err := os.Stat(teamsDir); os.IsNotExist(err) {
+		return nil
+	} else if err != nil {
+		return fmt.Errorf("stating teams dir %q: %w", teamsDir, err)
+	}
+
+	dstTeams := filepath.Join(dstDir, "teams")
+	if err := platform.CopyDir(teamsDir, dstTeams); err != nil {
+		return fmt.Errorf("copying teams dir: %w", err)
+	}
+	fmt.Fprintf(os.Stderr, "  synced teams/\n")
 	return nil
 }

@@ -19,32 +19,103 @@ type OtherAccount struct {
 	Stale    string // "15m", "", or "reset"
 }
 
+// RenderOpts holds optional rendering parameters.
+type RenderOpts struct {
+	AccountName string // current account label (empty = omit)
+	Compact     bool   // compact single-line mode
+}
+
 // Render produces one or two status-line strings.
 //
-// Line 1: [Opus 4.6] 32% ctx | 5h: ██░░░ 38% (2h14m) | 7d: ███░░ 62%
+// Line 1: [20x] [Opus 4.6] 32% ctx | $0.45 | 5h: ██░░░ 38% (2h14m) | 7d: ███░░ 62%
+// Line 1 may end with: → alt (yellow, when current 5h > 80% and alt has lower usage)
 // Line 2 (if other != nil): [5x] 5h: ████░ 71% | stale 15m
+//
+// Compact mode: [20x] [Opus] 32% | 5h:38% 7d:62%
 //
 // When no rate_limits: [Opus 4.6] 32% ctx
 // When context used_percentage is nil: treat as 0.
-func Render(input *Input, other *OtherAccount, useColor bool) []string {
+func Render(input *Input, other *OtherAccount, useColor bool, opts ...RenderOpts) []string {
+	var opt RenderOpts
+	if len(opts) > 0 {
+		opt = opts[0]
+	}
+
+	if opt.Compact {
+		return []string{renderCompact(input, opt, useColor)}
+	}
+
 	var lines []string
-	lines = append(lines, renderPrimary(input, useColor))
+	lines = append(lines, renderPrimary(input, other, opt, useColor))
 	if other != nil {
 		lines = append(lines, renderOther(other, useColor))
 	}
 	return lines
 }
 
-func renderPrimary(input *Input, useColor bool) string {
+func renderCompact(input *Input, opt RenderOpts, useColor bool) string {
 	ctxPct := 0.0
 	if input.ContextWindow.UsedPercentage != nil {
 		ctxPct = *input.ContextWindow.UsedPercentage
 	}
 
+	var parts []string
+
+	// Account label.
+	if opt.AccountName != "" {
+		nameStr := format.Colorize(opt.AccountName, format.Cyan, useColor)
+		parts = append(parts, fmt.Sprintf("[%s]", nameStr))
+	}
+
+	// Shortened model name (first word only).
+	shortModel := input.Model.DisplayName
+	if idx := strings.Index(shortModel, " "); idx > 0 {
+		shortModel = shortModel[:idx]
+	}
+	modelStr := format.Colorize(shortModel, format.Cyan+format.Bold, useColor)
+	ctxStr := format.Colorize(fmt.Sprintf("%d%%", int(ctxPct)), format.UsageColor(ctxPct), useColor)
+	parts = append(parts, fmt.Sprintf("[%s] %s", modelStr, ctxStr))
+
+	// Rate limits as compact percentages.
+	if input.RateLimits != nil {
+		if input.RateLimits.FiveHour != nil {
+			pct := int(math.Round(input.RateLimits.FiveHour.UsedPercentage))
+			pctStr := format.Colorize(fmt.Sprintf("%d%%", pct), format.UsageColor(input.RateLimits.FiveHour.UsedPercentage), useColor)
+			parts = append(parts, fmt.Sprintf("5h:%s", pctStr))
+		}
+		if input.RateLimits.SevenDay != nil {
+			pct := int(math.Round(input.RateLimits.SevenDay.UsedPercentage))
+			pctStr := format.Colorize(fmt.Sprintf("%d%%", pct), format.UsageColor(input.RateLimits.SevenDay.UsedPercentage), useColor)
+			parts = append(parts, fmt.Sprintf("7d:%s", pctStr))
+		}
+	}
+
+	return strings.Join(parts, " | ")
+}
+
+func renderPrimary(input *Input, other *OtherAccount, opt RenderOpts, useColor bool) string {
+	ctxPct := 0.0
+	if input.ContextWindow.UsedPercentage != nil {
+		ctxPct = *input.ContextWindow.UsedPercentage
+	}
+
+	var prefix string
+	if opt.AccountName != "" {
+		nameStr := format.Colorize(opt.AccountName, format.Cyan, useColor)
+		prefix = fmt.Sprintf("[%s] ", nameStr)
+	}
+
 	modelName := format.Colorize(input.Model.DisplayName, format.Cyan+format.Bold, useColor)
 	ctxStr := format.Colorize(fmt.Sprintf("%d%%", int(ctxPct)), format.UsageColor(ctxPct), useColor)
 
-	line := fmt.Sprintf("[%s] %s ctx", modelName, ctxStr)
+	line := fmt.Sprintf("%s[%s] %s ctx", prefix, modelName, ctxStr)
+
+	// Session cost.
+	if input.Cost != nil && input.Cost.TotalCostUSD != nil {
+		cost := *input.Cost.TotalCostUSD
+		costStr := format.Colorize(fmt.Sprintf("$%.2f", cost), format.Dim, useColor)
+		line += fmt.Sprintf(" | %s", costStr)
+	}
 
 	if input.RateLimits == nil {
 		return line
@@ -65,7 +136,27 @@ func renderPrimary(input *Input, useColor bool) string {
 		line += fmt.Sprintf(" | 7d: %s %s", bar, pctStr)
 	}
 
+	// Smart switch prompt: when current 5h > 80% and another account has lower usage.
+	line += renderSwitchHint(input, other, useColor)
+
 	return line
+}
+
+// renderSwitchHint appends a switch suggestion when the current account's 5h
+// usage exceeds 80% and the other account has lower 5h usage.
+func renderSwitchHint(input *Input, other *OtherAccount, useColor bool) string {
+	if other == nil || input.RateLimits == nil || input.RateLimits.FiveHour == nil {
+		return ""
+	}
+	currentUsage := input.RateLimits.FiveHour.UsedPercentage
+	if currentUsage <= 80 {
+		return ""
+	}
+	if other.FiveHour >= currentUsage {
+		return ""
+	}
+	arrow := format.Colorize(fmt.Sprintf(" -> %s", other.Name), format.Yellow, useColor)
+	return arrow
 }
 
 func renderOther(other *OtherAccount, useColor bool) string {

@@ -234,6 +234,23 @@ func renderAndPrint(input *statusline.Input, other *statusline.OtherAccount, acc
 		AccountName: accountName,
 		Compact:     compact,
 	}
+
+	// Load statusline config from registry.
+	if regPath, err := config.RegistryPath(); err == nil {
+		if reg, err := config.LoadOrCreateRegistry(regPath); err == nil && reg.Statusline != nil {
+			sc := reg.Statusline
+			opts.Sections = &statusline.SectionVisibility{
+				ShowAccount:      sc.ShowAccount,
+				ShowCost:         sc.ShowCost,
+				ShowContext:      sc.ShowContext,
+				ShowRate5h:       sc.ShowRate5h,
+				ShowRate7d:       sc.ShowRate7d,
+				ShowOtherAccount: sc.ShowOtherAccount,
+				ShowSwitchHint:   sc.ShowSwitchHint,
+			}
+		}
+	}
+
 	lines := statusline.Render(input, other, platform.ANSIEnabled(), opts)
 	for _, line := range lines {
 		fmt.Println(line)

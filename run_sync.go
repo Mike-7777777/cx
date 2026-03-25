@@ -2,6 +2,8 @@ package main
 
 import (
 	"bufio"
+	"bytes"
+	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -9,6 +11,7 @@ import (
 
 	"github.com/Mike-7777777/cc-monitor/internal/config"
 	"github.com/Mike-7777777/cc-monitor/internal/platform"
+	"github.com/natefinch/atomic"
 )
 
 var syncFileList = []string{
@@ -36,7 +39,7 @@ func runSync() {
 		os.Exit(1)
 	}
 
-	force := hasFlag("--force")
+	force := hasFlagFrom("--force", 2)
 
 	for name, acc := range reg.Accounts {
 		if name == reg.Primary {
@@ -55,13 +58,16 @@ func runSync() {
 }
 
 // syncFiles copies each file in syncFileList from srcDir to dstDir,
-// then syncs memory and teams directories.
+// then syncs memory, teams, and MCP OAuth tokens.
 // Missing source files are silently skipped.
 // When force is false and the destination file is newer than the source,
 // the user is prompted to confirm the overwrite. When force is true, the
 // overwrite proceeds without prompting (used by auto-sync in switch/init).
 func syncFiles(srcDir, dstDir string, force bool) error {
 	reader := bufio.NewReader(os.Stdin)
+
+	// Track files that are newer in dst for bidirectional sync.
+	var newerInDst []string
 
 	for _, rel := range syncFileList {
 		src := filepath.Join(srcDir, rel)
@@ -80,6 +86,8 @@ func syncFiles(srcDir, dstDir string, force bool) error {
 		if !force {
 			dstInfo, statErr := os.Stat(dst)
 			if statErr == nil && dstInfo.ModTime().After(srcInfo.ModTime()) {
+				newerInDst = append(newerInDst, rel)
+
 				srcBase := filepath.Base(srcDir)
 				dstBase := filepath.Base(dstDir)
 				fmt.Fprintf(os.Stderr, "[cc-monitor] %s in %s is newer than %s.\n", rel, dstBase, srcBase)
@@ -126,6 +134,40 @@ func syncFiles(srcDir, dstDir string, force bool) error {
 	// Sync teams directory from primary to secondary.
 	if err := syncTeams(srcDir, dstDir); err != nil {
 		return fmt.Errorf("syncing teams: %w", err)
+	}
+
+	// Sync MCP OAuth tokens from primary to secondary.
+	if err := syncMcpOAuth(srcDir, dstDir); err != nil {
+		return fmt.Errorf("syncing MCP OAuth: %w", err)
+	}
+
+	// Bidirectional sync: offer to copy newer files back to primary.
+	if !force && len(newerInDst) > 0 {
+		dstBase := filepath.Base(dstDir)
+		fmt.Fprintf(os.Stderr, "\n[cc-monitor] %s has newer config files: %s\n",
+			dstBase, strings.Join(newerInDst, ", "))
+		fmt.Fprintf(os.Stderr, "  Sync back to primary? [y/N] ")
+
+		line, _ := reader.ReadString('\n')
+		line = strings.TrimSpace(line)
+		if line == "y" || line == "Y" {
+			for _, rel := range newerInDst {
+				src := filepath.Join(dstDir, rel)
+				dst := filepath.Join(srcDir, rel)
+
+				data, err := os.ReadFile(src)
+				if err != nil {
+					return fmt.Errorf("reading %q for reverse sync: %w", src, err)
+				}
+				if err := os.MkdirAll(filepath.Dir(dst), 0o700); err != nil {
+					return fmt.Errorf("creating parent for %q: %w", dst, err)
+				}
+				if err := os.WriteFile(dst, data, 0o600); err != nil {
+					return fmt.Errorf("writing %q: %w", dst, err)
+				}
+				fmt.Fprintf(os.Stderr, "  reverse-synced %s\n", rel)
+			}
+		}
 	}
 
 	return nil
@@ -189,5 +231,80 @@ func syncTeams(srcDir, dstDir string) error {
 		return fmt.Errorf("copying teams dir: %w", err)
 	}
 	fmt.Fprintf(os.Stderr, "  synced teams/\n")
+	return nil
+}
+
+// syncMcpOAuth merges the mcpOAuth key from src's .credentials.json into dst's
+// .credentials.json. The claudeAiOauth key is account-specific and never synced.
+// Only syncs if src has mcpOAuth and dst doesn't.
+// Writes atomically to prevent corruption.
+func syncMcpOAuth(srcDir, dstDir string) error {
+	const credFile = ".credentials.json"
+
+	srcPath := filepath.Join(srcDir, credFile)
+	srcData, err := os.ReadFile(srcPath)
+	if os.IsNotExist(err) {
+		return nil // no credentials in source
+	}
+	if err != nil {
+		return fmt.Errorf("reading src credentials %q: %w", srcPath, err)
+	}
+
+	var srcCreds map[string]json.RawMessage
+	if err := json.Unmarshal(srcData, &srcCreds); err != nil {
+		return nil // corrupt source, skip silently
+	}
+
+	srcOAuth, hasSrcOAuth := srcCreds["mcpOAuth"]
+	if !hasSrcOAuth {
+		return nil // nothing to sync
+	}
+
+	dstPath := filepath.Join(dstDir, credFile)
+	dstData, err := os.ReadFile(dstPath)
+	if os.IsNotExist(err) {
+		// dst has no credentials yet; create with only mcpOAuth.
+		dstCreds := map[string]json.RawMessage{
+			"mcpOAuth": srcOAuth,
+		}
+		return writeCredentialsAtomic(dstPath, dstCreds)
+	}
+	if err != nil {
+		return fmt.Errorf("reading dst credentials %q: %w", dstPath, err)
+	}
+
+	var dstCreds map[string]json.RawMessage
+	if err := json.Unmarshal(dstData, &dstCreds); err != nil {
+		return nil // corrupt destination, skip silently
+	}
+
+	// Only sync if dst doesn't have mcpOAuth.
+	if _, hasDstOAuth := dstCreds["mcpOAuth"]; hasDstOAuth {
+		return nil // dst already has mcpOAuth
+	}
+
+	dstCreds["mcpOAuth"] = srcOAuth
+	if err := writeCredentialsAtomic(dstPath, dstCreds); err != nil {
+		return err
+	}
+
+	fmt.Fprintf(os.Stderr, "  synced mcpOAuth tokens\n")
+	return nil
+}
+
+// writeCredentialsAtomic writes a credentials map to path atomically.
+func writeCredentialsAtomic(path string, creds map[string]json.RawMessage) error {
+	data, err := json.MarshalIndent(creds, "", "  ")
+	if err != nil {
+		return fmt.Errorf("marshalling credentials: %w", err)
+	}
+
+	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
+		return fmt.Errorf("creating parent for %q: %w", path, err)
+	}
+
+	if err := atomic.WriteFile(path, bytes.NewReader(data)); err != nil {
+		return fmt.Errorf("atomic write %q: %w", path, err)
+	}
 	return nil
 }

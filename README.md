@@ -19,10 +19,10 @@ $ cx status
 
   Account     Tier      Auth    5h Usage        Resets In     7d Usage        Note
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-  HY          Max 5x    OK      ░░░░░   0%      reset         █░░░░  15%
-★ QM          Max 20x   OK      █░░░░  24%      3h04m         ███░░  67%
+  work        Max 5x    OK      ░░░░░   0%      reset         █░░░░  15%
+★ personal    Max 20x   OK      █░░░░  24%      3h04m         ███░░  67%
 
-✓ Recommended: HY (lowest 5h usage at 0%)
+✓ Recommended: work (lowest 5h usage at 0%)
 ```
 
 ## Why cx?
@@ -235,8 +235,8 @@ cx completion powershell | Out-String | Invoke-Expression
 cx uses Claude Code's `CLAUDE_CONFIG_DIR` environment variable to isolate accounts. Each account gets its own directory with separate credentials and session history, but shares plugins and configuration via junctions (Windows) or symlinks (Unix).
 
 ```
-~/.claude/          <-- primary account (QM, Max 20x)
-~/.claude-5x/       <-- secondary account (HY, Max 5x)
+~/.claude/          <-- primary account (personal, Max 20x)
+~/.claude-work/     <-- secondary account (work, Max 5x)
     plugins/cache/  --> junction to ~/.claude/plugins/cache/  (shared)
     settings.json   <-- synced from primary
     .credentials.json  <-- independent (separate login)

@@ -48,6 +48,8 @@ var commands = map[string]command{
 	"switch":     {runSwitch, "Switch account (via wrapper: cx switch 5x)", catDailyUse},
 	"run":        {runRun, "Auto-select best account and launch claude", catDailyUse},
 	"config":     {runConfig, "Manage accounts, main, metadata", catDailyUse},
+	"sessions":   {runSessions, "List recent CC sessions across all accounts", catDailyUse},
+	"resume":     {runResume, "Resume a CC session with smart matching", catDailyUse},
 	"status":     {runStatus, "All accounts: auth status + rate limits", catDailyUse},
 	"dashboard":  {runDashboard, "Live TUI dashboard", catMonitoring},
 	"web":        {runWeb, "Browser dashboard on localhost", catMonitoring},
@@ -97,6 +99,8 @@ func printVersion() {
 // in help output. Commands without hints show just the bare name.
 var commandUsageHint = map[string]string{
 	"config":     "[subcommand]",
+	"sessions":   "[--all]",
+	"resume":     "[term|--last]",
 	"switch":     "<name>",
 	"run":        "[-- args]",
 	"web":        "[--port N]",

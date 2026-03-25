@@ -42,6 +42,51 @@ cc-monitor switch work
 cc-monitor status
 ```
 
+## Shell Setup
+
+The `cc switch` wrapper lets you switch accounts with `eval` so the env var is set in the current shell.
+
+### Bash / Zsh
+
+Add to `~/.bashrc` or `~/.zshrc`:
+
+```bash
+cc() {
+    case "$1" in
+        switch) eval "$(cc-monitor switch "$2")" ;;
+        *) cc-monitor "$@" ;;
+    esac
+}
+```
+
+### Fish
+
+Add to `~/.config/fish/functions/cc.fish`:
+
+```fish
+function cc
+    if test "$argv[1]" = "switch"
+        eval (cc-monitor switch $argv[2])
+    else
+        cc-monitor $argv
+    end
+end
+```
+
+### PowerShell
+
+Add to your `$PROFILE`:
+
+```powershell
+function cc {
+    if ($args[0] -eq "switch") {
+        Invoke-Expression (cc-monitor switch $args[1])
+    } else {
+        & cc-monitor @args
+    }
+}
+```
+
 ## Features
 
 | Command       | Description                                      | Latency  |

@@ -72,7 +72,7 @@ func runInit() {
 	}
 
 	// Sync shared config files.
-	if err := syncFiles(primaryDir, targetDir); err != nil {
+	if err := syncFiles(primaryDir, targetDir, true); err != nil {
 		fmt.Fprintf(os.Stderr, "cc-monitor init: syncing files: %v\n", err)
 		os.Exit(1)
 	}

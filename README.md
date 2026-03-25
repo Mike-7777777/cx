@@ -113,6 +113,7 @@ function cc {
 
 | Command       | Description                                                | Latency  |
 |---------------|------------------------------------------------------------|----------|
+| `run [args...]` | Auto-select best account and launch claude               |          |
 | `statusline`  | Emit a compact rate-limit string for tmux / shell prompts  | ~16 ms   |
 | `init <name>` | Create a secondary account directory and register it       |          |
 | `switch <name>` | Emit shell commands to switch the active account (use with `eval`) | |
@@ -121,6 +122,31 @@ function cc {
 | `usage [daily\|session\|blocks]` | Analyze token usage and costs (incremental cache) | |
 | `version`     | Print version information                                  |          |
 | `help`        | Show help message                                          |          |
+
+## Smart Routing
+
+`cc-monitor run` automatically selects the best account and launches `claude`. No shell wrappers or `eval` needed — it directly sets `CLAUDE_CONFIG_DIR` and execs into claude.
+
+**Default** — picks the account with the lowest 5h usage:
+
+```bash
+cc-monitor run
+cc-monitor run -- -p "fix the bug in main.go"
+```
+
+**`--prefer <name>`** — prefer a specific account, but fall back to the best available if usage exceeds 80%:
+
+```bash
+cc-monitor run --prefer primary
+```
+
+**`--balance`** — round-robin across accounts for maximum total throughput. Skips accounts above 90% usage:
+
+```bash
+cc-monitor run --balance
+```
+
+On Unix, `run` uses `syscall.Exec` for true process replacement (no wrapper process stays alive). On Windows, it spawns claude as a child process and forwards the exit code.
 
 ## Statusline Integration
 

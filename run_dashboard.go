@@ -576,7 +576,7 @@ func padLine(content string) string {
 func sectionHeader(title string, useColor bool) string {
 	var b strings.Builder
 	b.WriteString(emptyLine())
-	b.WriteString(padLine("  "+format.Colorize(title, format.Bold+format.White, useColor)))
+	b.WriteString(padLine("  " + format.Colorize(title, format.Bold+format.White, useColor)))
 	sep := "  " + strings.Repeat("─", dashboardBoxWidth-4)
 	b.WriteString(padLine(format.Colorize(sep, format.Dim, useColor)))
 	return b.String()
@@ -604,7 +604,6 @@ func shortModelName(model string) string {
 		return model
 	}
 }
-
 
 // shortenPath shortens a file path for display.
 // Replaces home dir prefix with ~ and takes the last directory component.

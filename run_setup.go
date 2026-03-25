@@ -161,9 +161,9 @@ func runSetup() {
 	fmt.Fprintln(os.Stderr, "  Install 'cx' shell wrapper:")
 
 	type shellOption struct {
-		shell   platform.Shell
-		name    string
-		exists  bool // profile file exists
+		shell  platform.Shell
+		name   string
+		exists bool // profile file exists
 	}
 
 	options := []shellOption{

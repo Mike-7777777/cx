@@ -9,12 +9,10 @@ import (
 	"github.com/Mike-7777777/cx/internal/format"
 )
 
-
 // formatCost formats a USD cost as "$X.XX".
 func formatCost(cost float64) string {
 	return fmt.Sprintf("$%.2f", cost)
 }
-
 
 // truncateSessionID returns at most 24 characters of a session ID.
 func truncateSessionID(id string) string {

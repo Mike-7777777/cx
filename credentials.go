@@ -134,7 +134,6 @@ func parseTier(rateLimitTier, subscriptionType string) string {
 	}
 }
 
-
 // credentialMessage returns a human-readable description of the status.
 func credentialMessage(status credentialStatus) string {
 	switch status {

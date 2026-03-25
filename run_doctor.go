@@ -20,11 +20,11 @@ const (
 )
 
 type checkResult struct {
-	ok      bool
-	warn    bool
-	label   string
-	detail  string
-	indent  int
+	ok     bool
+	warn   bool
+	label  string
+	detail string
+	indent int
 }
 
 func runDoctor() {

@@ -9,9 +9,9 @@ import (
 type Shell int
 
 const (
-	ShellBash        Shell = iota // default / fallback
-	ShellFish                     // $SHELL contains "fish"
-	ShellPowerShell               // $PSModulePath is set
+	ShellBash       Shell = iota // default / fallback
+	ShellFish                    // $SHELL contains "fish"
+	ShellPowerShell              // $PSModulePath is set
 )
 
 // DetectShell returns the Shell type of the current process's parent shell.

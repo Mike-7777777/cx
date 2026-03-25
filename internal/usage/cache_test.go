@@ -117,12 +117,12 @@ type mockFileInfo struct {
 	modTime time.Time
 }
 
-func (m mockFileInfo) Name() string      { return "test.jsonl" }
-func (m mockFileInfo) Size() int64       { return m.size }
-func (m mockFileInfo) Mode() os.FileMode { return 0644 }
+func (m mockFileInfo) Name() string       { return "test.jsonl" }
+func (m mockFileInfo) Size() int64        { return m.size }
+func (m mockFileInfo) Mode() os.FileMode  { return 0644 }
 func (m mockFileInfo) ModTime() time.Time { return m.modTime }
-func (m mockFileInfo) IsDir() bool       { return false }
-func (m mockFileInfo) Sys() any          { return nil }
+func (m mockFileInfo) IsDir() bool        { return false }
+func (m mockFileInfo) Sys() any           { return nil }
 
 func TestUsageCache_NeedsUpdate_NewFile(t *testing.T) {
 	cache := &UsageCache{Files: make(map[string]FileState)}

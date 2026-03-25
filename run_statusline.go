@@ -18,9 +18,9 @@ import (
 )
 
 const (
-	logMaxSize                     = 1048576 // 1 MB
-	minVersionWarn                 = "2.1.80"
-	statuslineStaleCacheThreshold  = 30 * time.Minute
+	logMaxSize                    = 1048576 // 1 MB
+	minVersionWarn                = "2.1.80"
+	statuslineStaleCacheThreshold = 30 * time.Minute
 )
 
 func runStatusline() {

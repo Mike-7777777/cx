@@ -10,8 +10,8 @@ import (
 )
 
 const (
-	barWidth             = 5
-	switchHintThreshold  = 80 // suggest switching accounts above this 5h usage %
+	barWidth            = 5
+	switchHintThreshold = 80 // suggest switching accounts above this 5h usage %
 )
 
 // OtherAccount holds rate-limit info for a secondary account.

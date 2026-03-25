@@ -20,13 +20,14 @@ type Account struct {
 // StatuslineConfig controls which sections are shown in the statusline.
 // All fields default to true when nil (pointer types for "not set" = default).
 type StatuslineConfig struct {
-	ShowAccount      *bool `json:"show_account,omitempty"`
-	ShowCost         *bool `json:"show_cost,omitempty"`
-	ShowContext      *bool `json:"show_context,omitempty"`
-	ShowRate5h       *bool `json:"show_rate_5h,omitempty"`
-	ShowRate7d       *bool `json:"show_rate_7d,omitempty"`
-	ShowOtherAccount *bool `json:"show_other_account,omitempty"`
-	ShowSwitchHint   *bool `json:"show_switch_hint,omitempty"`
+	ShowAccount      *bool  `json:"show_account,omitempty"`
+	ShowCost         *bool  `json:"show_cost,omitempty"`
+	ShowContext      *bool  `json:"show_context,omitempty"`
+	ShowRate5h       *bool  `json:"show_rate_5h,omitempty"`
+	ShowRate7d       *bool  `json:"show_rate_7d,omitempty"`
+	ShowOtherAccount *bool  `json:"show_other_account,omitempty"`
+	ShowSwitchHint   *bool  `json:"show_switch_hint,omitempty"`
+	Locale           string `json:"locale,omitempty"` // "en" (default), "zh", "ja", "ko"
 }
 
 // IsEnabled returns the value of a *bool field, defaulting to true when nil.

@@ -151,3 +151,32 @@ func TestRender_OtherAccountReset(t *testing.T) {
 		t.Errorf("line2 missing reset marker: %q", lines[1])
 	}
 }
+
+func TestRender_ColorEnabled(t *testing.T) {
+	input := &Input{
+		Model:         Model{ID: "claude-opus-4-6", DisplayName: "Opus 4.6"},
+		ContextWindow: ContextWindow{UsedPercentage: ptrF64(32.5), ContextWindowSize: ptrI64(200000)},
+		RateLimits: &InputRateLimits{
+			FiveHour: &RateWindow{UsedPercentage: 38.2, ResetsAt: 9999999999},
+			SevenDay: &RateWindow{UsedPercentage: 85.0, ResetsAt: 9999999999},
+		},
+	}
+
+	lines := Render(input, nil, true)
+	if len(lines) != 1 {
+		t.Fatalf("got %d lines, want 1", len(lines))
+	}
+
+	line := lines[0]
+	// ANSI escape sequences must be present when color is enabled.
+	if !strings.Contains(line, "\033[") {
+		t.Errorf("colored line missing ANSI escape codes: %q", line)
+	}
+	// Content must still be present (color codes wrap the text, not replace it).
+	if !strings.Contains(line, "Opus 4.6") {
+		t.Errorf("colored line missing model name: %q", line)
+	}
+	if !strings.Contains(line, "38%") {
+		t.Errorf("colored line missing 5h percentage: %q", line)
+	}
+}

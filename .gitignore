@@ -1,3 +1,6 @@
 cc-monitor
 cc-monitor.exe
 *.log
+dist/
+*.old
+coverage.out

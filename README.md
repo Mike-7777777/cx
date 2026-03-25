@@ -18,33 +18,36 @@ Or download a pre-built binary from [Releases](https://github.com/Mike-7777777/c
 
 ## Quick Start
 
-**1. Initialize config**
+**1. Initialize a secondary account**
+
+Your default Claude Code config (`~/.claude/`) is the primary account. Use `init` to create additional accounts:
 
 ```bash
-cc-monitor init
+cc-monitor init 5x
+cc-monitor init personal
 ```
 
-**2. Log in to one or more accounts**
+This creates `~/.claude-5x/` (or `~/.claude-personal/`), links shared directories, and syncs config files from the primary.
+
+**2. Log in to the new account**
 
 ```bash
-cc-monitor init --account work
-cc-monitor init --account personal
+CLAUDE_CONFIG_DIR=~/.claude-5x claude auth login
 ```
 
-**3. Add the shell wrapper** (see Shell Wrapper section below)
+**3. Add the shell wrapper** (see Shell Setup below)
 
-**4. Configure your statusline** to call `cc-monitor statusline`
-
-**5. Switch accounts or check status**
+**4. Switch accounts and check status**
 
 ```bash
-cc-monitor switch work
-cc-monitor status
+cc switch 5x          # via shell wrapper (sets env in current shell)
+cc-monitor status     # show all accounts with rate limits
+cc-monitor usage      # analyze token usage and costs
 ```
 
 ## Shell Setup
 
-The `cc switch` wrapper lets you switch accounts with `eval` so the env var is set in the current shell.
+The `cc` wrapper lets you switch accounts so the `CLAUDE_CONFIG_DIR` env var is set in the current shell.
 
 ### Bash / Zsh
 
@@ -87,45 +90,33 @@ function cc {
 }
 ```
 
-## Features
+## Commands
 
-| Command       | Description                                      | Latency  |
-|---------------|--------------------------------------------------|----------|
-| `statusline`  | Emit a compact rate-limit string for statuslines | ~16 ms   |
-| `init`        | Initialize config and account credentials        |          |
-| `switch`      | Switch the active Claude Code account            |          |
-| `sync`        | Sync usage data from Claude API                  |          |
-| `status`      | Print account and rate-limit status              |          |
+| Command       | Description                                                | Latency  |
+|---------------|------------------------------------------------------------|----------|
+| `statusline`  | Emit a compact rate-limit string for tmux / shell prompts  | ~16 ms   |
+| `init <name>` | Create a secondary account directory and register it       |          |
+| `switch <name>` | Emit shell commands to switch the active account (use with `eval`) | |
+| `sync`        | Sync config files from the primary account to all secondaries |       |
+| `status`      | Print all accounts with rate-limit bars and recommendations |         |
+| `usage [daily\|session\|blocks]` | Analyze token usage and costs (incremental cache) | |
+| `version`     | Print version information                                  |          |
+| `help`        | Show help message                                          |          |
 
-## Shell Wrapper
+## Statusline Integration
 
-The wrapper ensures `claude` always runs under the currently active account.
+### tmux
 
-**bash / zsh** — add to `~/.bashrc` or `~/.zshrc`:
-
-```bash
-claude() {
-  eval "$(cc-monitor env)"
-  command claude "$@"
-}
+```tmux
+set -g status-right '#(cc-monitor statusline)'
 ```
 
-**fish** — add to `~/.config/fish/config.fish`:
+### Starship
 
-```fish
-function claude
-    eval (cc-monitor env)
-    command claude $argv
-end
-```
-
-**PowerShell** — add to your `$PROFILE`:
-
-```powershell
-function claude {
-    Invoke-Expression (cc-monitor env)
-    & claude.exe @args
-}
+```toml
+[custom.cc]
+command = "cc-monitor statusline"
+when = true
 ```
 
 ## Cross-Platform

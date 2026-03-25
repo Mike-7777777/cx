@@ -16,7 +16,9 @@ func CreateLink(link, target string) error {
 	linkVol := filepath.VolumeName(filepath.Clean(link))
 	targetVol := filepath.VolumeName(filepath.Clean(target))
 	if strings.EqualFold(linkVol, targetVol) {
-		cmd := exec.Command("cmd", "/C", "mklink", "/J", link, target)
+		// Quote both paths to prevent cmd.exe from interpreting shell
+		// metacharacters (defense-in-depth; account names are also validated).
+		cmd := exec.Command("cmd", "/C", fmt.Sprintf(`mklink /J "%s" "%s"`, link, target))
 		out, err := cmd.CombinedOutput()
 		if err != nil {
 			return fmt.Errorf("mklink /J: %w\n%s", err, out)

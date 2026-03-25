@@ -1,17 +1,16 @@
 package main
 
 import (
-	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
 	"sort"
 	"time"
 
-	"github.com/Mike-7777777/cc-monitor/internal/cache"
-	"github.com/Mike-7777777/cc-monitor/internal/config"
-	"github.com/Mike-7777777/cc-monitor/internal/format"
-	"github.com/Mike-7777777/cc-monitor/internal/platform"
+	"github.com/Mike-7777777/cx/internal/cache"
+	"github.com/Mike-7777777/cx/internal/config"
+	"github.com/Mike-7777777/cx/internal/format"
+	"github.com/Mike-7777777/cx/internal/platform"
 )
 
 const (
@@ -44,7 +43,7 @@ func runDoctor() {
 	})
 
 	// Check primary credentials.
-	primaryCredOk, credDetail := checkCredentials(primaryDir)
+	primaryCredOk, credDetail := checkCredentialsForDoctor(primaryDir)
 	results = append(results, checkResult{
 		ok: primaryCredOk, label: "Primary credentials", detail: credDetail,
 	})
@@ -101,7 +100,7 @@ func runDoctor() {
 		})
 
 		// Check credentials.
-		credOk, credMsg := checkCredentials(accDir)
+		credOk, credMsg := checkCredentialsForDoctor(accDir)
 		results = append(results, checkResult{
 			ok: credOk, label: "credentials", detail: credMsg, indent: 1,
 		})
@@ -151,27 +150,22 @@ func runDoctor() {
 	printResults(results, useColor)
 }
 
-// checkCredentials verifies .credentials.json exists and has claudeAiOauth.
-func checkCredentials(dir string) (bool, string) {
-	credPath := filepath.Join(dir, ".credentials.json")
-	data, err := os.ReadFile(credPath)
-	if err != nil {
-		if os.IsNotExist(err) {
-			return false, "missing"
-		}
-		return false, fmt.Sprintf("read error: %v", err)
+// checkCredentialsForDoctor verifies .credentials.json exists and has claudeAiOauth.
+// Returns (ok, detail) for the doctor report output.
+func checkCredentialsForDoctor(dir string) (bool, string) {
+	status := checkCredentials(dir)
+	switch status {
+	case credentialOK:
+		return true, "valid"
+	case credentialMissing:
+		return false, "missing or unreadable"
+	case credentialNoToken:
+		return false, "no access token"
+	case credentialExpired:
+		return false, "expired (no refresh token)"
+	default:
+		return false, "unknown"
 	}
-
-	var creds map[string]json.RawMessage
-	if err := json.Unmarshal(data, &creds); err != nil {
-		return false, "invalid JSON"
-	}
-
-	if _, ok := creds["claudeAiOauth"]; !ok {
-		return false, "claudeAiOauth key missing"
-	}
-
-	return true, "valid"
 }
 
 // checkLink verifies that linkPath is a valid junction/symlink pointing to target.

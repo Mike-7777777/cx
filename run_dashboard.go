@@ -13,11 +13,11 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/Mike-7777777/cc-monitor/internal/cache"
-	"github.com/Mike-7777777/cc-monitor/internal/config"
-	"github.com/Mike-7777777/cc-monitor/internal/format"
-	"github.com/Mike-7777777/cc-monitor/internal/platform"
-	"github.com/Mike-7777777/cc-monitor/internal/usage"
+	"github.com/Mike-7777777/cx/internal/cache"
+	"github.com/Mike-7777777/cx/internal/config"
+	"github.com/Mike-7777777/cx/internal/format"
+	"github.com/Mike-7777777/cx/internal/platform"
+	"github.com/Mike-7777777/cx/internal/usage"
 )
 
 const (
@@ -48,18 +48,18 @@ func runDashboard() {
 	for i := 0; i < len(args); i++ {
 		if args[i] == "--interval" {
 			if i+1 >= len(args) {
-				fmt.Fprintln(os.Stderr, "cc-monitor dashboard: --interval requires a value in seconds")
+				fmt.Fprintln(os.Stderr, "cx dashboard: --interval requires a value in seconds")
 				os.Exit(1)
 			}
 			i++
 			n, err := strconv.Atoi(args[i])
 			if err != nil || n < 1 {
-				fmt.Fprintf(os.Stderr, "cc-monitor dashboard: --interval must be a positive integer, got %q\n", args[i])
+				fmt.Fprintf(os.Stderr, "cx dashboard: --interval must be a positive integer, got %q\n", args[i])
 				os.Exit(1)
 			}
 			interval = time.Duration(n) * time.Second
 		} else {
-			fmt.Fprintf(os.Stderr, "cc-monitor dashboard: unknown flag %q\n", args[i])
+			fmt.Fprintf(os.Stderr, "cx dashboard: unknown flag %q\n", args[i])
 			os.Exit(1)
 		}
 	}
@@ -97,7 +97,7 @@ func renderDashboard(useColor bool, interval time.Duration) {
 
 	// Title bar.
 	b.WriteString(boxTop())
-	title := "  cc-monitor dashboard"
+	title := "  cx dashboard"
 	refreshNote := fmt.Sprintf("[refreshing every %ds]", int(interval.Seconds()))
 	padding := dashboardBoxWidth - len(title) - len(refreshNote) - 4
 	if padding < 1 {
@@ -150,7 +150,7 @@ func renderAccountsSection(useColor bool) string {
 	}
 
 	if len(reg.Accounts) == 0 {
-		b.WriteString(padLine("  No accounts configured. Run: cc-monitor init", useColor))
+		b.WriteString(padLine("  No accounts configured. Run: cx init", useColor))
 		return b.String()
 	}
 

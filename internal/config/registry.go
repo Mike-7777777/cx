@@ -108,11 +108,11 @@ func (r *Registry) Save() error {
 	return nil
 }
 
-// RegistryPath returns the default registry file location (~/.cc-monitor.json).
+// RegistryPath returns the default registry file location (~/.cx.json).
 func RegistryPath() (string, error) {
 	home, err := os.UserHomeDir()
 	if err != nil {
 		return "", fmt.Errorf("resolving home directory: %w", err)
 	}
-	return filepath.Join(home, ".cc-monitor.json"), nil
+	return filepath.Join(home, ".cx.json"), nil
 }

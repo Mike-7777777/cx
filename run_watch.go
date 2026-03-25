@@ -8,7 +8,7 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/Mike-7777777/cc-monitor/internal/config"
+	"github.com/Mike-7777777/cx/internal/config"
 )
 
 const (
@@ -24,40 +24,40 @@ type watchFileMeta struct {
 	size  int64
 }
 
-// runWatch implements the `cc-monitor watch` command.
+// runWatch implements the `cx watch` command.
 // It polls the primary account's config files every 30 seconds and
 // auto-syncs to all secondaries when a change is detected.
 func runWatch() {
 	regPath, err := config.RegistryPath()
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "cc-monitor watch: %v\n", err)
+		fmt.Fprintf(os.Stderr, "cx watch: %v\n", err)
 		os.Exit(1)
 	}
 
 	reg, err := config.LoadOrCreateRegistry(regPath)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "cc-monitor watch: %v\n", err)
+		fmt.Fprintf(os.Stderr, "cx watch: %v\n", err)
 		os.Exit(1)
 	}
 
 	if reg.Primary == "" {
-		fmt.Fprintln(os.Stderr, "cc-monitor watch: no primary account configured; run: cc-monitor init <name>")
+		fmt.Fprintln(os.Stderr, "cx watch: no primary account configured; run: cx init <name>")
 		os.Exit(1)
 	}
 
 	primaryDir, err := reg.ResolveConfigDir(reg.Primary)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "cc-monitor watch: resolving primary account %q: %v\n", reg.Primary, err)
+		fmt.Fprintf(os.Stderr, "cx watch: resolving primary account %q: %v\n", reg.Primary, err)
 		os.Exit(1)
 	}
 
 	secondaryCount := len(reg.Accounts) - 1
 	if secondaryCount <= 0 {
-		fmt.Fprintln(os.Stderr, "cc-monitor watch: no secondary accounts configured; run: cc-monitor init <name>")
+		fmt.Fprintln(os.Stderr, "cx watch: no secondary accounts configured; run: cx init <name>")
 		os.Exit(1)
 	}
 
-	fmt.Fprintf(os.Stderr, "cc-monitor watch: monitoring %q → %d secondary account(s) (Ctrl+C to stop)\n",
+	fmt.Fprintf(os.Stderr, "cx watch: monitoring %q → %d secondary account(s) (Ctrl+C to stop)\n",
 		reg.Primary, secondaryCount)
 
 	// Build initial state snapshot.
@@ -73,7 +73,7 @@ func runWatch() {
 	for {
 		select {
 		case <-quit:
-			fmt.Fprintln(os.Stderr, "\ncc-monitor watch: stopped")
+			fmt.Fprintln(os.Stderr, "\ncx watch: stopped")
 			return
 
 		case <-ticker.C:
@@ -85,7 +85,7 @@ func runWatch() {
 			// Re-load registry in case accounts changed since startup.
 			reg, err = config.LoadOrCreateRegistry(regPath)
 			if err != nil {
-				fmt.Fprintf(os.Stderr, "cc-monitor watch: reloading registry: %v\n", err)
+				fmt.Fprintf(os.Stderr, "cx watch: reloading registry: %v\n", err)
 				continue
 			}
 
@@ -99,7 +99,7 @@ func runWatch() {
 					continue
 				}
 				if err := syncFiles(primaryDir, targetDir, true); err != nil {
-					fmt.Fprintf(os.Stderr, "cc-monitor watch: syncing %q: %v\n", name, err)
+					fmt.Fprintf(os.Stderr, "cx watch: syncing %q: %v\n", name, err)
 					continue
 				}
 				synced++

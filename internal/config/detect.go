@@ -48,7 +48,7 @@ func DetectConfigDir() (string, error) {
 	switch {
 	case dotClaudeExists && xdgExists:
 		// Both present: prefer ~/.claude/ and warn.
-		log.Printf("cc-monitor: both %q and %q exist; using %q", xdgPath, dotClaude, dotClaude)
+		log.Printf("cx: both %q and %q exist; using %q", xdgPath, dotClaude, dotClaude)
 		return dotClaude, nil
 	case dotClaudeExists:
 		return dotClaude, nil

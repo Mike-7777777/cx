@@ -6,7 +6,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/Mike-7777777/cc-monitor/internal/format"
+	"github.com/Mike-7777777/cx/internal/format"
 )
 
 const barWidth = 5

@@ -6,12 +6,12 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/Mike-7777777/cc-monitor/internal/config"
+	"github.com/Mike-7777777/cx/internal/config"
 )
 
 func runCompletion() {
 	if len(os.Args) < 3 {
-		fmt.Fprintln(os.Stderr, "usage: cc-monitor completion <bash|fish|powershell>")
+		fmt.Fprintln(os.Stderr, "usage: cx completion <bash|fish|powershell>")
 		os.Exit(1)
 	}
 
@@ -51,10 +51,10 @@ func bashCompletion() string {
 	accounts := accountNames()
 	accountList := strings.Join(accounts, " ")
 
-	return fmt.Sprintf(`# bash completion for cc-monitor
-# Add to ~/.bashrc: eval "$(cc-monitor completion bash)"
+	return fmt.Sprintf(`# bash completion for cx
+# Add to ~/.bashrc: eval "$(cx completion bash)"
 
-_cc_monitor_completions() {
+_cx_completions() {
     local cur prev commands
     COMPREPLY=()
     cur="${COMP_WORDS[COMP_CWORD]}"
@@ -62,7 +62,7 @@ _cc_monitor_completions() {
     commands="run statusline init switch sync status usage completion doctor version help"
 
     case "${prev}" in
-        cc-monitor)
+        cx)
             COMPREPLY=( $(compgen -W "${commands}" -- "${cur}") )
             return 0
             ;;
@@ -88,7 +88,7 @@ _cc_monitor_completions() {
             ;;
     esac
 }
-complete -F _cc_monitor_completions cc-monitor
+complete -F _cx_completions cx
 `, accountList, accountList)
 }
 
@@ -96,42 +96,42 @@ func fishCompletion() string {
 	accounts := accountNames()
 
 	var sb strings.Builder
-	sb.WriteString(`# fish completion for cc-monitor
-# Add to ~/.config/fish/completions/cc-monitor.fish
+	sb.WriteString(`# fish completion for cx
+# Add to ~/.config/fish/completions/cx.fish
 
 # Disable file completions by default
-complete -c cc-monitor -f
+complete -c cx -f
 
 # Subcommands
-complete -c cc-monitor -n '__fish_use_subcommand' -a 'run' -d 'Auto-select best account and launch claude'
-complete -c cc-monitor -n '__fish_use_subcommand' -a 'statusline' -d 'Print compact status line'
-complete -c cc-monitor -n '__fish_use_subcommand' -a 'init' -d 'Initialize cc-monitor configuration'
-complete -c cc-monitor -n '__fish_use_subcommand' -a 'switch' -d 'Switch active Claude Code account'
-complete -c cc-monitor -n '__fish_use_subcommand' -a 'sync' -d 'Sync account state'
-complete -c cc-monitor -n '__fish_use_subcommand' -a 'status' -d 'Show full account status'
-complete -c cc-monitor -n '__fish_use_subcommand' -a 'usage' -d 'Analyze token usage and costs'
-complete -c cc-monitor -n '__fish_use_subcommand' -a 'completion' -d 'Output shell completion script'
-complete -c cc-monitor -n '__fish_use_subcommand' -a 'doctor' -d 'Run health checks'
-complete -c cc-monitor -n '__fish_use_subcommand' -a 'version' -d 'Print version information'
-complete -c cc-monitor -n '__fish_use_subcommand' -a 'help' -d 'Show help message'
+complete -c cx -n '__fish_use_subcommand' -a 'run' -d 'Auto-select best account and launch claude'
+complete -c cx -n '__fish_use_subcommand' -a 'statusline' -d 'Print compact status line'
+complete -c cx -n '__fish_use_subcommand' -a 'init' -d 'Initialize cx configuration'
+complete -c cx -n '__fish_use_subcommand' -a 'switch' -d 'Switch active Claude Code account'
+complete -c cx -n '__fish_use_subcommand' -a 'sync' -d 'Sync account state'
+complete -c cx -n '__fish_use_subcommand' -a 'status' -d 'Show full account status'
+complete -c cx -n '__fish_use_subcommand' -a 'usage' -d 'Analyze token usage and costs'
+complete -c cx -n '__fish_use_subcommand' -a 'completion' -d 'Output shell completion script'
+complete -c cx -n '__fish_use_subcommand' -a 'doctor' -d 'Run health checks'
+complete -c cx -n '__fish_use_subcommand' -a 'version' -d 'Print version information'
+complete -c cx -n '__fish_use_subcommand' -a 'help' -d 'Show help message'
 
 # switch completions (account names)
 `)
 	for _, name := range accounts {
-		sb.WriteString(fmt.Sprintf("complete -c cc-monitor -n '__fish_seen_subcommand_from switch' -a '%s'\n", name))
-		sb.WriteString(fmt.Sprintf("complete -c cc-monitor -n '__fish_seen_subcommand_from init' -a '%s'\n", name))
+		sb.WriteString(fmt.Sprintf("complete -c cx -n '__fish_seen_subcommand_from switch' -a '%s'\n", name))
+		sb.WriteString(fmt.Sprintf("complete -c cx -n '__fish_seen_subcommand_from init' -a '%s'\n", name))
 	}
 
 	sb.WriteString(`
 # usage completions (modes)
-complete -c cc-monitor -n '__fish_seen_subcommand_from usage' -a 'daily weekly monthly session blocks messages'
+complete -c cx -n '__fish_seen_subcommand_from usage' -a 'daily weekly monthly session blocks messages'
 
 # completion shell types
-complete -c cc-monitor -n '__fish_seen_subcommand_from completion' -a 'bash fish powershell'
+complete -c cx -n '__fish_seen_subcommand_from completion' -a 'bash fish powershell'
 
 # run flags
-complete -c cc-monitor -n '__fish_seen_subcommand_from run' -l 'prefer' -d 'Prefer a specific account'
-complete -c cc-monitor -n '__fish_seen_subcommand_from run' -l 'balance' -d 'Round-robin selection'
+complete -c cx -n '__fish_seen_subcommand_from run' -l 'prefer' -d 'Prefer a specific account'
+complete -c cx -n '__fish_seen_subcommand_from run' -l 'balance' -d 'Round-robin selection'
 `)
 	return sb.String()
 }
@@ -143,10 +143,10 @@ func powershellCompletion() string {
 		accountList = ""
 	}
 
-	return fmt.Sprintf(`# PowerShell completion for cc-monitor
-# Add to your $PROFILE: cc-monitor completion powershell | Invoke-Expression
+	return fmt.Sprintf(`# PowerShell completion for cx
+# Add to your $PROFILE: cx completion powershell | Invoke-Expression
 
-Register-ArgumentCompleter -CommandName cc-monitor -ScriptBlock {
+Register-ArgumentCompleter -CommandName cx -ScriptBlock {
     param($wordToComplete, $commandAst, $cursorPosition)
 
     $commands = @('run', 'statusline', 'init', 'switch', 'sync', 'status', 'usage', 'completion', 'doctor', 'version', 'help')

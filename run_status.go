@@ -7,10 +7,10 @@ import (
 	"sort"
 	"time"
 
-	"github.com/Mike-7777777/cc-monitor/internal/cache"
-	"github.com/Mike-7777777/cc-monitor/internal/config"
-	"github.com/Mike-7777777/cc-monitor/internal/format"
-	"github.com/Mike-7777777/cc-monitor/internal/platform"
+	"github.com/Mike-7777777/cx/internal/cache"
+	"github.com/Mike-7777777/cx/internal/config"
+	"github.com/Mike-7777777/cx/internal/format"
+	"github.com/Mike-7777777/cx/internal/platform"
 )
 
 const (
@@ -28,23 +28,24 @@ type statusRow struct {
 	note         string
 	hasData      bool
 	isStale      bool
+	authOK       bool
 }
 
 func runStatus() {
 	regPath, err := config.RegistryPath()
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "cc-monitor status: %v\n", err)
+		fmt.Fprintf(os.Stderr, "cx status: %v\n", err)
 		os.Exit(1)
 	}
 
 	reg, err := config.LoadOrCreateRegistry(regPath)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "cc-monitor status: %v\n", err)
+		fmt.Fprintf(os.Stderr, "cx status: %v\n", err)
 		os.Exit(1)
 	}
 
 	if len(reg.Accounts) == 0 {
-		fmt.Println("No accounts configured. Run: cc-monitor init <name>")
+		fmt.Println("No accounts configured. Run: cx init <name>")
 		return
 	}
 
@@ -67,6 +68,7 @@ func runStatus() {
 
 		rc, err := cache.ReadRateCache(filepath.Join(dir, "rate-cache.json"))
 		row := buildRow(name, rc, err)
+		row.authOK = checkCredentials(dir) == credentialOK
 		rows = append(rows, row)
 
 		if row.hasData && !row.isStale {
@@ -120,19 +122,25 @@ func buildRow(name string, rc *cache.RateCache, readErr error) statusRow {
 }
 
 func printTable(rows []statusRow, useColor bool) {
-	header := fmt.Sprintf("%-10s  %-14s  %-12s  %-14s  %s",
-		"Account", "5h Usage", "Resets In", "7d Usage", "Note")
-	sep := "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+	header := fmt.Sprintf("%-10s  %-6s  %-14s  %-12s  %-14s  %s",
+		"Account", "Auth", "5h Usage", "Resets In", "7d Usage", "Note")
+	sep := "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 
 	fmt.Println(format.Colorize(header, format.Bold, useColor))
 	fmt.Println(format.Colorize(sep, format.Dim, useColor))
 
 	for _, row := range rows {
 		nameStr := format.Colorize(row.name, format.Cyan, useColor)
+
+		authStr := format.Colorize("OK", format.Green, useColor)
+		if !row.authOK {
+			authStr = format.Colorize("FAIL", format.Red, useColor)
+		}
+
 		if !row.hasData {
 			noteStr := format.Colorize(noDataMarker, format.Dim, useColor)
-			fmt.Printf("%-10s  %-14s  %-12s  %-14s  %s\n",
-				nameStr, noteStr, "", "", row.note)
+			fmt.Printf("%-10s  %-6s  %-14s  %-12s  %-14s  %s\n",
+				nameStr, authStr, noteStr, "", "", row.note)
 			continue
 		}
 
@@ -143,8 +151,8 @@ func printTable(rows []statusRow, useColor bool) {
 			noteStr = format.Colorize(row.note, format.Dim, useColor)
 		}
 
-		fmt.Printf("%-10s  %-14s  %-12s  %-14s  %s\n",
-			nameStr, fiveBar, row.fiveResetStr, sevenBar, noteStr)
+		fmt.Printf("%-10s  %-6s  %-14s  %-12s  %-14s  %s\n",
+			nameStr, authStr, fiveBar, row.fiveResetStr, sevenBar, noteStr)
 	}
 }
 

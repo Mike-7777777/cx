@@ -1,4 +1,4 @@
-module github.com/Mike-7777777/cc-monitor
+module github.com/Mike-7777777/cx
 
 go 1.24.0
 

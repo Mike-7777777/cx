@@ -170,11 +170,11 @@ func writeJSON(w http.ResponseWriter, v any) {
 // --- API Types ---
 
 type apiAccountStatus struct {
-	Name         string   `json:"name"`
-	FiveHourPct  *float64 `json:"five_hour_pct"`
-	FiveHourRst  string   `json:"five_hour_reset,omitempty"`
-	SevenDayPct  *float64 `json:"seven_day_pct"`
-	Note         string   `json:"note,omitempty"`
+	Name        string   `json:"name"`
+	FiveHourPct *float64 `json:"five_hour_pct"`
+	FiveHourRst string   `json:"five_hour_reset,omitempty"`
+	SevenDayPct *float64 `json:"seven_day_pct"`
+	Note        string   `json:"note,omitempty"`
 }
 
 type apiStatusResponse struct {

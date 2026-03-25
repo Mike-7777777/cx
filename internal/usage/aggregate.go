@@ -242,13 +242,13 @@ func AggregateByProject(entries []Entry) []ProjectReport {
 
 // TrendPair holds current and previous period values for trend comparison.
 type TrendPair struct {
-	Date            string  `json:"Date"`
-	CurrentTokens   int64   `json:"CurrentTokens"`
-	PreviousTokens  int64   `json:"PreviousTokens"`
-	CurrentCost     float64 `json:"CurrentCost"`
-	PreviousCost    float64 `json:"PreviousCost"`
-	ChangePercent   float64 `json:"ChangePercent"`   // token change %
-	CostChangePct   float64 `json:"CostChangePct"`   // cost change %
+	Date           string  `json:"Date"`
+	CurrentTokens  int64   `json:"CurrentTokens"`
+	PreviousTokens int64   `json:"PreviousTokens"`
+	CurrentCost    float64 `json:"CurrentCost"`
+	PreviousCost   float64 `json:"PreviousCost"`
+	ChangePercent  float64 `json:"ChangePercent"` // token change %
+	CostChangePct  float64 `json:"CostChangePct"` // cost change %
 }
 
 // AggregateTrend compares the current period (since to now) with the previous

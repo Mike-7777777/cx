@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"runtime"
 	"strings"
@@ -410,6 +411,21 @@ func powershellProfilePath() string {
 	return filepath.Join(home, ".config", "powershell", "Microsoft.PowerShell_profile.ps1")
 }
 
+// resolveStatuslineCommand returns the best statusline command string.
+// If cx is in PATH, returns the portable "cx statusline".
+// Otherwise returns the absolute path with forward slashes.
+func resolveStatuslineCommand(cxPath string) string {
+	// Check if "cx" resolves to the same binary via PATH.
+	if found, err := exec.LookPath("cx"); err == nil {
+		foundAbs, _ := filepath.Abs(found)
+		selfAbs, _ := filepath.Abs(cxPath)
+		if normalizePath(foundAbs) == normalizePath(selfAbs) {
+			return "cx statusline"
+		}
+	}
+	return strings.ReplaceAll(cxPath, "\\", "/") + " statusline"
+}
+
 // configureStatusline adds the cx statusline command to CC's settings.json.
 // It reads the existing settings, merges the statusLine config, and writes
 // back atomically. Returns true if configuration succeeded.
@@ -435,8 +451,10 @@ func configureStatusline(primaryConfigDir string) bool {
 		}
 	}
 
-	// Set statusLine config. Use forward slashes on all platforms.
-	cmd := strings.ReplaceAll(cxPath, "\\", "/") + " statusline"
+	// Set statusLine config.
+	// Prefer bare "cx statusline" if cx is in PATH (portable across installs).
+	// Otherwise fall back to absolute path with forward slashes.
+	cmd := resolveStatuslineCommand(cxPath)
 	settings["statusLine"] = map[string]string{
 		"type":    "command",
 		"command": cmd,

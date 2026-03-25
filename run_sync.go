@@ -33,16 +33,16 @@ func runSync() {
 		os.Exit(1)
 	}
 
-	primaryDir, err := reg.ResolveConfigDir(reg.Primary)
+	mainDir, err := reg.ResolveConfigDir(reg.Main)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "cx sync: resolving primary account %q: %v\n", reg.Primary, err)
+		fmt.Fprintf(os.Stderr, "cx sync: resolving main account %q: %v\n", reg.Main, err)
 		os.Exit(1)
 	}
 
 	force := hasFlagFrom("--force", 2)
 
 	for name, acc := range reg.Accounts {
-		if name == reg.Primary {
+		if name == reg.Main {
 			continue
 		}
 		targetDir := acc.ConfigDir
@@ -50,7 +50,7 @@ func runSync() {
 			continue
 		}
 		fmt.Fprintf(os.Stderr, "syncing %q → %q\n", name, targetDir)
-		if err := syncFiles(primaryDir, targetDir, force); err != nil {
+		if err := syncFiles(mainDir, targetDir, force); err != nil {
 			fmt.Fprintf(os.Stderr, "cx sync: %v\n", err)
 			os.Exit(1)
 		}
@@ -126,27 +126,27 @@ func syncFiles(srcDir, dstDir string, force bool) error {
 		fmt.Fprintf(os.Stderr, "  synced %s\n", rel)
 	}
 
-	// Sync project memory files from primary to secondary.
+	// Sync project memory files from main to secondary.
 	if err := syncMemory(srcDir, dstDir); err != nil {
 		return fmt.Errorf("syncing memory: %w", err)
 	}
 
-	// Sync teams directory from primary to secondary.
+	// Sync teams directory from main to secondary.
 	if err := syncTeams(srcDir, dstDir); err != nil {
 		return fmt.Errorf("syncing teams: %w", err)
 	}
 
-	// Sync MCP OAuth tokens from primary to secondary.
+	// Sync MCP OAuth tokens from main to secondary.
 	if err := syncMcpOAuth(srcDir, dstDir); err != nil {
 		return fmt.Errorf("syncing MCP OAuth: %w", err)
 	}
 
-	// Bidirectional sync: offer to copy newer files back to primary.
+	// Bidirectional sync: offer to copy newer files back to main.
 	if !force && len(newerInDst) > 0 {
 		dstBase := filepath.Base(dstDir)
 		fmt.Fprintf(os.Stderr, "\n[cx] %s has newer config files: %s\n",
 			dstBase, strings.Join(newerInDst, ", "))
-		fmt.Fprintf(os.Stderr, "  Sync back to primary? [y/N] ")
+		fmt.Fprintf(os.Stderr, "  Sync back to main? [y/N] ")
 
 		line, _ := reader.ReadString('\n')
 		line = strings.TrimSpace(line)
@@ -174,7 +174,7 @@ func syncFiles(srcDir, dstDir string, force bool) error {
 }
 
 // syncMemory copies project memory files (projects/*/memory/MEMORY.md)
-// from srcDir to dstDir. Only syncs memory dirs that exist in the primary.
+// from srcDir to dstDir. Only syncs memory dirs that exist in the main account.
 // Silently skips if projects/ doesn't exist in srcDir.
 func syncMemory(srcDir, dstDir string) error {
 	projectsDir := filepath.Join(srcDir, "projects")

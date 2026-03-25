@@ -8,9 +8,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 ## [Unreleased]
 
 ### Added
-- `cx config` command: show/primary/rename/set email|alias
+- `cx config` command: show/main/rename/set email|alias
 - Auto-read identity from `.claude.json` (email, displayName, tier, CC version, session count)
-- `cx status` shows subscription tier column and primary marker
+- `cx status` shows subscription tier column and main marker
 - `cx doctor` auto-fixes backslash paths in statusline config
 - Graceful statusline fallback when CC doesn't pipe stdin data
 - GoReleaser config for Homebrew tap and Scoop bucket

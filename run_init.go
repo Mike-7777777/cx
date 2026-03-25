@@ -15,7 +15,7 @@ import (
 var validAccountName = regexp.MustCompile(`^[a-zA-Z0-9_-]+$`)
 
 // sharedLinkDirs are subdirectories that are junctioned/symlinked from the
-// primary config dir into every secondary account dir.
+// main config dir into every secondary account dir.
 var sharedLinkDirs = []string{
 	filepath.Join("plugins", "cache"),
 	"ide",
@@ -34,8 +34,8 @@ func runInit() {
 	}
 	force := hasFlag("--force")
 
-	// Validate: primary config dir must exist.
-	primaryDir, err := config.DetectConfigDir()
+	// Validate: main config dir must exist.
+	mainDir, err := config.DetectConfigDir()
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "cx init: %v\n", err)
 		os.Exit(1)
@@ -61,7 +61,7 @@ func runInit() {
 
 	// Create junctions/symlinks for shared dirs.
 	for _, rel := range sharedLinkDirs {
-		src := filepath.Join(primaryDir, rel)
+		src := filepath.Join(mainDir, rel)
 		if _, err := os.Stat(src); os.IsNotExist(err) {
 			continue
 		}
@@ -81,7 +81,7 @@ func runInit() {
 	}
 
 	// Sync shared config files.
-	if err := syncFiles(primaryDir, targetDir, true); err != nil {
+	if err := syncFiles(mainDir, targetDir, true); err != nil {
 		fmt.Fprintf(os.Stderr, "cx init: syncing files: %v\n", err)
 		os.Exit(1)
 	}
@@ -99,10 +99,10 @@ func runInit() {
 		os.Exit(1)
 	}
 
-	// If no primary is registered yet, detect and set it.
-	if reg.Primary == "" {
-		reg.Primary = "primary"
-		reg.AddAccount("primary", "")
+	// If no main account is registered yet, detect and set it.
+	if reg.Main == "" {
+		reg.Main = "main"
+		reg.AddAccount("main", "")
 	}
 
 	reg.AddAccount(name, targetDir)

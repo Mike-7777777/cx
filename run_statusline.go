@@ -245,7 +245,7 @@ func currentAccountName(cfgDir string) string {
 		return ""
 	}
 
-	// The primary account may have an empty ConfigDir (uses default).
+	// The main account may have an empty ConfigDir (uses default).
 	// Use DefaultConfigDir (not DetectConfigDir) for empty config_dir to avoid
 	// matching the CLAUDE_CONFIG_DIR override set by cx for the active session.
 	normalizedCfg := normalizePath(cfgDir)

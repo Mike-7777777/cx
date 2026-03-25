@@ -62,12 +62,12 @@ func runSwitch() {
 		os.Exit(1)
 	}
 
-	// Auto-sync non-primary accounts unless suppressed.
-	isPrimary := name == reg.Primary
-	if !noSync && !isPrimary {
-		primaryDir, err := reg.ResolveConfigDir(reg.Primary)
+	// Auto-sync non-main accounts unless suppressed.
+	isMain := name == reg.Main
+	if !noSync && !isMain {
+		mainDir, err := reg.ResolveConfigDir(reg.Main)
 		if err == nil {
-			_ = syncFiles(primaryDir, configDir, true)
+			_ = syncFiles(mainDir, configDir, true)
 		}
 	}
 
@@ -77,21 +77,21 @@ func runSwitch() {
 	// Emit shell commands to stdout — these are eval'd by the shell wrapper.
 	switch shell {
 	case platform.ShellFish:
-		if isPrimary {
+		if isMain {
 			fmt.Println("set -e CLAUDE_CONFIG_DIR")
 		} else {
 			fmt.Printf("set -gx CLAUDE_CONFIG_DIR \"%s\"\n", configDir)
 		}
 		fmt.Printf("echo '[cx] Switched to %s'\n", name)
 	case platform.ShellPowerShell:
-		if isPrimary {
+		if isMain {
 			fmt.Println("Remove-Item Env:CLAUDE_CONFIG_DIR -ErrorAction SilentlyContinue")
 		} else {
 			fmt.Printf("$env:CLAUDE_CONFIG_DIR=\"%s\"\n", configDir)
 		}
 		fmt.Printf("Write-Host '[cx] Switched to %s'\n", name)
 	default: // bash / zsh
-		if isPrimary {
+		if isMain {
 			fmt.Println("unset CLAUDE_CONFIG_DIR")
 		} else {
 			fmt.Printf("export CLAUDE_CONFIG_DIR=\"%s\"\n", configDir)

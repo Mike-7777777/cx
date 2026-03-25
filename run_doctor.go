@@ -31,23 +31,23 @@ func runDoctor() {
 	useColor := platform.ANSIEnabled()
 	var results []checkResult
 
-	// Check primary config dir.
-	primaryDir, err := config.DetectConfigDir()
+	// Check main config dir.
+	mainDir, err := config.DetectConfigDir()
 	if err != nil {
 		results = append(results, checkResult{
-			label: "Primary config", detail: err.Error(),
+			label: "Main config", detail: err.Error(),
 		})
 		printResults(results, useColor)
 		os.Exit(1)
 	}
 	results = append(results, checkResult{
-		ok: true, label: "Primary config", detail: primaryDir,
+		ok: true, label: "Main config", detail: mainDir,
 	})
 
-	// Check primary credentials.
-	primaryCredOk, credDetail := checkCredentialsForDoctor(primaryDir)
+	// Check main credentials.
+	mainCredOk, credDetail := checkCredentialsForDoctor(mainDir)
 	results = append(results, checkResult{
-		ok: primaryCredOk, label: "Primary credentials", detail: credDetail,
+		ok: mainCredOk, label: "Main credentials", detail: credDetail,
 	})
 
 	// Load registry.
@@ -110,7 +110,7 @@ func runDoctor() {
 		// Check junction/symlink for shared dirs.
 		for _, rel := range sharedLinkDirs {
 			linkPath := filepath.Join(accDir, rel)
-			linkOk, linkMsg := checkLink(linkPath, filepath.Join(primaryDir, rel))
+			linkOk, linkMsg := checkLink(linkPath, filepath.Join(mainDir, rel))
 			results = append(results, checkResult{
 				ok: linkOk, label: fmt.Sprintf("%s junction", rel), detail: linkMsg, indent: 1,
 			})
@@ -140,9 +140,9 @@ func runDoctor() {
 			}
 		}
 
-		// Check settings.json sync with primary (skip for primary itself).
-		if name != reg.Primary {
-			syncOk, syncMsg := checkSettingsSync(primaryDir, accDir)
+		// Check settings.json sync with main (skip for main itself).
+		if name != reg.Main {
+			syncOk, syncMsg := checkSettingsSync(mainDir, accDir)
 			results = append(results, checkResult{
 				ok: syncOk, warn: !syncOk, label: "settings.json", detail: syncMsg, indent: 1,
 			})
@@ -219,17 +219,17 @@ func checkLink(linkPath, target string) (bool, string) {
 	return true, "exists (copy)"
 }
 
-// checkSettingsSync compares settings.json between primary and account dirs.
-func checkSettingsSync(primaryDir, accDir string) (bool, string) {
-	primaryPath := filepath.Join(primaryDir, "settings.json")
+// checkSettingsSync compares settings.json between main and account dirs.
+func checkSettingsSync(mainDir, accDir string) (bool, string) {
+	mainPath := filepath.Join(mainDir, "settings.json")
 	accPath := filepath.Join(accDir, "settings.json")
 
-	primaryData, err := os.ReadFile(primaryPath)
+	mainData, err := os.ReadFile(mainPath)
 	if os.IsNotExist(err) {
-		return true, "no primary settings.json"
+		return true, "no main settings.json"
 	}
 	if err != nil {
-		return false, fmt.Sprintf("read primary error: %v", err)
+		return false, fmt.Sprintf("read main error: %v", err)
 	}
 
 	accData, err := os.ReadFile(accPath)
@@ -240,10 +240,10 @@ func checkSettingsSync(primaryDir, accDir string) (bool, string) {
 		return false, fmt.Sprintf("read error: %v", err)
 	}
 
-	if string(primaryData) == string(accData) {
+	if string(mainData) == string(accData) {
 		return true, "in sync"
 	}
-	return false, "differs from primary (run sync)"
+	return false, "differs from main (run sync)"
 }
 
 // checkStatuslinePath verifies the statusLine command in settings.json is valid:

@@ -21,12 +21,12 @@ func runConfig() {
 	}
 
 	switch args[0] {
-	case "primary":
+	case "main":
 		if len(args) < 2 {
-			fmt.Fprintln(os.Stderr, "usage: cx config primary <account-name>")
+			fmt.Fprintln(os.Stderr, "usage: cx config main <account-name>")
 			os.Exit(1)
 		}
-		configSetPrimary(args[1])
+		configSetMain(args[1])
 	case "rename":
 		if len(args) < 3 {
 			fmt.Fprintln(os.Stderr, "usage: cx config rename <old-name> <new-name>")
@@ -62,9 +62,9 @@ func configShow() {
 		acc := reg.Accounts[name]
 		dir := resolveDir(reg, name)
 
-		// Primary marker.
+		// Main marker.
 		marker := "  "
-		if name == reg.Primary {
+		if name == reg.Main {
 			marker = format.Colorize("★ ", format.Yellow, useColor)
 		}
 
@@ -112,7 +112,7 @@ func configShow() {
 	}
 }
 
-func configSetPrimary(name string) {
+func configSetMain(name string) {
 	reg := loadRegistry()
 
 	if _, ok := reg.Accounts[name]; !ok {
@@ -120,14 +120,14 @@ func configSetPrimary(name string) {
 		os.Exit(1)
 	}
 
-	old := reg.Primary
-	reg.Primary = name
+	old := reg.Main
+	reg.Main = name
 	if err := reg.Save(); err != nil {
 		fmt.Fprintf(os.Stderr, "saving registry: %v\n", err)
 		os.Exit(1)
 	}
 
-	fmt.Fprintf(os.Stderr, "Primary changed: %s → %s\n", old, name)
+	fmt.Fprintf(os.Stderr, "Main changed: %s → %s\n", old, name)
 }
 
 func configRename(oldName, newName string) {
@@ -153,9 +153,9 @@ func configRename(oldName, newName string) {
 	delete(reg.Accounts, oldName)
 	reg.Accounts[newName] = acc
 
-	// Update primary if it was the renamed account.
-	if reg.Primary == oldName {
-		reg.Primary = newName
+	// Update main if it was the renamed account.
+	if reg.Main == oldName {
+		reg.Main = newName
 	}
 
 	if err := reg.Save(); err != nil {
@@ -204,7 +204,7 @@ func configHelp() {
 
 Usage:
   cx config                        Show full configuration
-  cx config primary <name>         Change primary account
+  cx config main <name>            Change main account
   cx config rename <old> <new>     Rename an account
   cx config set <name> email <v>   Set account email
   cx config set <name> alias <v>   Set account alias
@@ -235,18 +235,18 @@ func resolveDir(reg *config.Registry, name string) string {
 	return filepath.Clean(dir)
 }
 
-// sortedAccountNames returns account names sorted, primary first.
+// sortedAccountNames returns account names sorted, main first.
 func sortedAccountNames(reg *config.Registry) []string {
 	names := make([]string, 0, len(reg.Accounts))
 	for name := range reg.Accounts {
 		names = append(names, name)
 	}
 	sort.Slice(names, func(i, j int) bool {
-		// Primary account always comes first.
-		if names[i] == reg.Primary {
+		// Main account always comes first.
+		if names[i] == reg.Main {
 			return true
 		}
-		if names[j] == reg.Primary {
+		if names[j] == reg.Main {
 			return false
 		}
 		return names[i] < names[j]

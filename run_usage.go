@@ -165,13 +165,13 @@ func runUsage() {
 	// All other modes require full scan for individual Entry structs.
 	var entries []usage.Entry
 	if allTools {
-		// --all-tools: scan the primary config dir plus all other CLI tool dirs.
-		primaryDir, err := config.DetectConfigDir()
+		// --all-tools: scan the main config dir plus all other CLI tool dirs.
+		mainDir, err := config.DetectConfigDir()
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "cx usage: detecting primary config dir: %v\n", err)
+			fmt.Fprintf(os.Stderr, "cx usage: detecting main config dir: %v\n", err)
 			os.Exit(1)
 		}
-		if err := usage.ScanAllCLIs(primaryDir, func(e usage.Entry) {
+		if err := usage.ScanAllCLIs(mainDir, func(e usage.Entry) {
 			entries = append(entries, e)
 		}); err != nil {
 			fmt.Fprintf(os.Stderr, "cx usage: scanning all CLIs: %v\n", err)

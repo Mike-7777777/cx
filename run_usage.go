@@ -8,9 +8,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/MasaYan24/cc-monitor/internal/config"
-	"github.com/MasaYan24/cc-monitor/internal/platform"
-	"github.com/MasaYan24/cc-monitor/internal/usage"
+	"github.com/Mike-7777777/cc-monitor/internal/config"
+	"github.com/Mike-7777777/cc-monitor/internal/platform"
+	"github.com/Mike-7777777/cc-monitor/internal/usage"
 )
 
 // usageCacheFilename is the name of the incremental cache file stored in the

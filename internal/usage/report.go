@@ -6,7 +6,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/MasaYan24/cc-monitor/internal/format"
+	"github.com/Mike-7777777/cc-monitor/internal/format"
 )
 
 // formatNumber formats an int64 with comma separators (e.g., 1234567 → "1,234,567").

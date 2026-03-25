@@ -79,7 +79,7 @@ cx setup
 ```
 
 The interactive setup will:
-1. Detect your primary account
+1. Detect your main account
 2. Create secondary accounts and log them in (browser opens once per account)
 3. Install the `cx` shell wrapper for your terminal (PowerShell / Bash / Zsh / Fish)
 4. Configure the CC statusline integration
@@ -187,7 +187,7 @@ cx completion powershell | Out-String | Invoke-Expression
 | `run --balance` | Round-robin across accounts for max throughput |
 | `status` | All accounts: auth, tier, rate limits, routing recommendation |
 | `config` | Show full config: email, tier, CC version, session count |
-| `config primary <name>` | Change primary account |
+| `config main <name>` | Change main account |
 | `config rename <old> <new>` | Rename an account |
 | `config set <name> email/alias <v>` | Set account metadata |
 
@@ -205,7 +205,7 @@ cx completion powershell | Out-String | Invoke-Expression
 |---------|-------------|
 | `setup` | Interactive first-time setup |
 | `doctor` | Health check all accounts (auto-fixes common issues) |
-| `sync [--force]` | Sync config from primary to all secondaries |
+| `sync [--force]` | Sync config from main to all secondaries |
 | `login [name]` | Re-authenticate an account (rarely needed) |
 | `init <name>` | Create a new account directory |
 | `watch` | Auto-sync config changes (30s daemon) |
@@ -235,10 +235,10 @@ cx completion powershell | Out-String | Invoke-Expression
 cx uses Claude Code's `CLAUDE_CONFIG_DIR` environment variable to isolate accounts. Each account gets its own directory with separate credentials and session history, but shares plugins and configuration via junctions (Windows) or symlinks (Unix).
 
 ```
-~/.claude/          <-- primary account (personal, Max 20x)
+~/.claude/          <-- main account (personal, Max 20x)
 ~/.claude-work/     <-- secondary account (work, Max 5x)
     plugins/cache/  --> junction to ~/.claude/plugins/cache/  (shared)
-    settings.json   <-- synced from primary
+    settings.json   <-- synced from main
     .credentials.json  <-- independent (separate login)
     .claude.json    <-- identity, session stats (auto-read by cx)
 ```

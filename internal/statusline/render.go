@@ -62,7 +62,7 @@ func Render(input *Input, other *OtherAccount, useColor bool, opts ...RenderOpts
 	}
 
 	var lines []string
-	lines = append(lines, renderPrimary(input, other, opt, useColor))
+	lines = append(lines, renderMain(input, other, opt, useColor))
 	// Other account line is opt-in (default off). Users who want it can set
 	// "show_other_account": true in the registry's statusline config.
 	showOther := opt.Sections != nil && opt.Sections.ShowOtherAccount != nil && *opt.Sections.ShowOtherAccount
@@ -122,7 +122,7 @@ func renderCompact(input *Input, opt RenderOpts, useColor bool) string {
 	return strings.Join(parts, " | ")
 }
 
-func renderPrimary(input *Input, other *OtherAccount, opt RenderOpts, useColor bool) string {
+func renderMain(input *Input, other *OtherAccount, opt RenderOpts, useColor bool) string {
 	sec := opt.Sections
 
 	ctxPct := 0.0

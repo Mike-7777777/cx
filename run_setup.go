@@ -19,10 +19,10 @@ func runSetup() {
 	fmt.Fprintln(os.Stderr, "[cx] Interactive setup")
 	fmt.Fprintln(os.Stderr)
 
-	// Step 1: Detect and register primary account.
-	primaryDir, err := config.DetectConfigDir()
+	// Step 1: Detect and register main account.
+	mainDir, err := config.DetectConfigDir()
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "[cx] Cannot detect primary Claude Code config: %v\n", err)
+		fmt.Fprintf(os.Stderr, "[cx] Cannot detect main Claude Code config: %v\n", err)
 		fmt.Fprintln(os.Stderr, "  Make sure Claude Code is installed and you've logged in at least once.")
 		os.Exit(1)
 	}
@@ -39,29 +39,29 @@ func runSetup() {
 		os.Exit(1)
 	}
 
-	// Ask for primary account name.
-	defaultPrimary := reg.Primary
-	if defaultPrimary == "" {
-		defaultPrimary = "primary"
+	// Ask for main account name.
+	defaultMain := reg.Main
+	if defaultMain == "" {
+		defaultMain = "main"
 	}
-	fmt.Fprintf(os.Stderr, "  Primary account detected: %s\n", primaryDir)
-	fmt.Fprintf(os.Stderr, "  Name for primary account [%s]: ", defaultPrimary)
-	primaryName := readLine(reader)
-	if primaryName == "" {
-		primaryName = defaultPrimary
+	fmt.Fprintf(os.Stderr, "  Main account detected: %s\n", mainDir)
+	fmt.Fprintf(os.Stderr, "  Name for main account [%s]: ", defaultMain)
+	mainName := readLine(reader)
+	if mainName == "" {
+		mainName = defaultMain
 	}
-	if !validAccountName.MatchString(primaryName) {
-		fmt.Fprintf(os.Stderr, "[cx] invalid name %q\n", primaryName)
+	if !validAccountName.MatchString(mainName) {
+		fmt.Fprintf(os.Stderr, "[cx] invalid name %q\n", mainName)
 		os.Exit(1)
 	}
 
-	reg.Primary = primaryName
-	reg.AddAccount(primaryName, "")
+	reg.Main = mainName
+	reg.AddAccount(mainName, "")
 	if err := reg.Save(); err != nil {
 		fmt.Fprintf(os.Stderr, "[cx] saving registry: %v\n", err)
 		os.Exit(1)
 	}
-	fmt.Fprintf(os.Stderr, "  Registered primary account %q\n\n", primaryName)
+	fmt.Fprintf(os.Stderr, "  Registered main account %q\n\n", mainName)
 
 	// Step 2: Create secondary accounts.
 	fmt.Fprint(os.Stderr, "  How many additional accounts? [0]: ")
@@ -115,7 +115,7 @@ func runSetup() {
 
 			// Create junctions/symlinks.
 			for _, rel := range sharedLinkDirs {
-				src := filepath.Join(primaryDir, rel)
+				src := filepath.Join(mainDir, rel)
 				if _, statErr := os.Stat(src); os.IsNotExist(statErr) {
 					continue
 				}
@@ -130,7 +130,7 @@ func runSetup() {
 			}
 
 			// Sync config.
-			if err := syncFiles(primaryDir, targetDir, true); err != nil {
+			if err := syncFiles(mainDir, targetDir, true); err != nil {
 				fmt.Fprintf(os.Stderr, "  warning: syncing config: %v\n", err)
 			}
 
@@ -209,7 +209,7 @@ func runSetup() {
 	fmt.Fprintf(os.Stderr, "  Configure Claude Code statusline? [Y/n]: ")
 	slAnswer := readLine(reader)
 	if slAnswer == "" || strings.ToLower(slAnswer) == "y" {
-		if configureStatusline(primaryDir) {
+		if configureStatusline(mainDir) {
 			fmt.Fprintln(os.Stderr, "  Statusline configured. cx will show rate limits in CC's status bar.")
 		}
 	} else {
@@ -230,8 +230,8 @@ func runSetup() {
 	// List registered accounts.
 	reg, _ = config.LoadOrCreateRegistry(regPath)
 	for name := range reg.Accounts {
-		if name == reg.Primary {
-			fmt.Fprintf(os.Stderr, "    cx switch %s     — switch to primary\n", name)
+		if name == reg.Main {
+			fmt.Fprintf(os.Stderr, "    cx switch %s     — switch to main\n", name)
 		} else {
 			fmt.Fprintf(os.Stderr, "    cx switch %s     — switch to %s\n", name, name)
 		}
@@ -429,8 +429,8 @@ func resolveStatuslineCommand(cxPath string) string {
 // configureStatusline adds the cx statusline command to CC's settings.json.
 // It reads the existing settings, merges the statusLine config, and writes
 // back atomically. Returns true if configuration succeeded.
-func configureStatusline(primaryConfigDir string) bool {
-	settingsPath := filepath.Join(primaryConfigDir, "settings.json")
+func configureStatusline(mainConfigDir string) bool {
+	settingsPath := filepath.Join(mainConfigDir, "settings.json")
 
 	// Find the cx binary path.
 	cxPath, err := os.Executable()

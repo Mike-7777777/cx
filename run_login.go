@@ -54,7 +54,7 @@ func runLogin() {
 		}
 		configDir = dir
 	} else {
-		// Use current CLAUDE_CONFIG_DIR or detect primary.
+		// Use current CLAUDE_CONFIG_DIR or detect main.
 		configDir = os.Getenv("CLAUDE_CONFIG_DIR")
 		if configDir == "" {
 			d, err := config.DetectConfigDir()

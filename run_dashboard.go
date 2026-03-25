@@ -173,8 +173,8 @@ func renderAccountsSection(useColor bool) string {
 		rc, err := cache.ReadRateCache(filepath.Join(dir, "rate-cache.json"))
 		if err != nil || rc == nil || rc.RateLimits == nil || rc.RateLimits.FiveHour == nil {
 			label := name
-			if name == reg.Primary {
-				label += " (primary)"
+			if name == reg.Main {
+				label += " (main)"
 			}
 			line := fmt.Sprintf("  %-18s 5h: no data", label)
 			b.WriteString(padLine(line))
@@ -183,8 +183,8 @@ func renderAccountsSection(useColor bool) string {
 
 		rl := rc.RateLimits
 		label := name
-		if name == reg.Primary {
-			label += " (primary)"
+		if name == reg.Main {
+			label += " (main)"
 		}
 
 		// 5-hour info.

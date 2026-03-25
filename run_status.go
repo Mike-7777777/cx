@@ -21,17 +21,18 @@ const (
 )
 
 type statusRow struct {
-	name         string
-	fivePct      float64
-	fiveResetStr string
-	sevenPct     float64
-	note         string
-	hasData      bool
-	isStale      bool
-	authOK       bool
-	isPrimary    bool
-	tier         string
-	email        string
+	name          string
+	fivePct       float64
+	fiveResetStr  string
+	sevenPct      float64
+	sevenResetStr string
+	note          string
+	hasData       bool
+	isStale       bool
+	authOK        bool
+	isMain        bool
+	tier          string
+	email         string
 }
 
 func runStatus() {
@@ -72,7 +73,7 @@ func runStatus() {
 		rc, err := cache.ReadRateCache(filepath.Join(dir, "rate-cache.json"))
 		row := buildRow(name, rc, err)
 		row.authOK = checkCredentials(dir) == credentialOK
-		row.isPrimary = name == reg.Primary
+		row.isMain = name == reg.Main
 		info := readAccountInfo(dir)
 		row.tier = info.Tier
 		if info.Email != "" {
@@ -127,28 +128,33 @@ func buildRow(name string, rc *cache.RateCache, readErr error) statusRow {
 
 	if rl.SevenDay != nil {
 		row.sevenPct = rl.SevenDay.UsedPercentage
+		if rl.SevenDay.IsReset() {
+			row.sevenResetStr = "reset"
+		} else {
+			// Show the actual reset date/time (e.g., "Tue 08:00").
+			resetTime := time.Unix(rl.SevenDay.ResetsAt, 0).Local()
+			row.sevenResetStr = resetTime.Format("Mon 15:04")
+		}
 	}
 
 	return row
 }
 
 func printTable(rows []statusRow, useColor bool) {
-	header := fmt.Sprintf("  %-10s  %-8s  %-6s  %-14s  %-12s  %-14s  %s",
-		"Account", "Tier", "Auth", "5h Usage", "Resets In", "7d Usage", "Note")
-	sep := "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+	header := fmt.Sprintf("  %-10s  %-8s  %-6s  %-14s  %-10s  %-14s  %-10s  %s",
+		"Account", "Tier", "Auth", "5h Usage", "5h Reset", "7d Usage", "7d Reset", "Note")
+	sep := "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 
 	fmt.Println(format.Colorize(header, format.Bold, useColor))
 	fmt.Println(format.Colorize(sep, format.Dim, useColor))
 
 	for _, row := range rows {
-		// Primary marker.
 		marker := "  "
-		if row.isPrimary {
+		if row.isMain {
 			marker = format.Colorize("★ ", format.Yellow, useColor)
 		}
 
 		nameStr := format.Colorize(row.name, format.Cyan, useColor)
-
 		tierStr := format.Colorize(fmt.Sprintf("%-8s", row.tier), format.Dim, useColor)
 
 		authStr := format.Colorize("OK", format.Green, useColor)
@@ -158,8 +164,8 @@ func printTable(rows []statusRow, useColor bool) {
 
 		if !row.hasData {
 			noteStr := format.Colorize(noDataMarker, format.Dim, useColor)
-			fmt.Printf("%s%-10s  %s  %-6s  %-14s  %-12s  %-14s  %s\n",
-				marker, nameStr, tierStr, authStr, noteStr, "", "", row.note)
+			fmt.Printf("%s%-10s  %s  %-6s  %-14s  %-10s  %-14s  %-10s  %s\n",
+				marker, nameStr, tierStr, authStr, noteStr, "", "", "", row.note)
 			continue
 		}
 
@@ -170,8 +176,11 @@ func printTable(rows []statusRow, useColor bool) {
 			noteStr = format.Colorize(row.note, format.Dim, useColor)
 		}
 
-		fmt.Printf("%s%-10s  %s  %-6s  %-14s  %-12s  %-14s  %s\n",
-			marker, nameStr, tierStr, authStr, fiveBar, row.fiveResetStr, sevenBar, noteStr)
+		fmt.Printf("%s%-10s  %s  %-6s  %-14s  %-10s  %-14s  %-10s  %s\n",
+			marker, nameStr, tierStr, authStr,
+			fiveBar, row.fiveResetStr,
+			sevenBar, row.sevenResetStr,
+			noteStr)
 	}
 }
 

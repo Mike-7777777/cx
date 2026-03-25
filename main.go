@@ -47,7 +47,7 @@ var commands = map[string]command{
 	"setup":      {runSetup, "One-time interactive setup (accounts + shell wrapper)", catGettingStarted},
 	"switch":     {runSwitch, "Switch account (via wrapper: cx switch 5x)", catDailyUse},
 	"run":        {runRun, "Auto-select best account and launch claude", catDailyUse},
-	"config":     {runConfig, "Manage accounts, primary, metadata", catDailyUse},
+	"config":     {runConfig, "Manage accounts, main, metadata", catDailyUse},
 	"status":     {runStatus, "All accounts: auth status + rate limits", catDailyUse},
 	"dashboard":  {runDashboard, "Live TUI dashboard", catMonitoring},
 	"web":        {runWeb, "Browser dashboard on localhost", catMonitoring},

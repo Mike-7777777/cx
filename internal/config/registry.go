@@ -37,11 +37,11 @@ func (c *StatuslineConfig) IsEnabled(field *bool) bool {
 	return *field
 }
 
-// Registry holds all known accounts and tracks which is primary.
+// Registry holds all known accounts and tracks which is main.
 // The path field is intentionally unexported so it is never serialised.
 type Registry struct {
 	Version    int                `json:"version"`
-	Primary    string             `json:"primary"`
+	Main       string             `json:"main"`
 	Accounts   map[string]Account `json:"accounts"`
 	Statusline *StatuslineConfig  `json:"statusline,omitempty"`
 	path       string

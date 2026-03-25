@@ -16,7 +16,7 @@ const (
 )
 
 // watchState tracks the last-seen mtime and size of each synced file in the
-// primary config directory so we can detect changes on each poll cycle.
+// main config directory so we can detect changes on each poll cycle.
 type watchState map[string]watchFileMeta
 
 type watchFileMeta struct {
@@ -25,7 +25,7 @@ type watchFileMeta struct {
 }
 
 // runWatch implements the `cx watch` command.
-// It polls the primary account's config files every 30 seconds and
+// It polls the main account's config files every 30 seconds and
 // auto-syncs to all secondaries when a change is detected.
 func runWatch() {
 	regPath, err := config.RegistryPath()
@@ -40,14 +40,14 @@ func runWatch() {
 		os.Exit(1)
 	}
 
-	if reg.Primary == "" {
-		fmt.Fprintln(os.Stderr, "cx watch: no primary account configured; run: cx init <name>")
+	if reg.Main == "" {
+		fmt.Fprintln(os.Stderr, "cx watch: no main account configured; run: cx init <name>")
 		os.Exit(1)
 	}
 
-	primaryDir, err := reg.ResolveConfigDir(reg.Primary)
+	mainDir, err := reg.ResolveConfigDir(reg.Main)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "cx watch: resolving primary account %q: %v\n", reg.Primary, err)
+		fmt.Fprintf(os.Stderr, "cx watch: resolving main account %q: %v\n", reg.Main, err)
 		os.Exit(1)
 	}
 
@@ -58,10 +58,10 @@ func runWatch() {
 	}
 
 	fmt.Fprintf(os.Stderr, "cx watch: monitoring %q → %d secondary account(s) (Ctrl+C to stop)\n",
-		reg.Primary, secondaryCount)
+		reg.Main, secondaryCount)
 
 	// Build initial state snapshot.
-	state := snapshotFiles(primaryDir)
+	state := snapshotFiles(mainDir)
 
 	// Handle Ctrl+C / SIGTERM for clean shutdown.
 	quit := make(chan os.Signal, 1)
@@ -77,7 +77,7 @@ func runWatch() {
 			return
 
 		case <-ticker.C:
-			changed := detectChanges(primaryDir, state)
+			changed := detectChanges(mainDir, state)
 			if len(changed) == 0 {
 				continue
 			}
@@ -91,14 +91,14 @@ func runWatch() {
 
 			synced := 0
 			for name, acc := range reg.Accounts {
-				if name == reg.Primary {
+				if name == reg.Main {
 					continue
 				}
 				targetDir := acc.ConfigDir
 				if targetDir == "" {
 					continue
 				}
-				if err := syncFiles(primaryDir, targetDir, true); err != nil {
+				if err := syncFiles(mainDir, targetDir, true); err != nil {
 					fmt.Fprintf(os.Stderr, "cx watch: syncing %q: %v\n", name, err)
 					continue
 				}
@@ -111,7 +111,7 @@ func runWatch() {
 			}
 
 			// Update state snapshot after a successful sync pass.
-			state = snapshotFiles(primaryDir)
+			state = snapshotFiles(mainDir)
 		}
 	}
 }

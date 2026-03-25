@@ -131,9 +131,9 @@ func buildRow(name string, rc *cache.RateCache, readErr error) statusRow {
 		if rl.SevenDay.IsReset() {
 			row.sevenResetStr = "reset"
 		} else {
-			// Show the actual reset date/time (e.g., "Tue 08:00").
+			// Show the actual reset date/time (e.g., "Tue 28 08:00").
 			resetTime := time.Unix(rl.SevenDay.ResetsAt, 0).Local()
-			row.sevenResetStr = resetTime.Format("Mon 15:04")
+			row.sevenResetStr = resetTime.Format("Mon 2 15:04")
 		}
 	}
 

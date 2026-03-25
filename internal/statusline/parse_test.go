@@ -10,7 +10,7 @@ func TestParseInput_Full(t *testing.T) {
 	if err != nil {
 		t.Fatalf("open testdata: %v", err)
 	}
-	defer f.Close()
+	defer func() { _ = f.Close() }()
 
 	input, err := ParseInput(f)
 	if err != nil {
@@ -73,7 +73,7 @@ func TestParseInput_Minimal(t *testing.T) {
 	if err != nil {
 		t.Fatalf("open testdata: %v", err)
 	}
-	defer f.Close()
+	defer func() { _ = f.Close() }()
 
 	input, err := ParseInput(f)
 	if err != nil {
@@ -102,7 +102,7 @@ func TestParseInput_Null(t *testing.T) {
 	if err != nil {
 		t.Fatalf("open testdata: %v", err)
 	}
-	defer f.Close()
+	defer func() { _ = f.Close() }()
 
 	input, err := ParseInput(f)
 	if err != nil {

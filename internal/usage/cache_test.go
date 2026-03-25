@@ -389,10 +389,10 @@ func TestScanDirCached(t *testing.T) {
 		t.Fatal(err)
 	}
 	if _, err := f.WriteString(line2); err != nil {
-		f.Close()
+		_ = f.Close()
 		t.Fatal(err)
 	}
-	f.Close()
+	_ = f.Close()
 
 	var entriesThird []Entry
 	if err := ScanDirCached(dir, cache, func(e Entry) {

@@ -35,14 +35,8 @@ func TestDetectConfigDir_FallbackDotClaude(t *testing.T) {
 
 	// Override home directory via environment variable used by os.UserHomeDir on
 	// all platforms (HOME on Unix, USERPROFILE on Windows).
-	origHome := os.Getenv("HOME")
-	origUserProfile := os.Getenv("USERPROFILE")
-	os.Setenv("HOME", fakeHome)
-	os.Setenv("USERPROFILE", fakeHome)
-	t.Cleanup(func() {
-		os.Setenv("HOME", origHome)
-		os.Setenv("USERPROFILE", origUserProfile)
-	})
+	t.Setenv("HOME", fakeHome)
+	t.Setenv("USERPROFILE", fakeHome)
 
 	got, err := DetectConfigDir()
 	if err != nil {

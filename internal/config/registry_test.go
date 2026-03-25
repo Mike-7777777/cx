@@ -50,14 +50,8 @@ func TestRegistry_ResolveConfigDir(t *testing.T) {
 	}
 	t.Setenv("CLAUDE_CONFIG_DIR", "")
 	t.Setenv("XDG_CONFIG_HOME", "")
-	origHome := os.Getenv("HOME")
-	origUserProfile := os.Getenv("USERPROFILE")
-	os.Setenv("HOME", fakeHome)
-	os.Setenv("USERPROFILE", fakeHome)
-	t.Cleanup(func() {
-		os.Setenv("HOME", origHome)
-		os.Setenv("USERPROFILE", origUserProfile)
-	})
+	t.Setenv("HOME", fakeHome)
+	t.Setenv("USERPROFILE", fakeHome)
 
 	dir := t.TempDir()
 	r, err := LoadOrCreateRegistry(filepath.Join(dir, "registry.json"))

@@ -34,6 +34,8 @@ func totalSubscriptionCost() float64 {
 }
 
 func runUsage() {
+	usage.CheckPricingStaleness()
+
 	// Parse subcommand: cx usage [daily|session|blocks|monthly|weekly|messages] [flags]
 	mode := "daily"
 	var accountName string

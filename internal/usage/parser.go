@@ -2,6 +2,7 @@ package usage
 
 import (
 	"bufio"
+	"bytes"
 	"encoding/json"
 	"io"
 	"io/fs"
@@ -9,6 +10,12 @@ import (
 	"path/filepath"
 	"strings"
 	"time"
+)
+
+// Pre-allocated byte slices for fast line filtering (avoids string conversion).
+var (
+	assistantType      = []byte(`"type":"assistant"`)
+	assistantTypeSpace = []byte(`"type": "assistant"`)
 )
 
 // TokenUsage holds token counts from a single API response.
@@ -74,11 +81,10 @@ func ParseFile(path string, fn func(Entry)) error {
 
 // parseLine processes a single JSONL line, calling fn if it is a valid assistant entry.
 func parseLine(line []byte, fn func(Entry)) {
-	s := string(line)
-
 	// Lightweight pre-check: skip lines that cannot be assistant entries.
-	if !strings.Contains(s, `"type":"assistant"`) &&
-		!strings.Contains(s, `"type": "assistant"`) {
+	// Uses bytes.Contains to avoid allocating a string copy of the line.
+	if !bytes.Contains(line, assistantType) &&
+		!bytes.Contains(line, assistantTypeSpace) {
 		return
 	}
 

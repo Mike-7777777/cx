@@ -1,16 +1,19 @@
 package main
 
 import (
+	"context"
 	"embed"
 	"encoding/json"
 	"fmt"
 	"net/http"
 	"os"
 	"os/exec"
+	"os/signal"
 	"path/filepath"
 	"runtime"
 	"sort"
 	"strings"
+	"syscall"
 	"time"
 
 	"github.com/Mike-7777777/cx/internal/cache"
@@ -51,6 +54,13 @@ func runWeb() {
 		}
 	}
 
+	// Load registry once at server start (it doesn't change during a web session).
+	reg, configDirs, err := loadWebRegistry()
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "cx web: %v\n", err)
+		os.Exit(1)
+	}
+
 	mux := http.NewServeMux()
 
 	// Serve embedded HTML.
@@ -68,13 +78,25 @@ func runWeb() {
 		w.Write(data)
 	})
 
-	// API endpoints.
-	mux.HandleFunc("/api/status", handleAPIStatus)
-	mux.HandleFunc("/api/daily", handleAPIDaily)
-	mux.HandleFunc("/api/weekly", handleAPIWeekly)
-	mux.HandleFunc("/api/monthly", handleAPIMonthly)
-	mux.HandleFunc("/api/sessions", handleAPISessions)
-	mux.HandleFunc("/api/roi", handleAPIROI)
+	// API endpoints (registry and config dirs are captured by closure).
+	mux.HandleFunc("/api/status", func(w http.ResponseWriter, r *http.Request) {
+		handleAPIStatus(w, r, reg)
+	})
+	mux.HandleFunc("/api/daily", func(w http.ResponseWriter, r *http.Request) {
+		handleAPIDaily(w, r, configDirs)
+	})
+	mux.HandleFunc("/api/weekly", func(w http.ResponseWriter, r *http.Request) {
+		handleAPIWeekly(w, r, configDirs)
+	})
+	mux.HandleFunc("/api/monthly", func(w http.ResponseWriter, r *http.Request) {
+		handleAPIMonthly(w, r, configDirs)
+	})
+	mux.HandleFunc("/api/sessions", func(w http.ResponseWriter, r *http.Request) {
+		handleAPISessions(w, r, configDirs)
+	})
+	mux.HandleFunc("/api/roi", func(w http.ResponseWriter, r *http.Request) {
+		handleAPIROI(w, r, configDirs)
+	})
 
 	addr := fmt.Sprintf("127.0.0.1:%d", port)
 	url := fmt.Sprintf("http://localhost:%d", port)
@@ -83,10 +105,36 @@ func runWeb() {
 		openBrowser(url)
 	}
 
+	srv := &http.Server{
+		Addr:    addr,
+		Handler: mux,
+	}
+
+	// Use signal.NotifyContext for graceful shutdown on SIGINT/SIGTERM.
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stop()
+
+	// Start the server in a goroutine.
+	errCh := make(chan error, 1)
+	go func() {
+		errCh <- srv.ListenAndServe()
+	}()
+
 	fmt.Fprintf(os.Stderr, "Dashboard: %s (Ctrl+C to stop)\n", url)
-	if err := http.ListenAndServe(addr, mux); err != nil {
-		fmt.Fprintf(os.Stderr, "cx web: %v\n", err)
-		os.Exit(1)
+
+	select {
+	case <-ctx.Done():
+		fmt.Fprintln(os.Stderr, "shutting down...")
+		shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		if err := srv.Shutdown(shutdownCtx); err != nil {
+			fmt.Fprintf(os.Stderr, "cx web: shutdown error: %v\n", err)
+		}
+	case err := <-errCh:
+		if err != nil && err != http.ErrServerClosed {
+			fmt.Fprintf(os.Stderr, "cx web: %v\n", err)
+			os.Exit(1)
+		}
 	}
 }
 
@@ -158,19 +206,7 @@ type apiSessionsResponse struct {
 
 // --- API Handlers ---
 
-func handleAPIStatus(w http.ResponseWriter, r *http.Request) {
-	regPath, err := config.RegistryPath()
-	if err != nil {
-		writeJSONError(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
-
-	reg, err := config.LoadOrCreateRegistry(regPath)
-	if err != nil {
-		writeJSONError(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
-
+func handleAPIStatus(w http.ResponseWriter, r *http.Request, reg *config.Registry) {
 	names := make([]string, 0, len(reg.Accounts))
 	for name := range reg.Accounts {
 		names = append(names, name)
@@ -232,13 +268,7 @@ func handleAPIStatus(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, resp)
 }
 
-func handleAPIDaily(w http.ResponseWriter, r *http.Request) {
-	configDirs, err := webConfigDirs()
-	if err != nil {
-		writeJSONError(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
-
+func handleAPIDaily(w http.ResponseWriter, r *http.Request, configDirs []string) {
 	// Scan entries for the last 30 days.
 	since := time.Now().UTC().AddDate(0, 0, -30)
 	var entries []usage.Entry
@@ -254,13 +284,7 @@ func handleAPIDaily(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, reports)
 }
 
-func handleAPIWeekly(w http.ResponseWriter, r *http.Request) {
-	configDirs, err := webConfigDirs()
-	if err != nil {
-		writeJSONError(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
-
+func handleAPIWeekly(w http.ResponseWriter, r *http.Request, configDirs []string) {
 	var entries []usage.Entry
 	for _, dir := range configDirs {
 		_ = usage.ScanDir(dir, func(e usage.Entry) {
@@ -272,13 +296,7 @@ func handleAPIWeekly(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, reports)
 }
 
-func handleAPIMonthly(w http.ResponseWriter, r *http.Request) {
-	configDirs, err := webConfigDirs()
-	if err != nil {
-		writeJSONError(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
-
+func handleAPIMonthly(w http.ResponseWriter, r *http.Request, configDirs []string) {
 	var entries []usage.Entry
 	for _, dir := range configDirs {
 		_ = usage.ScanDir(dir, func(e usage.Entry) {
@@ -290,13 +308,7 @@ func handleAPIMonthly(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, reports)
 }
 
-func handleAPISessions(w http.ResponseWriter, r *http.Request) {
-	configDirs, err := webConfigDirs()
-	if err != nil {
-		writeJSONError(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
-
+func handleAPISessions(w http.ResponseWriter, r *http.Request, configDirs []string) {
 	// Only show sessions from the last 24 hours for "active" sessions.
 	since := time.Now().UTC().Add(-24 * time.Hour)
 	var entries []usage.Entry
@@ -336,13 +348,7 @@ func handleAPISessions(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, resp)
 }
 
-func handleAPIROI(w http.ResponseWriter, r *http.Request) {
-	configDirs, err := webConfigDirs()
-	if err != nil {
-		writeJSONError(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
-
+func handleAPIROI(w http.ResponseWriter, r *http.Request, configDirs []string) {
 	// Scan all entries to calculate total API-equivalent cost.
 	var entries []usage.Entry
 	for _, dir := range configDirs {
@@ -373,25 +379,27 @@ func handleAPIROI(w http.ResponseWriter, r *http.Request) {
 
 // --- Helpers ---
 
-// webConfigDirs returns all registered account config directories.
-func webConfigDirs() ([]string, error) {
+// loadWebRegistry loads the registry and resolves config directories once.
+// Returns the registry (for status endpoint) and the list of config dirs
+// (for usage endpoints).
+func loadWebRegistry() (*config.Registry, []string, error) {
 	regPath, err := config.RegistryPath()
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
 	reg, err := config.LoadOrCreateRegistry(regPath)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
 	if len(reg.Accounts) == 0 {
 		// Fall back to detecting the single default config dir.
 		dir, err := config.DetectConfigDir()
 		if err != nil {
-			return nil, err
+			return nil, nil, err
 		}
-		return []string{dir}, nil
+		return reg, []string{dir}, nil
 	}
 
 	dirs := make([]string, 0, len(reg.Accounts))
@@ -402,7 +410,7 @@ func webConfigDirs() ([]string, error) {
 		}
 		dirs = append(dirs, dir)
 	}
-	return dirs, nil
+	return reg, dirs, nil
 }
 
 // sessionProject extracts the most common ProjectPath for a given session ID.

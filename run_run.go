@@ -1,16 +1,20 @@
 package main
 
 import (
+	"bytes"
 	"fmt"
 	"os"
 	"path/filepath"
 	"sort"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/Mike-7777777/cx/internal/cache"
 	"github.com/Mike-7777777/cx/internal/config"
+	"github.com/Mike-7777777/cx/internal/format"
 	"github.com/Mike-7777777/cx/internal/platform"
+	"github.com/natefinch/atomic"
 )
 
 const (
@@ -18,11 +22,41 @@ const (
 	balanceThreshold = 90.0 // --balance: skip account if 5h usage > this
 )
 
-// accountScore pairs an account name with its effective 5h usage percentage.
+// accountScore pairs an account name with its effective 5h usage and reset timing.
 type accountScore struct {
-	name    string
-	dir     string
-	fiveHPct float64
+	name        string
+	dir         string
+	fiveHPct    float64
+	timeToReset time.Duration
+}
+
+// smartScore calculates a routing score. Lower = should use first.
+// Accounts closer to reset with remaining capacity are preferred.
+//
+// Insight: if account A has 3h50m until reset (24% used) and account B has
+// 48m until reset (71% used), B should be used first (it resets soon),
+// saving A for after B resets.
+func smartScore(usagePct float64, timeToReset time.Duration) float64 {
+	const maxWindow = 5 * time.Hour
+
+	// Normalize timeToReset to [0, 1] where 0 = about to reset, 1 = just started.
+	resetFraction := float64(timeToReset) / float64(maxWindow)
+	if resetFraction > 1 {
+		resetFraction = 1
+	}
+	if resetFraction < 0 {
+		resetFraction = 0
+	}
+
+	// If usage is very high (>90%), penalize heavily regardless of reset time.
+	if usagePct > 90 {
+		return 1000 + usagePct
+	}
+
+	// Score: prefer accounts that reset soon AND have remaining capacity.
+	// Low resetFraction (about to reset) + moderate usage = good (low score).
+	// High resetFraction (just started window) + low usage = save for later (higher score).
+	return usagePct * resetFraction
 }
 
 func runRun() {
@@ -74,7 +108,7 @@ func runRun() {
 		os.Exit(1)
 	}
 
-	// Score all accounts by 5h usage.
+	// Score all accounts by smart routing (usage + time-to-reset).
 	scores := scoreAccounts(reg)
 	if len(scores) == 0 {
 		fmt.Fprintln(os.Stderr, "[cx] No accounts with rate data; picking first account")
@@ -95,8 +129,14 @@ func runRun() {
 		selected, reason = selectLowest(scores)
 	}
 
-	fmt.Fprintf(os.Stderr, "[cx] Auto-selected: %s (5h: %.0f%%) %s\n",
-		selected.name, selected.fiveHPct, reason)
+	if selected.timeToReset > 0 {
+		fmt.Fprintf(os.Stderr, "[cx] Auto-selected: %s (5h: %.0f%%, resets in %s) %s\n",
+			selected.name, selected.fiveHPct,
+			format.FormatDuration(selected.timeToReset), reason)
+	} else {
+		fmt.Fprintf(os.Stderr, "[cx] Auto-selected: %s (5h: %.0f%%) %s\n",
+			selected.name, selected.fiveHPct, reason)
+	}
 
 	// Build env with CLAUDE_CONFIG_DIR set.
 	env := replaceOrAppendEnv(os.Environ(), "CLAUDE_CONFIG_DIR", selected.dir)
@@ -122,7 +162,7 @@ func runRun() {
 }
 
 // scoreAccounts reads the rate-cache for each account and returns scored entries
-// sorted by 5h usage ascending.
+// sorted by smart score (usage weighted by time-to-reset).
 func scoreAccounts(reg *config.Registry) []accountScore {
 	var scores []accountScore
 
@@ -142,17 +182,27 @@ func scoreAccounts(reg *config.Registry) []accountScore {
 		}
 
 		pct := rc.RateLimits.FiveHour.UsedPercentage
+		ttr := rc.RateLimits.FiveHour.TimeToReset()
+
 		// If cache is stale but the window has reset, treat as 0%.
 		if rc.RateLimits.FiveHour.IsReset() {
 			pct = 0
+			ttr = 0
 		}
 
-		scores = append(scores, accountScore{name: name, dir: dir, fiveHPct: pct})
+		scores = append(scores, accountScore{
+			name:        name,
+			dir:         dir,
+			fiveHPct:    pct,
+			timeToReset: ttr,
+		})
 	}
 
 	sort.Slice(scores, func(i, j int) bool {
-		if scores[i].fiveHPct != scores[j].fiveHPct {
-			return scores[i].fiveHPct < scores[j].fiveHPct
+		si := smartScore(scores[i].fiveHPct, scores[i].timeToReset)
+		sj := smartScore(scores[j].fiveHPct, scores[j].timeToReset)
+		if si != sj {
+			return si < sj
 		}
 		return scores[i].name < scores[j].name
 	})
@@ -180,13 +230,17 @@ func fallbackScores(reg *config.Registry) []accountScore {
 	return scores
 }
 
-// selectLowest picks the account with the lowest 5h usage.
+// selectLowest picks the account with the best smart score and shows reset info.
 func selectLowest(scores []accountScore) (accountScore, string) {
-	return scores[0], ""
+	s := scores[0]
+	if s.timeToReset > 0 {
+		return s, fmt.Sprintf("[resets in %s]", format.FormatDuration(s.timeToReset))
+	}
+	return s, ""
 }
 
 // selectPreferred picks the preferred account if its usage is below the
-// threshold, otherwise falls back to the lowest.
+// threshold, otherwise falls back to the best smart-scored account.
 func selectPreferred(scores []accountScore, prefer string) (accountScore, string) {
 	for _, s := range scores {
 		if s.name == prefer {
@@ -199,11 +253,13 @@ func selectPreferred(scores []accountScore, prefer string) (accountScore, string
 				prefer, s.fiveHPct, preferThreshold)
 		}
 	}
-	// Preferred name not found; fall back to lowest.
+	// Preferred name not found; fall back to best smart-scored.
 	return scores[0], fmt.Sprintf("[preferred %q not found, fell back]", prefer)
 }
 
 // selectBalanced implements round-robin selection, skipping overloaded accounts.
+// Accounts are sorted by smart score, so round-robin operates over a
+// schedule-aware ordering.
 func selectBalanced(scores []accountScore) (accountScore, string) {
 	counter := readRunCounter()
 	counter++
@@ -218,7 +274,7 @@ func selectBalanced(scores []accountScore) (accountScore, string) {
 		}
 	}
 
-	// All accounts are over threshold; pick lowest anyway.
+	// All accounts are over threshold; pick best smart-scored anyway.
 	writeRunCounter(counter)
 	return scores[0], "[balanced, all above threshold]"
 }
@@ -253,7 +309,7 @@ func writeRunCounter(n int) {
 	if p == "" {
 		return
 	}
-	_ = os.WriteFile(p, []byte(strconv.Itoa(n)+"\n"), 0o600)
+	_ = atomic.WriteFile(p, bytes.NewReader([]byte(strconv.Itoa(n)+"\n")))
 }
 
 // replaceOrAppendEnv sets key=value in the env slice, replacing an existing

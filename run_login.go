@@ -1,12 +1,14 @@
 package main
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"os/exec"
 	"strings"
 
 	"github.com/Mike-7777777/cx/internal/config"
+	cxerrors "github.com/Mike-7777777/cx/internal/errors"
 )
 
 func runLogin() {
@@ -43,7 +45,11 @@ func runLogin() {
 		}
 		dir, err := reg.ResolveConfigDir(name)
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "[cx] account %q not found (run 'cx init %s' first)\n", name, name)
+			if errors.Is(err, cxerrors.ErrAccountNotFound) {
+				fmt.Fprintf(os.Stderr, "[cx] account %q not found (run 'cx init %s' first)\n", name, name)
+			} else {
+				fmt.Fprintf(os.Stderr, "[cx] %v\n", err)
+			}
 			os.Exit(1)
 		}
 		configDir = dir

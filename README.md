@@ -1,12 +1,31 @@
 # cc-monitor
 
+[![CI](https://github.com/Mike-7777777/cc-monitor/actions/workflows/ci.yml/badge.svg)](https://github.com/Mike-7777777/cc-monitor/actions/workflows/ci.yml)
+[![Go](https://img.shields.io/badge/Go-1.24-00ADD8?logo=go)](https://go.dev)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+
 A single Go binary for managing multiple Claude Code accounts with real-time rate limit monitoring.
 
-## Why not ccusage or Claude HUD?
+## How it compares
 
-ccusage statusline consumes 300%+ CPU and 1.5GB+ RAM (#804). Claude HUD is 4K lines TypeScript that
-can't coexist with custom statusline logic. Neither supports multi-account. cc-monitor is a single
-~2MB Go binary that replaces both.
+cc-monitor fills a gap that existing tools don't cover: **multi-account management + lightweight monitoring in a single binary**.
+
+|                          | cc-monitor           | ccusage (11.9k stars)         | Claude HUD (12.6k stars) |
+|--------------------------|----------------------|-------------------------------|--------------------------|
+| Multi-account switching  | Built-in (init/switch/sync) | No                      | No                       |
+| Cross-account rate limits | Statusline + status table | No                      | No                       |
+| Config sync              | Built-in + conflict detection | No                   | No                       |
+| Statusline performance   | ~16ms, ~5MB RAM      | 30s+ to stabilize, 300%+ CPU, 1.5-2.4GB RAM ([#804](https://github.com/ryoppippi/ccusage/issues/804)) | ~60-100ms (Node.js) |
+| Runtime dependency       | None (single binary) | Node.js / Bun                 | Node.js / Bun            |
+| Usage reports            | daily/session/blocks | daily/weekly/monthly/session/blocks | None              |
+| MCP Server               | No                   | Yes                           | No                       |
+| Pricing data             | Static (manual update) | LiteLLM (auto-fetch)        | N/A                      |
+| Multi-CLI support        | Claude Code only     | 5 CLIs (Claude Code, Codex, Amp, OpenCode, Pi-agent) | Claude Code only |
+| Incremental caching      | Yes (0.2s warm)      | No (output cache for statusline only) | N/A              |
+
+**Choose cc-monitor if** you manage multiple Claude Code accounts and want one tool for switching, syncing, and monitoring.
+
+**Choose ccusage if** you need the richest usage analytics, MCP integration, or support for non-Claude CLIs.
 
 ## Install
 

@@ -56,21 +56,21 @@ func runSwitch() {
 		if isPrimary {
 			fmt.Println("set -e CLAUDE_CONFIG_DIR")
 		} else {
-			fmt.Printf("set -gx CLAUDE_CONFIG_DIR %q\n", configDir)
+			fmt.Printf("set -gx CLAUDE_CONFIG_DIR \"%s\"\n", configDir)
 		}
 		fmt.Printf("echo '[cc-monitor] Switched to %s'\n", name)
 	case platform.ShellPowerShell:
 		if isPrimary {
 			fmt.Println("Remove-Item Env:CLAUDE_CONFIG_DIR -ErrorAction SilentlyContinue")
 		} else {
-			fmt.Printf("$env:CLAUDE_CONFIG_DIR=%q\n", configDir)
+			fmt.Printf("$env:CLAUDE_CONFIG_DIR=\"%s\"\n", configDir)
 		}
 		fmt.Printf("Write-Host '[cc-monitor] Switched to %s'\n", name)
 	default: // bash / zsh
 		if isPrimary {
 			fmt.Println("unset CLAUDE_CONFIG_DIR")
 		} else {
-			fmt.Printf("export CLAUDE_CONFIG_DIR=%q\n", configDir)
+			fmt.Printf("export CLAUDE_CONFIG_DIR=\"%s\"\n", configDir)
 		}
 		fmt.Printf("echo '[cc-monitor] Switched to %s'\n", name)
 	}

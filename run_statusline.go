@@ -39,10 +39,12 @@ func doStatusline() error {
 		return fmt.Errorf("parse stdin: %w", err)
 	}
 
+	compact := hasFlagStatusline("--compact")
+
 	cfgDir, err := config.DetectConfigDir()
 	if err != nil {
 		// No config dir is non-fatal; render without cache ops.
-		return renderAndPrint(input, nil)
+		return renderAndPrint(input, nil, "", compact)
 	}
 
 	// Warn when rate_limits is absent and CC version is too old.
@@ -66,7 +68,10 @@ func doStatusline() error {
 	// Read other accounts' rate-cache.json.
 	other := loadOtherAccount(cfgDir)
 
-	return renderAndPrint(input, other)
+	// Resolve current account name from registry.
+	accountName := currentAccountName(cfgDir)
+
+	return renderAndPrint(input, other, accountName, compact)
 }
 
 func buildRateCache(input *statusline.Input) *cache.RateCache {
@@ -181,8 +186,55 @@ func formatStaleAge(d time.Duration) string {
 	return fmt.Sprintf("%dm", m)
 }
 
-func renderAndPrint(input *statusline.Input, other *statusline.OtherAccount) error {
-	lines := statusline.Render(input, other, platform.ANSIEnabled())
+// currentAccountName resolves the display name of the active account by
+// matching cfgDir against the registry. Returns empty string on any error.
+func currentAccountName(cfgDir string) string {
+	regPath, err := config.RegistryPath()
+	if err != nil {
+		return ""
+	}
+	reg, err := config.LoadOrCreateRegistry(regPath)
+	if err != nil {
+		return ""
+	}
+
+	// The primary account may have an empty ConfigDir (uses default).
+	// Detect by resolving it.
+	for name, acc := range reg.Accounts {
+		dir := acc.ConfigDir
+		if dir == "" {
+			resolved, err := config.DetectConfigDir()
+			if err != nil {
+				continue
+			}
+			dir = resolved
+		}
+		if dir == cfgDir {
+			return name
+		}
+	}
+	return ""
+}
+
+// hasFlagStatusline checks os.Args[2:] for a flag (statusline subcommand flags).
+func hasFlagStatusline(flag string) bool {
+	if len(os.Args) <= 2 {
+		return false
+	}
+	for _, arg := range os.Args[2:] {
+		if arg == flag {
+			return true
+		}
+	}
+	return false
+}
+
+func renderAndPrint(input *statusline.Input, other *statusline.OtherAccount, accountName string, compact bool) error {
+	opts := statusline.RenderOpts{
+		AccountName: accountName,
+		Compact:     compact,
+	}
+	lines := statusline.Render(input, other, platform.ANSIEnabled(), opts)
 	for _, line := range lines {
 		fmt.Println(line)
 	}

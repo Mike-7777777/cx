@@ -18,6 +18,29 @@ func ProgressBar(pct float64, width int) string {
 	return strings.Repeat("█", filled) + strings.Repeat("░", width-filled)
 }
 
+// FormatNumber formats an int64 with comma separators (e.g., 1234567 -> "1,234,567").
+func FormatNumber(n int64) string {
+	if n < 0 {
+		return "-" + FormatNumber(-n)
+	}
+	s := fmt.Sprintf("%d", n)
+	if len(s) <= 3 {
+		return s
+	}
+	var buf strings.Builder
+	remainder := len(s) % 3
+	if remainder > 0 {
+		buf.WriteString(s[:remainder])
+	}
+	for i := remainder; i < len(s); i += 3 {
+		if buf.Len() > 0 {
+			buf.WriteByte(',')
+		}
+		buf.WriteString(s[i : i+3])
+	}
+	return buf.String()
+}
+
 // FormatDuration formats d as a compact human-readable string.
 // Examples: 2h14m, 48m, 0m.
 func FormatDuration(d time.Duration) string {
@@ -30,4 +53,13 @@ func FormatDuration(d time.Duration) string {
 		return fmt.Sprintf("%dh%dm", h, m)
 	}
 	return fmt.Sprintf("%dm", m)
+}
+
+// IsEnabled returns the value of a *bool field, defaulting to true when nil.
+// This is the canonical implementation used across config and statusline packages.
+func IsEnabled(field *bool) bool {
+	if field == nil {
+		return true
+	}
+	return *field
 }

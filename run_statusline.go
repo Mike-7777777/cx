@@ -10,13 +10,15 @@ import (
 
 	"github.com/Mike-7777777/cx/internal/cache"
 	"github.com/Mike-7777777/cx/internal/config"
+	"github.com/Mike-7777777/cx/internal/format"
 	"github.com/Mike-7777777/cx/internal/platform"
 	"github.com/Mike-7777777/cx/internal/statusline"
 )
 
 const (
-	logMaxSize      = 1048576 // 1 MB
-	minVersionWarn  = "2.1.80"
+	logMaxSize                     = 1048576 // 1 MB
+	minVersionWarn                 = "2.1.80"
+	statuslineStaleCacheThreshold  = 30 * time.Minute
 )
 
 func runStatusline() {
@@ -39,7 +41,7 @@ func doStatusline() error {
 		return fmt.Errorf("parse stdin: %w", err)
 	}
 
-	compact := hasFlagStatusline("--compact")
+	compact := hasFlagFrom("--compact", 2)
 
 	cfgDir, err := config.DetectConfigDir()
 	if err != nil {
@@ -154,8 +156,8 @@ func loadOtherAccount(currentCfgDir string) *statusline.OtherAccount {
 		// Staleness detection: if not reset, check cache age.
 		if other.Stale == "" {
 			age := rc.Age()
-			if age > 30*time.Minute {
-				other.Stale = formatStaleAge(age)
+			if age > statuslineStaleCacheThreshold {
+				other.Stale = format.FormatDuration(age)
 			}
 		}
 
@@ -175,15 +177,6 @@ func loadOtherAccount(currentCfgDir string) *statusline.OtherAccount {
 		}
 	}
 	return best.other
-}
-
-func formatStaleAge(d time.Duration) string {
-	h := int(d.Hours())
-	m := int(d.Minutes()) % 60
-	if h > 0 {
-		return fmt.Sprintf("%dh%dm", h, m)
-	}
-	return fmt.Sprintf("%dm", m)
 }
 
 // currentAccountName resolves the display name of the active account by
@@ -214,19 +207,6 @@ func currentAccountName(cfgDir string) string {
 		}
 	}
 	return ""
-}
-
-// hasFlagStatusline checks os.Args[2:] for a flag (statusline subcommand flags).
-func hasFlagStatusline(flag string) bool {
-	if len(os.Args) <= 2 {
-		return false
-	}
-	for _, arg := range os.Args[2:] {
-		if arg == flag {
-			return true
-		}
-	}
-	return false
 }
 
 func renderAndPrint(input *statusline.Input, other *statusline.OtherAccount, accountName string, compact bool) error {
@@ -276,36 +256,26 @@ func openLogFile(logPath string) (*os.File, error) {
 	return os.OpenFile(logPath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o600)
 }
 
-func logError(err error) {
-	cfgDir, dirErr := config.DetectConfigDir()
-	if dirErr != nil {
-		return // Cannot log if we don't know where to write.
+// withLogFile opens the cx.log file and passes a logger to fn.
+// Silently returns if the config dir or log file cannot be resolved.
+func withLogFile(fn func(*log.Logger)) {
+	cfgDir, err := config.DetectConfigDir()
+	if err != nil {
+		return
 	}
-
 	logPath := filepath.Join(cfgDir, "cx.log")
-	f, fErr := openLogFile(logPath)
-	if fErr != nil {
+	f, err := openLogFile(logPath)
+	if err != nil {
 		return
 	}
 	defer f.Close()
+	fn(log.New(f, "", log.LstdFlags))
+}
 
-	logger := log.New(f, "", log.LstdFlags)
-	logger.Printf("ERROR: %v", err)
+func logError(err error) {
+	withLogFile(func(l *log.Logger) { l.Printf("ERROR: %v", err) })
 }
 
 func logWarn(msg string) {
-	cfgDir, dirErr := config.DetectConfigDir()
-	if dirErr != nil {
-		return
-	}
-
-	logPath := filepath.Join(cfgDir, "cx.log")
-	f, fErr := openLogFile(logPath)
-	if fErr != nil {
-		return
-	}
-	defer f.Close()
-
-	logger := log.New(f, "", log.LstdFlags)
-	logger.Printf("[WARN] %s", msg)
+	withLogFile(func(l *log.Logger) { l.Printf("[WARN] %s", msg) })
 }

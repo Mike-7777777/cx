@@ -126,13 +126,13 @@ func runDoctor() {
 			if age > rateCacheStaleThreshold {
 				results = append(results, checkResult{
 					warn: true, label: "rate-cache",
-					detail: fmt.Sprintf("stale (%s ago)", formatAge(age)),
+					detail: fmt.Sprintf("stale (%s ago)", format.FormatDuration(age)),
 					indent: 1,
 				})
 			} else {
 				results = append(results, checkResult{
 					ok: true, label: "rate-cache",
-					detail: fmt.Sprintf("fresh (%s ago)", formatAge(age)),
+					detail: fmt.Sprintf("fresh (%s ago)", format.FormatDuration(age)),
 					indent: 1,
 				})
 			}
@@ -222,15 +222,6 @@ func checkSettingsSync(primaryDir, accDir string) (bool, string) {
 		return true, "in sync"
 	}
 	return false, "differs from primary (run sync)"
-}
-
-func formatAge(d time.Duration) string {
-	h := int(d.Hours())
-	m := int(d.Minutes()) % 60
-	if h > 0 {
-		return fmt.Sprintf("%dh%dm", h, m)
-	}
-	return fmt.Sprintf("%dm", m)
 }
 
 func printResults(results []checkResult, useColor bool) {

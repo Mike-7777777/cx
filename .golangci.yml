@@ -4,26 +4,27 @@ linters:
   enable:
     - gocritic
     - misspell
+  exclusions:
+    rules:
+      - path: _test\.go
+        linters:
+          - errcheck
   settings:
     gocritic:
       enabled-tags:
         - diagnostic
       disabled-checks:
-        - hugeParam           # 128-byte Entry struct is fine for a CLI
-        - rangeValCopy        # same reason
-        - commentedOutCode    # test files have arithmetic comments
-        - ifElseChain         # style preference, not a bug
+        - hugeParam
+        - rangeValCopy
+        - commentedOutCode
+        - ifElseChain
     errcheck:
       exclude-functions:
-        - (io.Closer).Close   # close errors on read-only files are safe to ignore
-        - (net/http.ResponseWriter).Write  # best-effort writes to HTTP clients
+        - (io.Closer).Close
+        - (net/http.ResponseWriter).Write
 issues:
   max-issues-per-linter: 50
   max-same-issues: 5
-  exclude-rules:
-    - path: _test\.go
-      linters:
-        - errcheck            # test files: less strict on error checking
 formatters:
   enable:
     - gofmt

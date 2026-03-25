@@ -410,6 +410,14 @@ func powershellProfilePath() string {
 	return filepath.Join(home, ".config", "powershell", "Microsoft.PowerShell_profile.ps1")
 }
 
+// writeStatuslineWrapper creates a bash wrapper script that execs the cx binary.
+// On Windows, CC's Git Bash doesn't pipe stdin to .exe files correctly;
+// wrapping with bash + exec fixes the pipe.
+func writeStatuslineWrapper(wrapperPath, cxPath string) {
+	content := "#!/bin/bash\nexec \"" + cxPath + "\" statusline\n"
+	_ = os.WriteFile(wrapperPath, []byte(content), 0o755)
+}
+
 // configureStatusline adds the cx statusline command to CC's settings.json.
 // It reads the existing settings, merges the statusLine config, and writes
 // back atomically. Returns true if configuration succeeded.
@@ -436,9 +444,19 @@ func configureStatusline(primaryConfigDir string) bool {
 	}
 
 	// Set statusLine config.
-	// CC runs statusline commands through Git Bash on Windows, so paths
-	// must use forward slashes to avoid broken stdin pipes.
-	cmd := strings.ReplaceAll(cxPath, "\\", "/") + " statusline"
+	// On Windows, CC pipes stdin to statusline commands through Git Bash,
+	// but direct .exe invocation receives EOF on stdin. Using a bash wrapper
+	// with `exec` fixes the stdin pipe. On Unix, direct invocation works fine.
+	cxPath = strings.ReplaceAll(cxPath, "\\", "/")
+	var cmd string
+	if runtime.GOOS == "windows" {
+		wrapperPath := filepath.Join(filepath.Dir(cxPath), "statusline.sh")
+		wrapperPath = strings.ReplaceAll(wrapperPath, "\\", "/")
+		writeStatuslineWrapper(wrapperPath, cxPath)
+		cmd = "bash " + wrapperPath
+	} else {
+		cmd = cxPath + " statusline"
+	}
 	settings["statusLine"] = map[string]string{
 		"type":    "command",
 		"command": cmd,

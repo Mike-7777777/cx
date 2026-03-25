@@ -155,6 +155,39 @@ func runDoctor() {
 		})
 	}
 
+	// Check for project-level statusLine overrides in the current directory.
+	// A .claude/settings.json with a statusLine key overrides the global config,
+	// which is a common source of "statusline not working" issues.
+	cwd, cwdErr := os.Getwd()
+	if cwdErr == nil {
+		projSettingsPath := filepath.Join(cwd, ".claude", "settings.json")
+		if projData, readErr := os.ReadFile(projSettingsPath); readErr == nil {
+			var projSettings map[string]any
+			if json.Unmarshal(projData, &projSettings) == nil {
+				if sl, hasSL := projSettings["statusLine"]; hasSL {
+					slMap, _ := sl.(map[string]any)
+					cmd, _ := slMap["command"].(string)
+					if cmd != "" && !strings.Contains(cmd, "cx") {
+						results = append(results, checkResult{
+							warn: true, label: "project statusline override",
+							detail: fmt.Sprintf(".claude/settings.json overrides global statusline: %s", cmd),
+						})
+					} else if strings.Contains(cmd, "cc-monitor") {
+						results = append(results, checkResult{
+							label: "project statusline override",
+							detail: ".claude/settings.json points to old cc-monitor path",
+						})
+					} else {
+						results = append(results, checkResult{
+							ok: true, label: "project statusline",
+							detail: "ok",
+						})
+					}
+				}
+			}
+		}
+	}
+
 	printResults(results, useColor)
 }
 

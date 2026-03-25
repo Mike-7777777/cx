@@ -63,7 +63,9 @@ func Render(input *Input, other *OtherAccount, useColor bool, opts ...RenderOpts
 
 	var lines []string
 	lines = append(lines, renderPrimary(input, other, opt, useColor))
-	showOther := opt.Sections == nil || format.IsEnabled(opt.Sections.ShowOtherAccount)
+	// Other account line is opt-in (default off). Users who want it can set
+	// "show_other_account": true in the registry's statusline config.
+	showOther := opt.Sections != nil && opt.Sections.ShowOtherAccount != nil && *opt.Sections.ShowOtherAccount
 	if other != nil && showOther {
 		lines = append(lines, renderOther(other, useColor))
 	}

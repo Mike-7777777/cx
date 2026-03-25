@@ -112,7 +112,9 @@ func TestRender_WithOtherAccount(t *testing.T) {
 		Stale:    "15m",
 	}
 
-	lines := Render(input, other, false)
+	showOther := true
+	opts := RenderOpts{Sections: &SectionVisibility{ShowOtherAccount: &showOther}}
+	lines := Render(input, other, false, opts)
 	if len(lines) != 2 {
 		t.Fatalf("got %d lines, want 2", len(lines))
 	}
@@ -142,7 +144,9 @@ func TestRender_OtherAccountReset(t *testing.T) {
 		Stale:    "reset",
 	}
 
-	lines := Render(input, other, false)
+	showOther := true
+	opts := RenderOpts{Sections: &SectionVisibility{ShowOtherAccount: &showOther}}
+	lines := Render(input, other, false, opts)
 	if len(lines) != 2 {
 		t.Fatalf("got %d lines, want 2", len(lines))
 	}
@@ -268,7 +272,9 @@ func TestRender_SmartSwitchHint(t *testing.T) {
 		FiveHour: 30.0,
 	}
 
-	lines := Render(input, other, false)
+	showOther := true
+	opts := RenderOpts{Sections: &SectionVisibility{ShowOtherAccount: &showOther}}
+	lines := Render(input, other, false, opts)
 	if len(lines) != 2 {
 		t.Fatalf("got %d lines, want 2", len(lines))
 	}
@@ -398,7 +404,8 @@ func TestRender_FullWithAllFeatures(t *testing.T) {
 		SevenDay: 20.0,
 	}
 
-	opts := RenderOpts{AccountName: "20x"}
+	showOther := true
+	opts := RenderOpts{AccountName: "20x", Sections: &SectionVisibility{ShowOtherAccount: &showOther}}
 	lines := Render(input, other, false, opts)
 
 	if len(lines) != 2 {

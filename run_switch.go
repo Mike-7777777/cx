@@ -16,6 +16,10 @@ func runSwitch() {
 	}
 
 	name := os.Args[2]
+	if !validAccountName.MatchString(name) {
+		fmt.Fprintf(os.Stderr, "cc-monitor switch: invalid account name %q (only letters, digits, hyphens, underscores)\n", name)
+		os.Exit(1)
+	}
 	noSync := hasFlag("--no-sync")
 	shell := detectShellOverride()
 

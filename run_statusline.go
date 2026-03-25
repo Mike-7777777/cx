@@ -5,6 +5,7 @@ import (
 	"log"
 	"os"
 	"path/filepath"
+	"sort"
 	"time"
 
 	"github.com/Mike-7777777/cc-monitor/internal/cache"
@@ -101,13 +102,25 @@ func loadOtherAccount(currentCfgDir string) *statusline.OtherAccount {
 		return nil
 	}
 
-	for name, acc := range reg.Accounts {
+	// Sort account names for deterministic iteration order.
+	names := make([]string, 0, len(reg.Accounts))
+	for name := range reg.Accounts {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+
+	// Collect all other accounts with valid rate caches, then pick the one
+	// with the highest 5h usage (most urgent to show as an alternative).
+	type candidate struct {
+		other    *statusline.OtherAccount
+		fiveHour float64
+	}
+	var candidates []candidate
+
+	for _, name := range names {
+		acc := reg.Accounts[name]
 		accDir := acc.ConfigDir
-		if accDir == "" {
-			continue
-		}
-		// Skip current account.
-		if accDir == currentCfgDir {
+		if accDir == "" || accDir == currentCfgDir {
 			continue
 		}
 
@@ -118,10 +131,12 @@ func loadOtherAccount(currentCfgDir string) *statusline.OtherAccount {
 		}
 
 		other := &statusline.OtherAccount{Name: name}
+		var fiveHour float64
 
 		if rc.RateLimits != nil {
 			if rc.RateLimits.FiveHour != nil {
-				other.FiveHour = rc.RateLimits.FiveHour.UsedPercentage
+				fiveHour = rc.RateLimits.FiveHour.UsedPercentage
+				other.FiveHour = fiveHour
 				if rc.RateLimits.FiveHour.IsReset() {
 					other.Stale = "reset"
 				}
@@ -139,10 +154,22 @@ func loadOtherAccount(currentCfgDir string) *statusline.OtherAccount {
 			}
 		}
 
-		return other // Only show first other account found.
+		candidates = append(candidates, candidate{other: other, fiveHour: fiveHour})
 	}
 
-	return nil
+	if len(candidates) == 0 {
+		return nil
+	}
+
+	// Pick the candidate with the highest 5h usage. On tie, the earlier
+	// name in sorted order wins (stable since names were sorted above).
+	best := candidates[0]
+	for _, c := range candidates[1:] {
+		if c.fiveHour > best.fiveHour {
+			best = c
+		}
+	}
+	return best.other
 }
 
 func formatStaleAge(d time.Duration) string {

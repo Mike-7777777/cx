@@ -4,10 +4,15 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"regexp"
 
 	"github.com/Mike-7777777/cc-monitor/internal/config"
 	"github.com/Mike-7777777/cc-monitor/internal/platform"
 )
+
+// validAccountName restricts account names to safe alphanumeric characters,
+// hyphens, and underscores to prevent path traversal attacks.
+var validAccountName = regexp.MustCompile(`^[a-zA-Z0-9_-]+$`)
 
 // sharedLinkDirs are subdirectories that are junctioned/symlinked from the
 // primary config dir into every secondary account dir.
@@ -23,6 +28,10 @@ func runInit() {
 	}
 
 	name := os.Args[2]
+	if !validAccountName.MatchString(name) {
+		fmt.Fprintf(os.Stderr, "cc-monitor init: invalid account name %q (only letters, digits, hyphens, underscores)\n", name)
+		os.Exit(1)
+	}
 	force := hasFlag("--force")
 
 	// Validate: primary config dir must exist.

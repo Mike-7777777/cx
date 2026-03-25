@@ -173,6 +173,243 @@ func TestAggregateBlocks(t *testing.T) {
 	}
 }
 
+func TestAggregateMonthly(t *testing.T) {
+	entries := loadSampleEntries(t)
+	reports := AggregateMonthly(entries)
+
+	// All entries are in 2026-03, so expect 1 monthly report.
+	if len(reports) != 1 {
+		t.Fatalf("expected 1 monthly report, got %d", len(reports))
+	}
+
+	m1 := reports[0]
+	if m1.Month != "2026-03" {
+		t.Errorf("month: got %q, want %q", m1.Month, "2026-03")
+	}
+	// All 3 entries combined: input=230, output=650, cache_create=700, cache_read=3500
+	if m1.Summary.InputTokens != 230 {
+		t.Errorf("monthly input: got %d, want 230", m1.Summary.InputTokens)
+	}
+	if m1.Summary.OutputTokens != 650 {
+		t.Errorf("monthly output: got %d, want 650", m1.Summary.OutputTokens)
+	}
+	if m1.Summary.CacheCreationInputTokens != 700 {
+		t.Errorf("monthly cache_create: got %d, want 700", m1.Summary.CacheCreationInputTokens)
+	}
+	if m1.Summary.CacheReadInputTokens != 3500 {
+		t.Errorf("monthly cache_read: got %d, want 3500", m1.Summary.CacheReadInputTokens)
+	}
+	if m1.Summary.TotalTokens != 5080 {
+		t.Errorf("monthly total: got %d, want 5080", m1.Summary.TotalTokens)
+	}
+	if m1.Summary.EntryCount != 3 {
+		t.Errorf("monthly entry count: got %d, want 3", m1.Summary.EntryCount)
+	}
+	// Verify per-model breakdown exists
+	if len(m1.Models) != 2 {
+		t.Errorf("monthly models: expected 2, got %d", len(m1.Models))
+	}
+}
+
+func TestAggregateMonthlyMultiMonth(t *testing.T) {
+	// Create entries spanning two months.
+	entries := []Entry{
+		{
+			Model:     "claude-opus-4-6",
+			Timestamp: time.Date(2026, 2, 28, 10, 0, 0, 0, time.UTC),
+			Usage:     TokenUsage{InputTokens: 100, OutputTokens: 200},
+		},
+		{
+			Model:     "claude-opus-4-6",
+			Timestamp: time.Date(2026, 3, 1, 10, 0, 0, 0, time.UTC),
+			Usage:     TokenUsage{InputTokens: 300, OutputTokens: 400},
+		},
+	}
+
+	reports := AggregateMonthly(entries)
+	if len(reports) != 2 {
+		t.Fatalf("expected 2 monthly reports, got %d", len(reports))
+	}
+	if reports[0].Month != "2026-02" {
+		t.Errorf("first month: got %q, want %q", reports[0].Month, "2026-02")
+	}
+	if reports[1].Month != "2026-03" {
+		t.Errorf("second month: got %q, want %q", reports[1].Month, "2026-03")
+	}
+	if reports[0].Summary.InputTokens != 100 {
+		t.Errorf("feb input: got %d, want 100", reports[0].Summary.InputTokens)
+	}
+	if reports[1].Summary.InputTokens != 300 {
+		t.Errorf("mar input: got %d, want 300", reports[1].Summary.InputTokens)
+	}
+}
+
+func TestAggregateWeekly(t *testing.T) {
+	entries := loadSampleEntries(t)
+	reports := AggregateWeekly(entries)
+
+	// 2026-03-24 is Monday of W13, 2026-03-25 is Tuesday of W13
+	// All entries should be in the same ISO week.
+	if len(reports) != 1 {
+		t.Fatalf("expected 1 weekly report, got %d", len(reports))
+	}
+
+	w1 := reports[0]
+	if w1.Week != "2026-W13" {
+		t.Errorf("week: got %q, want %q", w1.Week, "2026-W13")
+	}
+	if w1.Summary.InputTokens != 230 {
+		t.Errorf("weekly input: got %d, want 230", w1.Summary.InputTokens)
+	}
+	if w1.Summary.EntryCount != 3 {
+		t.Errorf("weekly entry count: got %d, want 3", w1.Summary.EntryCount)
+	}
+	if len(w1.Models) != 2 {
+		t.Errorf("weekly models: expected 2, got %d", len(w1.Models))
+	}
+}
+
+func TestAggregateWeeklyMultiWeek(t *testing.T) {
+	// Create entries spanning two ISO weeks.
+	entries := []Entry{
+		{
+			Model:     "claude-opus-4-6",
+			Timestamp: time.Date(2026, 3, 22, 10, 0, 0, 0, time.UTC), // Sunday = W12
+			Usage:     TokenUsage{InputTokens: 100, OutputTokens: 200},
+		},
+		{
+			Model:     "claude-opus-4-6",
+			Timestamp: time.Date(2026, 3, 23, 10, 0, 0, 0, time.UTC), // Monday = W13
+			Usage:     TokenUsage{InputTokens: 300, OutputTokens: 400},
+		},
+	}
+
+	reports := AggregateWeekly(entries)
+	if len(reports) != 2 {
+		t.Fatalf("expected 2 weekly reports, got %d", len(reports))
+	}
+	if reports[0].Week != "2026-W12" {
+		t.Errorf("first week: got %q, want %q", reports[0].Week, "2026-W12")
+	}
+	if reports[1].Week != "2026-W13" {
+		t.Errorf("second week: got %q, want %q", reports[1].Week, "2026-W13")
+	}
+}
+
+func TestFormatMonthlyTable(t *testing.T) {
+	entries := loadSampleEntries(t)
+	reports := AggregateMonthly(entries)
+	table := FormatMonthlyTable(reports, false)
+
+	for _, col := range []string{"Month", "Input", "Output", "Cache Read", "Cache Create", "Total", "Cost"} {
+		if !strings.Contains(table, col) {
+			t.Errorf("monthly table missing column header %q", col)
+		}
+	}
+	if !strings.Contains(table, "2026-03") {
+		t.Error("monthly table missing month 2026-03")
+	}
+	if !strings.Contains(table, "Total") {
+		t.Error("monthly table missing Total row")
+	}
+}
+
+func TestFormatWeeklyTable(t *testing.T) {
+	entries := loadSampleEntries(t)
+	reports := AggregateWeekly(entries)
+	table := FormatWeeklyTable(reports, false)
+
+	for _, col := range []string{"Week", "Input", "Output", "Cache Read", "Cache Create", "Total", "Cost"} {
+		if !strings.Contains(table, col) {
+			t.Errorf("weekly table missing column header %q", col)
+		}
+	}
+	if !strings.Contains(table, "2026-W13") {
+		t.Error("weekly table missing week 2026-W13")
+	}
+}
+
+func TestFormatDailyTableWithBreakdown(t *testing.T) {
+	entries := loadSampleEntries(t)
+	reports := AggregateDailies(entries)
+	table := FormatDailyTableWithBreakdown(reports, false)
+
+	// Should contain model names as sub-rows
+	if !strings.Contains(table, "claude-opus-4-6") {
+		t.Error("breakdown table missing model claude-opus-4-6")
+	}
+	if !strings.Contains(table, "claude-sonnet-4-6") {
+		t.Error("breakdown table missing model claude-sonnet-4-6")
+	}
+	// Should also contain date headers
+	if !strings.Contains(table, "2026-03-24") {
+		t.Error("breakdown table missing date 2026-03-24")
+	}
+}
+
+func TestFormatDailyCSV(t *testing.T) {
+	entries := loadSampleEntries(t)
+	reports := AggregateDailies(entries)
+	csv := FormatDailyCSV(reports)
+
+	// Check header
+	if !strings.HasPrefix(csv, "Date,Input,Output,CacheRead,CacheCreate,Total,Cost\n") {
+		t.Errorf("CSV missing expected header, got: %s", csv[:60])
+	}
+	// Check data rows
+	lines := strings.Split(strings.TrimSpace(csv), "\n")
+	if len(lines) != 3 { // header + 2 data rows
+		t.Errorf("CSV: expected 3 lines (header + 2 data), got %d", len(lines))
+	}
+	if !strings.HasPrefix(lines[1], "2026-03-24,") {
+		t.Errorf("CSV first data row should start with 2026-03-24, got: %s", lines[1])
+	}
+}
+
+func TestFormatDailyMarkdown(t *testing.T) {
+	entries := loadSampleEntries(t)
+	reports := AggregateDailies(entries)
+	md := FormatDailyMarkdown(reports)
+
+	// Check markdown table structure
+	if !strings.Contains(md, "| Date |") {
+		t.Error("markdown missing header row")
+	}
+	if !strings.Contains(md, "|---") {
+		t.Error("markdown missing separator row")
+	}
+	if !strings.Contains(md, "| 2026-03-24 |") {
+		t.Error("markdown missing data row for 2026-03-24")
+	}
+}
+
+func TestFormatROI(t *testing.T) {
+	roi := FormatROI(1000.0, 300.0, false)
+
+	if !strings.Contains(roi, "ROI Summary") {
+		t.Error("ROI missing header")
+	}
+	if !strings.Contains(roi, "$300.00") {
+		t.Error("ROI missing subscription cost")
+	}
+	if !strings.Contains(roi, "$1000.00") {
+		t.Error("ROI missing equivalent API cost")
+	}
+	if !strings.Contains(roi, "$700.00") {
+		t.Error("ROI missing savings amount")
+	}
+	if !strings.Contains(roi, "70.0%") {
+		t.Error("ROI missing savings percentage")
+	}
+}
+
+func TestFormatROIZeroCost(t *testing.T) {
+	roi := FormatROI(0, 300.0, false)
+	if !strings.Contains(roi, "0.0%") {
+		t.Error("ROI with zero cost should show 0.0%")
+	}
+}
+
 func TestFormatDailyTable(t *testing.T) {
 	entries := loadSampleEntries(t)
 	reports := AggregateDailies(entries)

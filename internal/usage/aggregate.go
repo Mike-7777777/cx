@@ -1,6 +1,7 @@
 package usage
 
 import (
+	"fmt"
 	"sort"
 	"time"
 )
@@ -132,6 +133,77 @@ func blockStart(t time.Time) time.Time {
 	hour := utc.Hour()
 	blockHour := (hour / 5) * 5
 	return time.Date(utc.Year(), utc.Month(), utc.Day(), blockHour, 0, 0, 0, time.UTC)
+}
+
+// MonthlyReport summarizes usage for a single UTC month.
+type MonthlyReport struct {
+	Month   string                   `json:"Month"` // "2026-03"
+	Summary UsageSummary             `json:"Summary"`
+	Models  map[string]*UsageSummary `json:"Models"`
+}
+
+// WeeklyReport summarizes usage for a single ISO week.
+type WeeklyReport struct {
+	Week    string                   `json:"Week"` // "2026-W13"
+	Summary UsageSummary             `json:"Summary"`
+	Models  map[string]*UsageSummary `json:"Models"`
+}
+
+// AggregateMonthly groups entries by UTC month. Returns sorted by month ascending.
+func AggregateMonthly(entries []Entry) []MonthlyReport {
+	byMonth := make(map[string]*MonthlyReport)
+
+	for _, e := range entries {
+		monthKey := e.Timestamp.UTC().Format("2006-01")
+		mr, ok := byMonth[monthKey]
+		if !ok {
+			mr = &MonthlyReport{
+				Month:  monthKey,
+				Models: make(map[string]*UsageSummary),
+			}
+			byMonth[monthKey] = mr
+		}
+		addEntry(&mr.Summary, e)
+		addEntry(getOrCreateModel(mr.Models, e.Model), e)
+	}
+
+	reports := make([]MonthlyReport, 0, len(byMonth))
+	for _, mr := range byMonth {
+		reports = append(reports, *mr)
+	}
+	sort.Slice(reports, func(i, j int) bool {
+		return reports[i].Month < reports[j].Month
+	})
+	return reports
+}
+
+// AggregateWeekly groups entries by ISO week. Returns sorted by week ascending.
+func AggregateWeekly(entries []Entry) []WeeklyReport {
+	byWeek := make(map[string]*WeeklyReport)
+
+	for _, e := range entries {
+		y, w := e.Timestamp.UTC().ISOWeek()
+		weekKey := fmt.Sprintf("%d-W%02d", y, w)
+		wr, ok := byWeek[weekKey]
+		if !ok {
+			wr = &WeeklyReport{
+				Week:   weekKey,
+				Models: make(map[string]*UsageSummary),
+			}
+			byWeek[weekKey] = wr
+		}
+		addEntry(&wr.Summary, e)
+		addEntry(getOrCreateModel(wr.Models, e.Model), e)
+	}
+
+	reports := make([]WeeklyReport, 0, len(byWeek))
+	for _, wr := range byWeek {
+		reports = append(reports, *wr)
+	}
+	sort.Slice(reports, func(i, j int) bool {
+		return reports[i].Week < reports[j].Week
+	})
+	return reports
 }
 
 // AggregateBlocks groups entries into 5-hour blocks aligned to midnight UTC.

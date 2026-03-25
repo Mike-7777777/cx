@@ -13,6 +13,11 @@ import (
 	"github.com/MasaYan24/cc-monitor/internal/statusline"
 )
 
+const (
+	logMaxSize      = 1048576 // 1 MB
+	minVersionWarn  = "2.1.80"
+)
+
 func runStatusline() {
 	// On ANY error: print [?] and exit 0 (never blank the status bar).
 	defer func() {
@@ -37,6 +42,14 @@ func doStatusline() error {
 	if err != nil {
 		// No config dir is non-fatal; render without cache ops.
 		return renderAndPrint(input, nil)
+	}
+
+	// Warn when rate_limits is absent and CC version is too old.
+	if input.RateLimits == nil && input.Version != "" && input.Version < minVersionWarn {
+		logWarn(fmt.Sprintf(
+			"Claude Code version %s may not provide rate_limits data. Recommended: >= %s",
+			input.Version, minVersionWarn,
+		))
 	}
 
 	// Write current account's rate-cache.json if rate_limits present.
@@ -149,6 +162,24 @@ func renderAndPrint(input *statusline.Input, other *statusline.OtherAccount) err
 	return nil
 }
 
+// rotateLogIfNeeded rotates logPath when it exceeds logMaxSize bytes.
+// It removes the .old file if present, then renames the current log to .old.
+func rotateLogIfNeeded(logPath string) {
+	info, err := os.Stat(logPath)
+	if err != nil || info.Size() <= logMaxSize {
+		return
+	}
+	oldPath := logPath + ".old"
+	_ = os.Remove(oldPath)
+	_ = os.Rename(logPath, oldPath)
+}
+
+// openLogFile opens (or creates) the log file at logPath, rotating first if needed.
+func openLogFile(logPath string) (*os.File, error) {
+	rotateLogIfNeeded(logPath)
+	return os.OpenFile(logPath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o600)
+}
+
 func logError(err error) {
 	cfgDir, dirErr := config.DetectConfigDir()
 	if dirErr != nil {
@@ -156,7 +187,7 @@ func logError(err error) {
 	}
 
 	logPath := filepath.Join(cfgDir, "cc-monitor.log")
-	f, fErr := os.OpenFile(logPath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o600)
+	f, fErr := openLogFile(logPath)
 	if fErr != nil {
 		return
 	}
@@ -164,4 +195,21 @@ func logError(err error) {
 
 	logger := log.New(f, "", log.LstdFlags)
 	logger.Printf("ERROR: %v", err)
+}
+
+func logWarn(msg string) {
+	cfgDir, dirErr := config.DetectConfigDir()
+	if dirErr != nil {
+		return
+	}
+
+	logPath := filepath.Join(cfgDir, "cc-monitor.log")
+	f, fErr := openLogFile(logPath)
+	if fErr != nil {
+		return
+	}
+	defer f.Close()
+
+	logger := log.New(f, "", log.LstdFlags)
+	logger.Printf("[WARN] %s", msg)
 }

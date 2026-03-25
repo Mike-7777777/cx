@@ -42,7 +42,7 @@ func runSwitch() {
 	if !noSync && !isPrimary {
 		primaryDir, err := reg.ResolveConfigDir(reg.Primary)
 		if err == nil {
-			_ = syncFiles(primaryDir, configDir)
+			_ = syncFiles(primaryDir, configDir, true)
 		}
 	}
 

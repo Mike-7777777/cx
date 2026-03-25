@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/MasaYan24/cc-monitor/internal/config"
+	"github.com/MasaYan24/cc-monitor/internal/platform"
 	"github.com/MasaYan24/cc-monitor/internal/usage"
 )
 
@@ -104,6 +105,9 @@ func runUsage() {
 		os.Exit(0)
 	}
 
+	// Color is disabled when --json is set (machine output) or terminal doesn't support it.
+	useColor := !jsonOutput && platform.ANSIEnabled()
+
 	// Aggregate and format.
 	switch mode {
 	case "daily":
@@ -111,21 +115,21 @@ func runUsage() {
 		if jsonOutput {
 			printJSON(reports)
 		} else {
-			fmt.Print(usage.FormatDailyTable(reports))
+			fmt.Print(usage.FormatDailyTable(reports, useColor))
 		}
 	case "session":
 		reports := usage.AggregateSessions(entries)
 		if jsonOutput {
 			printJSON(reports)
 		} else {
-			fmt.Print(usage.FormatSessionTable(reports))
+			fmt.Print(usage.FormatSessionTable(reports, useColor))
 		}
 	case "blocks":
 		reports := usage.AggregateBlocks(entries)
 		if jsonOutput {
 			printJSON(reports)
 		} else {
-			fmt.Print(usage.FormatBlockTable(reports))
+			fmt.Print(usage.FormatBlockTable(reports, useColor))
 		}
 	}
 }

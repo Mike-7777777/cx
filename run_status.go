@@ -10,6 +10,7 @@ import (
 	"github.com/MasaYan24/cc-monitor/internal/cache"
 	"github.com/MasaYan24/cc-monitor/internal/config"
 	"github.com/MasaYan24/cc-monitor/internal/format"
+	"github.com/MasaYan24/cc-monitor/internal/platform"
 )
 
 const (
@@ -73,8 +74,9 @@ func runStatus() {
 		}
 	}
 
-	printTable(rows)
-	printRecommendation(rows, allStale)
+	useColor := platform.ANSIEnabled()
+	printTable(rows, useColor)
+	printRecommendation(rows, allStale, useColor)
 }
 
 func buildRow(name string, rc *cache.RateCache, readErr error) statusRow {
@@ -117,30 +119,47 @@ func buildRow(name string, rc *cache.RateCache, readErr error) statusRow {
 	return row
 }
 
-func printTable(rows []statusRow) {
+func printTable(rows []statusRow, useColor bool) {
 	header := fmt.Sprintf("%-10s  %-14s  %-12s  %-14s  %s",
 		"Account", "5h Usage", "Resets In", "7d Usage", "Note")
-	separator := "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+	sep := "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 
-	fmt.Println(header)
-	fmt.Println(separator)
+	fmt.Println(format.Colorize(header, format.Bold, useColor))
+	fmt.Println(format.Colorize(sep, format.Dim, useColor))
 
 	for _, row := range rows {
+		nameStr := format.Colorize(row.name, format.Cyan, useColor)
 		if !row.hasData {
+			noteStr := format.Colorize(noDataMarker, format.Dim, useColor)
 			fmt.Printf("%-10s  %-14s  %-12s  %-14s  %s\n",
-				row.name, noDataMarker, "", "", row.note)
+				nameStr, noteStr, "", "", row.note)
 			continue
 		}
 
-		fiveBar := fmt.Sprintf("%s %3.0f%%", format.ProgressBar(row.fivePct, 5), row.fivePct)
-		sevenBar := fmt.Sprintf("%s %3.0f%%", format.ProgressBar(row.sevenPct, 5), row.sevenPct)
+		fiveBar := buildStatusBar(row.fivePct, useColor)
+		sevenBar := buildStatusBar(row.sevenPct, useColor)
+		noteStr := row.note
+		if row.isStale {
+			noteStr = format.Colorize(row.note, format.Dim, useColor)
+		}
 
 		fmt.Printf("%-10s  %-14s  %-12s  %-14s  %s\n",
-			row.name, fiveBar, row.fiveResetStr, sevenBar, row.note)
+			nameStr, fiveBar, row.fiveResetStr, sevenBar, noteStr)
 	}
 }
 
-func printRecommendation(rows []statusRow, allStale bool) {
+// buildStatusBar returns a formatted bar+percentage string, colored if enabled.
+func buildStatusBar(pct float64, useColor bool) string {
+	bar := format.ProgressBar(pct, 5)
+	pctStr := fmt.Sprintf("%3.0f%%", pct)
+	if useColor {
+		col := format.UsageColor(pct)
+		return format.Colorize(bar, col, true) + " " + format.Colorize(pctStr, col, true)
+	}
+	return fmt.Sprintf("%s %s", bar, pctStr)
+}
+
+func printRecommendation(rows []statusRow, allStale bool, useColor bool) {
 	var best *statusRow
 	for i := range rows {
 		r := &rows[i]
@@ -154,7 +173,8 @@ func printRecommendation(rows []statusRow, allStale bool) {
 
 	fmt.Println()
 	if best != nil {
-		fmt.Printf("✓ Recommended: %s (lowest 5h usage at %.0f%%)\n", best.name, best.fivePct)
+		rec := fmt.Sprintf("✓ Recommended: %s (lowest 5h usage at %.0f%%)", best.name, best.fivePct)
+		fmt.Println(format.Colorize(rec, format.Green+format.Bold, useColor))
 	}
 
 	if allStale {

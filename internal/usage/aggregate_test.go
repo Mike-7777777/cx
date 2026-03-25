@@ -176,7 +176,7 @@ func TestAggregateBlocks(t *testing.T) {
 func TestFormatDailyTable(t *testing.T) {
 	entries := loadSampleEntries(t)
 	reports := AggregateDailies(entries)
-	table := FormatDailyTable(reports)
+	table := FormatDailyTable(reports, false)
 
 	// Check headers present
 	for _, col := range []string{"Date", "Input", "Output", "Cache Read", "Cache Create", "Total", "Cost"} {
@@ -204,10 +204,21 @@ func TestFormatDailyTable(t *testing.T) {
 	}
 }
 
+func TestFormatDailyTableColor(t *testing.T) {
+	entries := loadSampleEntries(t)
+	reports := AggregateDailies(entries)
+	table := FormatDailyTable(reports, true)
+
+	// ANSI escape sequences must be present when color is enabled.
+	if !strings.Contains(table, "\033[") {
+		t.Error("colored table missing ANSI escape codes")
+	}
+}
+
 func TestFormatSessionTable(t *testing.T) {
 	entries := loadSampleEntries(t)
 	reports := AggregateSessions(entries)
-	table := FormatSessionTable(reports)
+	table := FormatSessionTable(reports, false)
 
 	// Check headers
 	for _, col := range []string{"Session", "Start", "Duration", "Tokens", "Cost"} {
@@ -225,7 +236,7 @@ func TestFormatSessionTable(t *testing.T) {
 func TestFormatBlockTable(t *testing.T) {
 	entries := loadSampleEntries(t)
 	reports := AggregateBlocks(entries)
-	table := FormatBlockTable(reports)
+	table := FormatBlockTable(reports, false)
 
 	// Check headers
 	for _, col := range []string{"Block Start", "Block End", "Tokens", "Cost"} {

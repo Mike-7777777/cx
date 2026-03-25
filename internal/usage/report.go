@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"strings"
 	"time"
+
+	"github.com/MasaYan24/cc-monitor/internal/format"
 )
 
 // formatNumber formats an int64 with comma separators (e.g., 1234567 → "1,234,567").
@@ -60,36 +62,49 @@ func truncateSessionID(id string) string {
 const separator = "━"
 
 // repeatSep returns a separator line of the given width.
-func repeatSep(width int) string {
+func repeatSep(width int, useColor bool) string {
 	var b strings.Builder
 	for i := 0; i < width; i++ {
 		b.WriteString(separator)
 	}
-	return b.String()
+	line := b.String()
+	return format.Colorize(line, format.Dim, useColor)
+}
+
+// costColor returns Green for low cost and Yellow for high cost (>$100/day).
+func costColor(cost float64) string {
+	if cost > 100 {
+		return format.Yellow
+	}
+	return format.Green
 }
 
 // FormatDailyTable formats daily reports as a human-readable table.
-func FormatDailyTable(reports []DailyReport) string {
+func FormatDailyTable(reports []DailyReport, useColor bool) string {
 	const (
 		fmtRow = "%-13s %11s %11s %11s %13s %11s %9s\n"
 		width  = 82
 	)
 
 	var b strings.Builder
-	b.WriteString(fmt.Sprintf(fmtRow, "Date", "Input", "Output", "Cache Read", "Cache Create", "Total", "Cost"))
-	b.WriteString(repeatSep(width))
+
+	header := fmt.Sprintf(fmtRow, "Date", "Input", "Output", "Cache Read", "Cache Create", "Total", "Cost")
+	b.WriteString(format.Colorize(header, format.Bold, useColor))
+	b.WriteString(repeatSep(width, useColor))
 	b.WriteString("\n")
 
 	var total UsageSummary
 	for _, r := range reports {
+		dateStr := format.Colorize(r.Date, format.Cyan, useColor)
+		costStr := format.Colorize(formatCost(r.Summary.CostUSD), costColor(r.Summary.CostUSD), useColor)
 		b.WriteString(fmt.Sprintf(fmtRow,
-			r.Date,
+			dateStr,
 			formatNumber(r.Summary.InputTokens),
 			formatNumber(r.Summary.OutputTokens),
 			formatNumber(r.Summary.CacheReadInputTokens),
 			formatNumber(r.Summary.CacheCreationInputTokens),
 			formatNumber(r.Summary.TotalTokens),
-			formatCost(r.Summary.CostUSD),
+			costStr,
 		))
 		total.InputTokens += r.Summary.InputTokens
 		total.OutputTokens += r.Summary.OutputTokens
@@ -99,9 +114,10 @@ func FormatDailyTable(reports []DailyReport) string {
 		total.CostUSD += r.Summary.CostUSD
 	}
 
-	b.WriteString(repeatSep(width))
+	b.WriteString(repeatSep(width, useColor))
 	b.WriteString("\n")
-	b.WriteString(fmt.Sprintf(fmtRow,
+
+	totalRow := fmt.Sprintf(fmtRow,
 		"Total",
 		formatNumber(total.InputTokens),
 		formatNumber(total.OutputTokens),
@@ -109,84 +125,97 @@ func FormatDailyTable(reports []DailyReport) string {
 		formatNumber(total.CacheCreationInputTokens),
 		formatNumber(total.TotalTokens),
 		formatCost(total.CostUSD),
-	))
+	)
+	b.WriteString(format.Colorize(totalRow, format.Bold, useColor))
 
 	return b.String()
 }
 
 // FormatSessionTable formats session reports as a table.
-func FormatSessionTable(reports []SessionReport) string {
+func FormatSessionTable(reports []SessionReport, useColor bool) string {
 	const (
 		fmtRow = "%-25s %-21s %10s %11s %9s\n"
 		width  = 80
 	)
 
 	var b strings.Builder
-	b.WriteString(fmt.Sprintf(fmtRow, "Session", "Start", "Duration", "Tokens", "Cost"))
-	b.WriteString(repeatSep(width))
+
+	header := fmt.Sprintf(fmtRow, "Session", "Start", "Duration", "Tokens", "Cost")
+	b.WriteString(format.Colorize(header, format.Bold, useColor))
+	b.WriteString(repeatSep(width, useColor))
 	b.WriteString("\n")
 
 	var totalTokens int64
 	var totalCost float64
 	for _, r := range reports {
 		dur := r.EndTime.Sub(r.StartTime)
+		sessionStr := format.Colorize(truncateSessionID(r.SessionID), format.Cyan, useColor)
+		costStr := format.Colorize(formatCost(r.Summary.CostUSD), costColor(r.Summary.CostUSD), useColor)
 		b.WriteString(fmt.Sprintf(fmtRow,
-			truncateSessionID(r.SessionID),
+			sessionStr,
 			r.StartTime.UTC().Format("2006-01-02 15:04"),
 			formatDuration(dur),
 			formatNumber(r.Summary.TotalTokens),
-			formatCost(r.Summary.CostUSD),
+			costStr,
 		))
 		totalTokens += r.Summary.TotalTokens
 		totalCost += r.Summary.CostUSD
 	}
 
-	b.WriteString(repeatSep(width))
+	b.WriteString(repeatSep(width, useColor))
 	b.WriteString("\n")
-	b.WriteString(fmt.Sprintf(fmtRow,
+
+	totalRow := fmt.Sprintf(fmtRow,
 		"Total",
 		"",
 		"",
 		formatNumber(totalTokens),
 		formatCost(totalCost),
-	))
+	)
+	b.WriteString(format.Colorize(totalRow, format.Bold, useColor))
 
 	return b.String()
 }
 
 // FormatBlockTable formats block reports as a table.
-func FormatBlockTable(reports []BlockReport) string {
+func FormatBlockTable(reports []BlockReport, useColor bool) string {
 	const (
 		fmtRow = "%-25s %-22s %11s %9s\n"
 		width  = 70
 	)
 
 	var b strings.Builder
-	b.WriteString(fmt.Sprintf(fmtRow, "Block Start", "Block End", "Tokens", "Cost"))
-	b.WriteString(repeatSep(width))
+
+	header := fmt.Sprintf(fmtRow, "Block Start", "Block End", "Tokens", "Cost")
+	b.WriteString(format.Colorize(header, format.Bold, useColor))
+	b.WriteString(repeatSep(width, useColor))
 	b.WriteString("\n")
 
 	var totalTokens int64
 	var totalCost float64
 	for _, r := range reports {
+		startStr := format.Colorize(r.StartTime.UTC().Format("2006-01-02 15:04"), format.Cyan, useColor)
+		costStr := format.Colorize(formatCost(r.Summary.CostUSD), costColor(r.Summary.CostUSD), useColor)
 		b.WriteString(fmt.Sprintf(fmtRow,
-			r.StartTime.UTC().Format("2006-01-02 15:04"),
+			startStr,
 			r.EndTime.UTC().Format("2006-01-02 15:04"),
 			formatNumber(r.Summary.TotalTokens),
-			formatCost(r.Summary.CostUSD),
+			costStr,
 		))
 		totalTokens += r.Summary.TotalTokens
 		totalCost += r.Summary.CostUSD
 	}
 
-	b.WriteString(repeatSep(width))
+	b.WriteString(repeatSep(width, useColor))
 	b.WriteString("\n")
-	b.WriteString(fmt.Sprintf(fmtRow,
+
+	totalRow := fmt.Sprintf(fmtRow,
 		"Total",
 		"",
 		formatNumber(totalTokens),
 		formatCost(totalCost),
-	))
+	)
+	b.WriteString(format.Colorize(totalRow, format.Bold, useColor))
 
 	return b.String()
 }

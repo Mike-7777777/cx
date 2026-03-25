@@ -118,10 +118,15 @@ func runInit() {
 
 // hasFlag reports whether flag appears verbatim in os.Args[3:].
 func hasFlag(flag string) bool {
-	if len(os.Args) <= 3 {
+	return hasFlagFrom(flag, 3)
+}
+
+// hasFlagFrom reports whether flag appears verbatim in os.Args[start:].
+func hasFlagFrom(flag string, start int) bool {
+	if len(os.Args) <= start {
 		return false
 	}
-	for _, arg := range os.Args[3:] {
+	for _, arg := range os.Args[start:] {
 		if arg == flag {
 			return true
 		}

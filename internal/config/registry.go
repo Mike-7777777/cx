@@ -13,13 +13,34 @@ type Account struct {
 	ConfigDir string `json:"config_dir"`
 }
 
+// StatuslineConfig controls which sections are shown in the statusline.
+// All fields default to true when nil (pointer types for "not set" = default).
+type StatuslineConfig struct {
+	ShowAccount      *bool `json:"show_account,omitempty"`
+	ShowCost         *bool `json:"show_cost,omitempty"`
+	ShowContext      *bool `json:"show_context,omitempty"`
+	ShowRate5h       *bool `json:"show_rate_5h,omitempty"`
+	ShowRate7d       *bool `json:"show_rate_7d,omitempty"`
+	ShowOtherAccount *bool `json:"show_other_account,omitempty"`
+	ShowSwitchHint   *bool `json:"show_switch_hint,omitempty"`
+}
+
+// IsEnabled returns the value of a *bool field, defaulting to true when nil.
+func (c *StatuslineConfig) IsEnabled(field *bool) bool {
+	if field == nil {
+		return true
+	}
+	return *field
+}
+
 // Registry holds all known accounts and tracks which is primary.
 // The path field is intentionally unexported so it is never serialised.
 type Registry struct {
-	Version  int                `json:"version"`
-	Primary  string             `json:"primary"`
-	Accounts map[string]Account `json:"accounts"`
-	path     string
+	Version    int                `json:"version"`
+	Primary    string             `json:"primary"`
+	Accounts   map[string]Account `json:"accounts"`
+	Statusline *StatuslineConfig  `json:"statusline,omitempty"`
+	path       string
 }
 
 // LoadOrCreateRegistry loads the registry from path, or returns a new empty

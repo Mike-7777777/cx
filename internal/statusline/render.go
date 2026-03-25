@@ -19,10 +19,31 @@ type OtherAccount struct {
 	Stale    string // "15m", "", or "reset"
 }
 
+// SectionVisibility controls which statusline sections are rendered.
+// All fields default to true when nil.
+type SectionVisibility struct {
+	ShowAccount      *bool
+	ShowCost         *bool
+	ShowContext      *bool
+	ShowRate5h       *bool
+	ShowRate7d       *bool
+	ShowOtherAccount *bool
+	ShowSwitchHint   *bool
+}
+
+// isEnabled returns the value of a *bool field, defaulting to true when nil.
+func isEnabled(field *bool) bool {
+	if field == nil {
+		return true
+	}
+	return *field
+}
+
 // RenderOpts holds optional rendering parameters.
 type RenderOpts struct {
-	AccountName string // current account label (empty = omit)
-	Compact     bool   // compact single-line mode
+	AccountName string             // current account label (empty = omit)
+	Compact     bool               // compact single-line mode
+	Sections    *SectionVisibility // nil = show all sections
 }
 
 // Render produces one or two status-line strings.
@@ -47,13 +68,16 @@ func Render(input *Input, other *OtherAccount, useColor bool, opts ...RenderOpts
 
 	var lines []string
 	lines = append(lines, renderPrimary(input, other, opt, useColor))
-	if other != nil {
+	showOther := opt.Sections == nil || isEnabled(opt.Sections.ShowOtherAccount)
+	if other != nil && showOther {
 		lines = append(lines, renderOther(other, useColor))
 	}
 	return lines
 }
 
 func renderCompact(input *Input, opt RenderOpts, useColor bool) string {
+	sec := opt.Sections
+
 	ctxPct := 0.0
 	if input.ContextWindow.UsedPercentage != nil {
 		ctxPct = *input.ContextWindow.UsedPercentage
@@ -62,28 +86,36 @@ func renderCompact(input *Input, opt RenderOpts, useColor bool) string {
 	var parts []string
 
 	// Account label.
-	if opt.AccountName != "" {
+	showAccount := sec == nil || isEnabled(sec.ShowAccount)
+	if opt.AccountName != "" && showAccount {
 		nameStr := format.Colorize(opt.AccountName, format.Cyan, useColor)
 		parts = append(parts, fmt.Sprintf("[%s]", nameStr))
 	}
 
-	// Shortened model name (first word only).
+	// Shortened model name (first word only) + context.
 	shortModel := input.Model.DisplayName
 	if idx := strings.Index(shortModel, " "); idx > 0 {
 		shortModel = shortModel[:idx]
 	}
 	modelStr := format.Colorize(shortModel, format.Cyan+format.Bold, useColor)
-	ctxStr := format.Colorize(fmt.Sprintf("%d%%", int(ctxPct)), format.UsageColor(ctxPct), useColor)
-	parts = append(parts, fmt.Sprintf("[%s] %s", modelStr, ctxStr))
+	showContext := sec == nil || isEnabled(sec.ShowContext)
+	if showContext {
+		ctxStr := format.Colorize(fmt.Sprintf("%d%%", int(ctxPct)), format.UsageColor(ctxPct), useColor)
+		parts = append(parts, fmt.Sprintf("[%s] %s", modelStr, ctxStr))
+	} else {
+		parts = append(parts, fmt.Sprintf("[%s]", modelStr))
+	}
 
 	// Rate limits as compact percentages.
 	if input.RateLimits != nil {
-		if input.RateLimits.FiveHour != nil {
+		show5h := sec == nil || isEnabled(sec.ShowRate5h)
+		if input.RateLimits.FiveHour != nil && show5h {
 			pct := int(math.Round(input.RateLimits.FiveHour.UsedPercentage))
 			pctStr := format.Colorize(fmt.Sprintf("%d%%", pct), format.UsageColor(input.RateLimits.FiveHour.UsedPercentage), useColor)
 			parts = append(parts, fmt.Sprintf("5h:%s", pctStr))
 		}
-		if input.RateLimits.SevenDay != nil {
+		show7d := sec == nil || isEnabled(sec.ShowRate7d)
+		if input.RateLimits.SevenDay != nil && show7d {
 			pct := int(math.Round(input.RateLimits.SevenDay.UsedPercentage))
 			pctStr := format.Colorize(fmt.Sprintf("%d%%", pct), format.UsageColor(input.RateLimits.SevenDay.UsedPercentage), useColor)
 			parts = append(parts, fmt.Sprintf("7d:%s", pctStr))
@@ -94,24 +126,34 @@ func renderCompact(input *Input, opt RenderOpts, useColor bool) string {
 }
 
 func renderPrimary(input *Input, other *OtherAccount, opt RenderOpts, useColor bool) string {
+	sec := opt.Sections
+
 	ctxPct := 0.0
 	if input.ContextWindow.UsedPercentage != nil {
 		ctxPct = *input.ContextWindow.UsedPercentage
 	}
 
 	var prefix string
-	if opt.AccountName != "" {
+	showAccount := sec == nil || isEnabled(sec.ShowAccount)
+	if opt.AccountName != "" && showAccount {
 		nameStr := format.Colorize(opt.AccountName, format.Cyan, useColor)
 		prefix = fmt.Sprintf("[%s] ", nameStr)
 	}
 
 	modelName := format.Colorize(input.Model.DisplayName, format.Cyan+format.Bold, useColor)
-	ctxStr := format.Colorize(fmt.Sprintf("%d%%", int(ctxPct)), format.UsageColor(ctxPct), useColor)
 
-	line := fmt.Sprintf("%s[%s] %s ctx", prefix, modelName, ctxStr)
+	showContext := sec == nil || isEnabled(sec.ShowContext)
+	if showContext {
+		ctxStr := format.Colorize(fmt.Sprintf("%d%%", int(ctxPct)), format.UsageColor(ctxPct), useColor)
+		prefix += fmt.Sprintf("[%s] %s ctx", modelName, ctxStr)
+	} else {
+		prefix += fmt.Sprintf("[%s]", modelName)
+	}
+	line := prefix
 
 	// Session cost.
-	if input.Cost != nil && input.Cost.TotalCostUSD != nil {
+	showCost := sec == nil || isEnabled(sec.ShowCost)
+	if showCost && input.Cost != nil && input.Cost.TotalCostUSD != nil {
 		cost := *input.Cost.TotalCostUSD
 		costStr := format.Colorize(fmt.Sprintf("$%.2f", cost), format.Dim, useColor)
 		line += fmt.Sprintf(" | %s", costStr)
@@ -121,7 +163,8 @@ func renderPrimary(input *Input, other *OtherAccount, opt RenderOpts, useColor b
 		return line
 	}
 
-	if input.RateLimits.FiveHour != nil {
+	show5h := sec == nil || isEnabled(sec.ShowRate5h)
+	if input.RateLimits.FiveHour != nil && show5h {
 		w := input.RateLimits.FiveHour
 		bar := colorProgressBar(w.UsedPercentage, barWidth, useColor)
 		pctStr := format.Colorize(fmt.Sprintf("%d%%", int(math.Round(w.UsedPercentage))), format.UsageColor(w.UsedPercentage), useColor)
@@ -129,7 +172,8 @@ func renderPrimary(input *Input, other *OtherAccount, opt RenderOpts, useColor b
 		line += fmt.Sprintf(" | 5h: %s %s (%s)", bar, pctStr, ttl)
 	}
 
-	if input.RateLimits.SevenDay != nil {
+	show7d := sec == nil || isEnabled(sec.ShowRate7d)
+	if input.RateLimits.SevenDay != nil && show7d {
 		w := input.RateLimits.SevenDay
 		bar := colorProgressBar(w.UsedPercentage, barWidth, useColor)
 		pctStr := format.Colorize(fmt.Sprintf("%d%%", int(math.Round(w.UsedPercentage))), format.UsageColor(w.UsedPercentage), useColor)
@@ -137,7 +181,10 @@ func renderPrimary(input *Input, other *OtherAccount, opt RenderOpts, useColor b
 	}
 
 	// Smart switch prompt: when current 5h > 80% and another account has lower usage.
-	line += renderSwitchHint(input, other, useColor)
+	showHint := sec == nil || isEnabled(sec.ShowSwitchHint)
+	if showHint {
+		line += renderSwitchHint(input, other, useColor)
+	}
 
 	return line
 }

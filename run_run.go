@@ -352,7 +352,7 @@ Options:
 Examples:
   cx run                    # pick lowest-usage account
   cx run --yolo             # skip permissions (same as cx run -- --dangerously-skip-permissions)
-  cx run --prefer personal        # prefer "personal", fall back if hot
+  cx run --prefer work      # prefer "work", fall back if hot
   cx run --balance          # alternate between accounts
   cx run -- -p "fix bug"   # pass args to claude after --
 `)

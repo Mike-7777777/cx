@@ -19,8 +19,8 @@ $ cx status
 
   Account     Tier      Auth    5h Usage        Resets In     7d Usage        Note
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-  work          Max 5x    OK      ░░░░░   0%      reset         █░░░░  15%
-★ personal          Max 20x   OK      █░░░░  24%      3h04m         ███░░  67%
+  work        Max 5x    OK      ░░░░░   0%      reset         █░░░░  15%
+★ personal    Max 20x   OK      █░░░░  24%      3h04m         ███░░  67%
 
 ✓ Recommended: work (lowest 5h usage at 0%)
 ```
@@ -236,7 +236,7 @@ cx uses Claude Code's `CLAUDE_CONFIG_DIR` environment variable to isolate accoun
 
 ```
 ~/.claude/          <-- primary account (personal, Max 20x)
-~/.claude-5x/       <-- secondary account (work, Max 5x)
+~/.claude-work/     <-- secondary account (work, Max 5x)
     plugins/cache/  --> junction to ~/.claude/plugins/cache/  (shared)
     settings.json   <-- synced from primary
     .credentials.json  <-- independent (separate login)

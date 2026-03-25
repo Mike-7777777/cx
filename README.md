@@ -3,6 +3,7 @@
 [![CI](https://github.com/Mike-7777777/cc-monitor/actions/workflows/ci.yml/badge.svg)](https://github.com/Mike-7777777/cc-monitor/actions/workflows/ci.yml)
 [![Go](https://img.shields.io/badge/Go-1.24-00ADD8?logo=go)](https://go.dev)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+[![Release](https://img.shields.io/github/v/release/Mike-7777777/cc-monitor)](https://github.com/Mike-7777777/cc-monitor/releases)
 
 A single Go binary for managing multiple Claude Code accounts with real-time rate limit monitoring.
 
@@ -120,6 +121,9 @@ function cc {
 | `sync`        | Sync config files from the primary account to all secondaries |       |
 | `status`      | Print all accounts with rate-limit bars and recommendations |         |
 | `usage [daily\|session\|blocks]` | Analyze token usage and costs (incremental cache) | |
+| `watch`       | Poll primary config dir and auto-sync changes to secondaries |        |
+| `completion`  | Generate shell completion script (bash/zsh/fish/powershell) |         |
+| `doctor`      | Diagnose configuration and environment issues              |          |
 | `version`     | Print version information                                  |          |
 | `help`        | Show help message                                          |          |
 

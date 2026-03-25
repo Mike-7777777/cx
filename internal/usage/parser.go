@@ -27,6 +27,7 @@ type Entry struct {
 	SessionID   string
 	ProjectPath string // project directory name extracted from JSONL file path
 	IsSubagent  bool   // true if parsed from a subagents/ directory
+	CLITool     string // "claude-code", "codex", "amp", "opencode"
 }
 
 // jsonEntry is the internal struct for partial JSON parsing of JSONL lines.
@@ -187,10 +188,90 @@ func ScanDir(configDir string, fn func(Entry)) error {
 		_ = ParseFile(path, func(e Entry) {
 			e.ProjectPath = project
 			e.IsSubagent = isSubagent
+			e.CLITool = "claude-code"
 			fn(e)
 		})
 		return nil
 	})
+}
+
+// cliToolDirs returns candidate root directories for each supported CLI tool.
+// Each entry is (toolName, dirPath). Non-existent paths are included; callers
+// should call ScanDir per tool and skip errors gracefully.
+func cliToolDirs(home string) []struct {
+	tool string
+	dir  string
+} {
+	xdgConfig := os.Getenv("XDG_CONFIG_HOME")
+	if xdgConfig == "" {
+		xdgConfig = filepath.Join(home, ".config")
+	}
+
+	return []struct {
+		tool string
+		dir  string
+	}{
+		{"codex", filepath.Join(home, ".codex")},
+		{"codex", filepath.Join(xdgConfig, "codex")},
+		{"amp", filepath.Join(home, ".amp")},
+		{"amp", filepath.Join(xdgConfig, "amp")},
+		{"opencode", filepath.Join(home, ".opencode")},
+		{"opencode", filepath.Join(xdgConfig, "opencode")},
+	}
+}
+
+// ScanAllCLIs scans the Claude Code config directory plus all known other CLI
+// tool directories (Codex, Amp, OpenCode). For non-Claude tools it tries the
+// same JSONL format; lines that do not parse are silently skipped.
+// Each Entry has CLITool set to the originating tool name.
+func ScanAllCLIs(claudeConfigDir string, fn func(Entry)) error {
+	// Scan Claude Code first (the canonical source).
+	if err := ScanDir(claudeConfigDir, fn); err != nil {
+		return err
+	}
+
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return nil // cannot expand home; skip other tools silently
+	}
+
+	seen := make(map[string]bool) // avoid double-scanning the same directory
+	for _, candidate := range cliToolDirs(home) {
+		if seen[candidate.dir] {
+			continue
+		}
+		seen[candidate.dir] = true
+
+		tool := candidate.tool
+		dir := candidate.dir
+
+		if _, err := os.Stat(dir); os.IsNotExist(err) {
+			continue
+		}
+
+		// Walk the entire directory tree looking for JSONL files.
+		// Unlike ScanDir we do NOT require a "projects/" sub-directory because
+		// each tool organises its state differently.
+		_ = filepath.WalkDir(dir, func(path string, d fs.DirEntry, walkErr error) error {
+			if walkErr != nil {
+				return nil
+			}
+			if d.IsDir() {
+				return nil
+			}
+			if !strings.HasSuffix(d.Name(), ".jsonl") {
+				return nil
+			}
+
+			_ = ParseFile(path, func(e Entry) {
+				e.CLITool = tool
+				fn(e)
+			})
+			return nil
+		})
+	}
+
+	return nil
 }
 
 // ScanDirCached walks the same directory tree as ScanDir but uses the cache

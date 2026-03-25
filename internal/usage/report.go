@@ -683,6 +683,86 @@ func sortedModelNames(models map[string]*UsageSummary) []string {
 	return names
 }
 
+// CLIToolReport summarizes usage attributed to one AI CLI tool.
+type CLIToolReport struct {
+	Tool    string       `json:"Tool"`
+	Summary UsageSummary `json:"Summary"`
+}
+
+// AggregateByCLITool groups entries by CLITool name.
+// Returns results sorted by total cost descending.
+func AggregateByCLITool(entries []Entry) []CLIToolReport {
+	byTool := make(map[string]*UsageSummary)
+	for _, e := range entries {
+		tool := e.CLITool
+		if tool == "" {
+			tool = "claude-code"
+		}
+		s, ok := byTool[tool]
+		if !ok {
+			s = &UsageSummary{}
+			byTool[tool] = s
+		}
+		addEntry(s, e)
+	}
+
+	reports := make([]CLIToolReport, 0, len(byTool))
+	for tool, s := range byTool {
+		reports = append(reports, CLIToolReport{Tool: tool, Summary: *s})
+	}
+	sort.Slice(reports, func(i, j int) bool {
+		return reports[i].Summary.CostUSD > reports[j].Summary.CostUSD
+	})
+	return reports
+}
+
+// FormatCLIToolTable formats CLI tool usage as a summary table.
+func FormatCLIToolTable(reports []CLIToolReport, useColor bool) string {
+	const (
+		fmtRow = "%-16s %11s %9s %5s\n"
+		width  = 45
+	)
+
+	var b strings.Builder
+
+	b.WriteString("\n")
+	b.WriteString(format.Colorize("By CLI Tool\n", format.Bold, useColor))
+	header := fmt.Sprintf(fmtRow, "Tool", "Tokens", "Cost", "Msgs")
+	b.WriteString(format.Colorize(header, format.Bold, useColor))
+	b.WriteString(repeatSep(width, useColor))
+	b.WriteString("\n")
+
+	var totalTokens int64
+	var totalCost float64
+	var totalMsgs int
+	for _, r := range reports {
+		toolStr := format.Colorize(r.Tool, format.Cyan, useColor)
+		costStr := format.Colorize(formatCost(r.Summary.CostUSD), costColor(r.Summary.CostUSD), useColor)
+		b.WriteString(fmt.Sprintf(fmtRow,
+			toolStr,
+			formatNumber(r.Summary.TotalTokens),
+			costStr,
+			fmt.Sprintf("%d", r.Summary.EntryCount),
+		))
+		totalTokens += r.Summary.TotalTokens
+		totalCost += r.Summary.CostUSD
+		totalMsgs += r.Summary.EntryCount
+	}
+
+	b.WriteString(repeatSep(width, useColor))
+	b.WriteString("\n")
+
+	totalRow := fmt.Sprintf(fmtRow,
+		"Total",
+		formatNumber(totalTokens),
+		formatCost(totalCost),
+		fmt.Sprintf("%d", totalMsgs),
+	)
+	b.WriteString(format.Colorize(totalRow, format.Bold, useColor))
+
+	return b.String()
+}
+
 // FormatJSON marshals any report slice to indented JSON.
 func FormatJSON(v any) (string, error) {
 	data, err := json.MarshalIndent(v, "", "  ")

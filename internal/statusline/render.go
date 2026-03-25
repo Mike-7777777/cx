@@ -174,7 +174,9 @@ func renderMain(input *Input, other *OtherAccount, opt RenderOpts, useColor bool
 		w := input.RateLimits.SevenDay
 		bar := colorProgressBar(w.UsedPercentage, barWidth, useColor)
 		pctStr := format.Colorize(fmt.Sprintf("%d%%", int(math.Round(w.UsedPercentage))), format.UsageColor(w.UsedPercentage), useColor)
-		line += fmt.Sprintf(" | 7d: %s %s", bar, pctStr)
+		resetDate := time.Unix(w.ResetsAt, 0).Local().Format("Mon 2 15:04")
+		resetStr := format.Colorize(resetDate, format.Dim, useColor)
+		line += fmt.Sprintf(" | 7d: %s %s (%s)", bar, pctStr, resetStr)
 	}
 
 	// Smart switch prompt: when current 5h > 80% and another account has lower usage.

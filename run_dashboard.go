@@ -106,7 +106,7 @@ func renderDashboard(useColor bool, interval time.Duration) {
 	titleLine := format.Colorize(title, format.Bold+format.Cyan, useColor) +
 		strings.Repeat(" ", padding) +
 		format.Colorize(refreshNote, format.Dim, useColor)
-	b.WriteString(boxRow(titleLine, useColor))
+	b.WriteString(boxRow(titleLine))
 	b.WriteString(boxMid())
 
 	// Section: ACCOUNTS
@@ -139,18 +139,18 @@ func renderAccountsSection(useColor bool) string {
 
 	regPath, err := config.RegistryPath()
 	if err != nil {
-		b.WriteString(padLine("  (registry not found)", useColor))
+		b.WriteString(padLine("  (registry not found)"))
 		return b.String()
 	}
 
 	reg, err := config.LoadOrCreateRegistry(regPath)
 	if err != nil {
-		b.WriteString(padLine("  (registry error)", useColor))
+		b.WriteString(padLine("  (registry error)"))
 		return b.String()
 	}
 
 	if len(reg.Accounts) == 0 {
-		b.WriteString(padLine("  No accounts configured. Run: cx init", useColor))
+		b.WriteString(padLine("  No accounts configured. Run: cx init"))
 		return b.String()
 	}
 
@@ -166,7 +166,7 @@ func renderAccountsSection(useColor bool) string {
 	for _, name := range names {
 		dir, err := reg.ResolveConfigDir(name)
 		if err != nil {
-			b.WriteString(padLine(fmt.Sprintf("  %-14s  no data", name), useColor))
+			b.WriteString(padLine(fmt.Sprintf("  %-14s  no data", name)))
 			continue
 		}
 
@@ -177,7 +177,7 @@ func renderAccountsSection(useColor bool) string {
 				label += " (primary)"
 			}
 			line := fmt.Sprintf("  %-18s 5h: no data", label)
-			b.WriteString(padLine(line, useColor))
+			b.WriteString(padLine(line))
 			continue
 		}
 
@@ -214,7 +214,7 @@ func renderAccountsSection(useColor bool) string {
 		}
 
 		line := fmt.Sprintf("  %-18s 5h: %s  (%s)%s", label, fiveStr, fiveReset, sevenStr)
-		b.WriteString(padLine(line, useColor))
+		b.WriteString(padLine(line))
 
 		if fivePct < bestPct {
 			bestPct = fivePct
@@ -226,7 +226,7 @@ func renderAccountsSection(useColor bool) string {
 		rec := fmt.Sprintf("  %s Recommended: %s",
 			format.Colorize("✓", format.Green, useColor),
 			format.Colorize(bestName, format.Green+format.Bold, useColor))
-		b.WriteString(padLine(rec, useColor))
+		b.WriteString(padLine(rec))
 	}
 
 	b.WriteString(emptyLine())
@@ -244,7 +244,7 @@ func renderTodayUsageSection(useColor bool) string {
 	if err != nil {
 		dir, err2 := config.DetectConfigDir()
 		if err2 != nil {
-			b.WriteString(padLine("  (no config dir found)", useColor))
+			b.WriteString(padLine("  (no config dir found)"))
 			return b.String()
 		}
 		configDirs = []string{dir}
@@ -262,7 +262,7 @@ func renderTodayUsageSection(useColor bool) string {
 	}
 
 	if len(entries) == 0 {
-		b.WriteString(padLine("  No usage data for today.", useColor))
+		b.WriteString(padLine("  No usage data for today."))
 		b.WriteString(emptyLine())
 		return b.String()
 	}
@@ -280,10 +280,10 @@ func renderTodayUsageSection(useColor bool) string {
 	}
 
 	line1 := fmt.Sprintf("  Tokens: %s    Cost: %s    Messages: %s",
-		format.Colorize(formatNumberDash(totalTokens), format.White, useColor),
+		format.Colorize(format.FormatNumber(totalTokens), format.White, useColor),
 		format.Colorize(fmt.Sprintf("$%.2f", totalCost), format.Yellow, useColor),
 		format.Colorize(fmt.Sprintf("%d", len(entries)), format.White, useColor))
-	b.WriteString(padLine(line1, useColor))
+	b.WriteString(padLine(line1))
 
 	// Model breakdown by percentage.
 	type modelPct struct {
@@ -302,7 +302,7 @@ func renderTodayUsageSection(useColor bool) string {
 		parts = append(parts, fmt.Sprintf("%s %.0f%%", mp.name, mp.pct))
 	}
 	line2 := "  Models: " + strings.Join(parts, ", ")
-	b.WriteString(padLine(line2, useColor))
+	b.WriteString(padLine(line2))
 
 	b.WriteString(emptyLine())
 	return b.String()
@@ -319,7 +319,7 @@ func renderWeeklyChartSection(useColor bool) string {
 	if err != nil {
 		dir, err2 := config.DetectConfigDir()
 		if err2 != nil {
-			b.WriteString(padLine("  (no data)", useColor))
+			b.WriteString(padLine("  (no data)"))
 			return b.String()
 		}
 		configDirs = []string{dir}
@@ -342,7 +342,7 @@ func renderWeeklyChartSection(useColor bool) string {
 	}
 
 	if len(entries) == 0 {
-		b.WriteString(padLine("  No usage data this week.", useColor))
+		b.WriteString(padLine("  No usage data this week."))
 		b.WriteString(emptyLine())
 		return b.String()
 	}
@@ -399,7 +399,7 @@ func renderWeeklyChartSection(useColor bool) string {
 			format.Colorize(bar, barColor, useColor),
 			format.Colorize(costStr, format.Dim, useColor),
 			todayMarker)
-		b.WriteString(padLine(line, useColor))
+		b.WriteString(padLine(line))
 	}
 
 	b.WriteString(emptyLine())
@@ -415,18 +415,18 @@ func renderSessionsSection(useColor bool) string {
 
 	sessions := getActiveSessions()
 	if len(sessions) == 0 {
-		b.WriteString(padLine("  No active sessions.", useColor))
+		b.WriteString(padLine("  No active sessions."))
 		b.WriteString(emptyLine())
 		return b.String()
 	}
 
 	for _, s := range sessions {
 		dur := time.Since(s.StartedAt)
-		durStr := formatDurationHuman(dur)
+		durStr := format.FormatDuration(dur)
 		cwd := shortenPath(s.Cwd)
 		line := fmt.Sprintf("  PID %-8d %-24s started %s ago",
 			s.PID, cwd, durStr)
-		b.WriteString(padLine(line, useColor))
+		b.WriteString(padLine(line))
 	}
 
 	b.WriteString(emptyLine())
@@ -483,6 +483,10 @@ func getActiveSessions() []sessionInfo {
 }
 
 // isProcessRunning checks if a process with the given PID exists.
+// On Unix, signal 0 succeeds for any process owned by the current user,
+// so this may return true for unrelated processes that reused the PID.
+// This is acceptable for dashboard display purposes (stale sessions are
+// cleaned up on the next refresh).
 func isProcessRunning(pid int) bool {
 	proc, err := os.FindProcess(pid)
 	if err != nil {
@@ -532,10 +536,10 @@ func renderROISection(useColor bool) string {
 
 	line := fmt.Sprintf("  ROI: %s/mo subscription → %s equiv API (%s saved)",
 		format.Colorize(fmt.Sprintf("$%.0f", subCost), format.Dim, useColor),
-		format.Colorize(fmt.Sprintf("$%s", formatNumberDash(int64(monthCost))), format.Yellow, useColor),
+		format.Colorize(fmt.Sprintf("$%s", format.FormatNumber(int64(monthCost))), format.Yellow, useColor),
 		format.Colorize(fmt.Sprintf("%.1f%%", savingsPct), format.Green+format.Bold, useColor))
 
-	b.WriteString(padLine(line, useColor))
+	b.WriteString(padLine(line))
 	return b.String()
 }
 
@@ -553,7 +557,7 @@ func boxBottom() string {
 	return "╚" + strings.Repeat("═", dashboardBoxWidth) + "╝\n"
 }
 
-func boxRow(content string, _ bool) string {
+func boxRow(content string) string {
 	// Box rows with side borders. Content is pre-formatted with ANSI codes,
 	// so we cannot reliably pad to a fixed width. Use a simple approach.
 	return "║ " + content + " ║\n"
@@ -565,16 +569,16 @@ func emptyLine() string {
 
 // padLine wraps content in box borders. Since content may contain ANSI escape
 // codes, we don't try to pad to exact width (would require stripping escapes).
-func padLine(content string, _ bool) string {
+func padLine(content string) string {
 	return "║" + content + "\n"
 }
 
 func sectionHeader(title string, useColor bool) string {
 	var b strings.Builder
 	b.WriteString(emptyLine())
-	b.WriteString(padLine("  "+format.Colorize(title, format.Bold+format.White, useColor), useColor))
+	b.WriteString(padLine("  "+format.Colorize(title, format.Bold+format.White, useColor)))
 	sep := "  " + strings.Repeat("─", dashboardBoxWidth-4)
-	b.WriteString(padLine(format.Colorize(sep, format.Dim, useColor), useColor))
+	b.WriteString(padLine(format.Colorize(sep, format.Dim, useColor)))
 	return b.String()
 }
 
@@ -601,41 +605,6 @@ func shortModelName(model string) string {
 	}
 }
 
-// formatNumberDash formats a number with comma separators.
-func formatNumberDash(n int64) string {
-	if n < 0 {
-		return "-" + formatNumberDash(-n)
-	}
-	s := fmt.Sprintf("%d", n)
-	if len(s) <= 3 {
-		return s
-	}
-	var buf strings.Builder
-	remainder := len(s) % 3
-	if remainder > 0 {
-		buf.WriteString(s[:remainder])
-	}
-	for i := remainder; i < len(s); i += 3 {
-		if buf.Len() > 0 {
-			buf.WriteByte(',')
-		}
-		buf.WriteString(s[i : i+3])
-	}
-	return buf.String()
-}
-
-// formatDurationHuman formats a duration as "Xh Ym" or "Xm" or "< 1m".
-func formatDurationHuman(d time.Duration) string {
-	if d < time.Minute {
-		return "< 1m"
-	}
-	h := int(d.Hours())
-	m := int(d.Minutes()) % 60
-	if h > 0 {
-		return fmt.Sprintf("%dh%dm", h, m)
-	}
-	return fmt.Sprintf("%dm", m)
-}
 
 // shortenPath shortens a file path for display.
 // Replaces home dir prefix with ~ and takes the last directory component.

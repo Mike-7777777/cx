@@ -98,7 +98,9 @@ func runSetup() {
 			} else {
 				// Directory exists but not registered.
 				reg.AddAccount(name, targetDir)
-				_ = reg.Save()
+				if err := reg.Save(); err != nil {
+					fmt.Fprintf(os.Stderr, "  warning: saving registry: %v\n", err)
+				}
 				fmt.Fprintf(os.Stderr, "  %q already exists, registered\n", name)
 			}
 		} else {
@@ -126,11 +128,15 @@ func runSetup() {
 			}
 
 			// Sync config.
-			_ = syncFiles(primaryDir, targetDir, true)
+			if err := syncFiles(primaryDir, targetDir, true); err != nil {
+				fmt.Fprintf(os.Stderr, "  warning: syncing config: %v\n", err)
+			}
 
 			// Register.
 			reg.AddAccount(name, targetDir)
-			_ = reg.Save()
+			if err := reg.Save(); err != nil {
+				fmt.Fprintf(os.Stderr, "  warning: saving registry: %v\n", err)
+			}
 			fmt.Fprintf(os.Stderr, "  Registered %q\n", name)
 		}
 
@@ -226,18 +232,6 @@ func runSetup() {
 func readLine(reader *bufio.Reader) string {
 	line, _ := reader.ReadString('\n')
 	return strings.TrimSpace(line)
-}
-
-// shellDisplayName returns a human-readable name for the detected shell.
-func shellDisplayName(shell platform.Shell) string {
-	switch shell {
-	case platform.ShellPowerShell:
-		return "PowerShell"
-	case platform.ShellFish:
-		return "Fish"
-	default:
-		return "Bash/Zsh"
-	}
 }
 
 // installShellWrapper writes the cx() wrapper function to the appropriate

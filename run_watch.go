@@ -144,8 +144,8 @@ func detectChanges(dir string, prev watchState) []string {
 		if err != nil {
 			continue
 		}
-		prev, seen := prev[rel]
-		if !seen || info.ModTime().After(prev.mtime) || info.Size() != prev.size {
+		fileMeta, seen := prev[rel]
+		if !seen || info.ModTime().After(fileMeta.mtime) || info.Size() != fileMeta.size {
 			changed = append(changed, rel)
 		}
 	}

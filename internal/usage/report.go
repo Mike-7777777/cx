@@ -5,52 +5,16 @@ import (
 	"fmt"
 	"sort"
 	"strings"
-	"time"
 
 	"github.com/Mike-7777777/cx/internal/format"
 )
 
-// formatNumber formats an int64 with comma separators (e.g., 1234567 → "1,234,567").
-func formatNumber(n int64) string {
-	if n < 0 {
-		return "-" + formatNumber(-n)
-	}
-	s := fmt.Sprintf("%d", n)
-	if len(s) <= 3 {
-		return s
-	}
-
-	var b strings.Builder
-	remainder := len(s) % 3
-	if remainder > 0 {
-		b.WriteString(s[:remainder])
-	}
-	for i := remainder; i < len(s); i += 3 {
-		if b.Len() > 0 {
-			b.WriteByte(',')
-		}
-		b.WriteString(s[i : i+3])
-	}
-	return b.String()
-}
 
 // formatCost formats a USD cost as "$X.XX".
 func formatCost(cost float64) string {
 	return fmt.Sprintf("$%.2f", cost)
 }
 
-// formatDuration formats a duration as "Xh Ym" or "< 1m".
-func formatDuration(d time.Duration) string {
-	if d < time.Minute {
-		return "< 1m"
-	}
-	h := int(d.Hours())
-	m := int(d.Minutes()) % 60
-	if h > 0 {
-		return fmt.Sprintf("%dh %dm", h, m)
-	}
-	return fmt.Sprintf("%dm", m)
-}
 
 // truncateSessionID returns at most 24 characters of a session ID.
 func truncateSessionID(id string) string {
@@ -100,11 +64,11 @@ func FormatDailyTable(reports []DailyReport, useColor bool) string {
 		costStr := format.Colorize(formatCost(r.Summary.CostUSD), costColor(r.Summary.CostUSD), useColor)
 		b.WriteString(fmt.Sprintf(fmtRow,
 			dateStr,
-			formatNumber(r.Summary.InputTokens),
-			formatNumber(r.Summary.OutputTokens),
-			formatNumber(r.Summary.CacheReadInputTokens),
-			formatNumber(r.Summary.CacheCreationInputTokens),
-			formatNumber(r.Summary.TotalTokens),
+			format.FormatNumber(r.Summary.InputTokens),
+			format.FormatNumber(r.Summary.OutputTokens),
+			format.FormatNumber(r.Summary.CacheReadInputTokens),
+			format.FormatNumber(r.Summary.CacheCreationInputTokens),
+			format.FormatNumber(r.Summary.TotalTokens),
 			costStr,
 		))
 		total.InputTokens += r.Summary.InputTokens
@@ -120,11 +84,11 @@ func FormatDailyTable(reports []DailyReport, useColor bool) string {
 
 	totalRow := fmt.Sprintf(fmtRow,
 		"Total",
-		formatNumber(total.InputTokens),
-		formatNumber(total.OutputTokens),
-		formatNumber(total.CacheReadInputTokens),
-		formatNumber(total.CacheCreationInputTokens),
-		formatNumber(total.TotalTokens),
+		format.FormatNumber(total.InputTokens),
+		format.FormatNumber(total.OutputTokens),
+		format.FormatNumber(total.CacheReadInputTokens),
+		format.FormatNumber(total.CacheCreationInputTokens),
+		format.FormatNumber(total.TotalTokens),
 		formatCost(total.CostUSD),
 	)
 	b.WriteString(format.Colorize(totalRow, format.Bold, useColor))
@@ -155,8 +119,8 @@ func FormatSessionTable(reports []SessionReport, useColor bool) string {
 		b.WriteString(fmt.Sprintf(fmtRow,
 			sessionStr,
 			r.StartTime.UTC().Format("2006-01-02 15:04"),
-			formatDuration(dur),
-			formatNumber(r.Summary.TotalTokens),
+			format.FormatDuration(dur),
+			format.FormatNumber(r.Summary.TotalTokens),
 			costStr,
 		))
 		totalTokens += r.Summary.TotalTokens
@@ -170,7 +134,7 @@ func FormatSessionTable(reports []SessionReport, useColor bool) string {
 		"Total",
 		"",
 		"",
-		formatNumber(totalTokens),
+		format.FormatNumber(totalTokens),
 		formatCost(totalCost),
 	)
 	b.WriteString(format.Colorize(totalRow, format.Bold, useColor))
@@ -200,7 +164,7 @@ func FormatBlockTable(reports []BlockReport, useColor bool) string {
 		b.WriteString(fmt.Sprintf(fmtRow,
 			startStr,
 			r.EndTime.UTC().Format("2006-01-02 15:04"),
-			formatNumber(r.Summary.TotalTokens),
+			format.FormatNumber(r.Summary.TotalTokens),
 			costStr,
 		))
 		totalTokens += r.Summary.TotalTokens
@@ -213,7 +177,7 @@ func FormatBlockTable(reports []BlockReport, useColor bool) string {
 	totalRow := fmt.Sprintf(fmtRow,
 		"Total",
 		"",
-		formatNumber(totalTokens),
+		format.FormatNumber(totalTokens),
 		formatCost(totalCost),
 	)
 	b.WriteString(format.Colorize(totalRow, format.Bold, useColor))
@@ -242,11 +206,11 @@ func FormatDailyTableWithBreakdown(reports []DailyReport, useColor bool) string 
 		costStr := format.Colorize(formatCost(r.Summary.CostUSD), costColor(r.Summary.CostUSD), useColor)
 		b.WriteString(fmt.Sprintf(fmtRow,
 			dateStr,
-			formatNumber(r.Summary.InputTokens),
-			formatNumber(r.Summary.OutputTokens),
-			formatNumber(r.Summary.CacheReadInputTokens),
-			formatNumber(r.Summary.CacheCreationInputTokens),
-			formatNumber(r.Summary.TotalTokens),
+			format.FormatNumber(r.Summary.InputTokens),
+			format.FormatNumber(r.Summary.OutputTokens),
+			format.FormatNumber(r.Summary.CacheReadInputTokens),
+			format.FormatNumber(r.Summary.CacheCreationInputTokens),
+			format.FormatNumber(r.Summary.TotalTokens),
 			costStr,
 		))
 		total.InputTokens += r.Summary.InputTokens
@@ -264,11 +228,11 @@ func FormatDailyTableWithBreakdown(reports []DailyReport, useColor bool) string 
 			mCostStr := format.Colorize(formatCost(ms.CostUSD), format.Dim, useColor)
 			b.WriteString(fmt.Sprintf(fmtSubRow,
 				modelStr,
-				formatNumber(ms.InputTokens),
-				formatNumber(ms.OutputTokens),
-				formatNumber(ms.CacheReadInputTokens),
-				formatNumber(ms.CacheCreationInputTokens),
-				formatNumber(ms.TotalTokens),
+				format.FormatNumber(ms.InputTokens),
+				format.FormatNumber(ms.OutputTokens),
+				format.FormatNumber(ms.CacheReadInputTokens),
+				format.FormatNumber(ms.CacheCreationInputTokens),
+				format.FormatNumber(ms.TotalTokens),
 				mCostStr,
 			))
 		}
@@ -279,11 +243,11 @@ func FormatDailyTableWithBreakdown(reports []DailyReport, useColor bool) string 
 
 	totalRow := fmt.Sprintf(fmtRow,
 		"Total",
-		formatNumber(total.InputTokens),
-		formatNumber(total.OutputTokens),
-		formatNumber(total.CacheReadInputTokens),
-		formatNumber(total.CacheCreationInputTokens),
-		formatNumber(total.TotalTokens),
+		format.FormatNumber(total.InputTokens),
+		format.FormatNumber(total.OutputTokens),
+		format.FormatNumber(total.CacheReadInputTokens),
+		format.FormatNumber(total.CacheCreationInputTokens),
+		format.FormatNumber(total.TotalTokens),
 		formatCost(total.CostUSD),
 	)
 	b.WriteString(format.Colorize(totalRow, format.Bold, useColor))
@@ -311,11 +275,11 @@ func FormatMonthlyTable(reports []MonthlyReport, useColor bool) string {
 		costStr := format.Colorize(formatCost(r.Summary.CostUSD), costColor(r.Summary.CostUSD), useColor)
 		b.WriteString(fmt.Sprintf(fmtRow,
 			monthStr,
-			formatNumber(r.Summary.InputTokens),
-			formatNumber(r.Summary.OutputTokens),
-			formatNumber(r.Summary.CacheReadInputTokens),
-			formatNumber(r.Summary.CacheCreationInputTokens),
-			formatNumber(r.Summary.TotalTokens),
+			format.FormatNumber(r.Summary.InputTokens),
+			format.FormatNumber(r.Summary.OutputTokens),
+			format.FormatNumber(r.Summary.CacheReadInputTokens),
+			format.FormatNumber(r.Summary.CacheCreationInputTokens),
+			format.FormatNumber(r.Summary.TotalTokens),
 			costStr,
 		))
 		total.InputTokens += r.Summary.InputTokens
@@ -331,11 +295,11 @@ func FormatMonthlyTable(reports []MonthlyReport, useColor bool) string {
 
 	totalRow := fmt.Sprintf(fmtRow,
 		"Total",
-		formatNumber(total.InputTokens),
-		formatNumber(total.OutputTokens),
-		formatNumber(total.CacheReadInputTokens),
-		formatNumber(total.CacheCreationInputTokens),
-		formatNumber(total.TotalTokens),
+		format.FormatNumber(total.InputTokens),
+		format.FormatNumber(total.OutputTokens),
+		format.FormatNumber(total.CacheReadInputTokens),
+		format.FormatNumber(total.CacheCreationInputTokens),
+		format.FormatNumber(total.TotalTokens),
 		formatCost(total.CostUSD),
 	)
 	b.WriteString(format.Colorize(totalRow, format.Bold, useColor))
@@ -363,11 +327,11 @@ func FormatWeeklyTable(reports []WeeklyReport, useColor bool) string {
 		costStr := format.Colorize(formatCost(r.Summary.CostUSD), costColor(r.Summary.CostUSD), useColor)
 		b.WriteString(fmt.Sprintf(fmtRow,
 			weekStr,
-			formatNumber(r.Summary.InputTokens),
-			formatNumber(r.Summary.OutputTokens),
-			formatNumber(r.Summary.CacheReadInputTokens),
-			formatNumber(r.Summary.CacheCreationInputTokens),
-			formatNumber(r.Summary.TotalTokens),
+			format.FormatNumber(r.Summary.InputTokens),
+			format.FormatNumber(r.Summary.OutputTokens),
+			format.FormatNumber(r.Summary.CacheReadInputTokens),
+			format.FormatNumber(r.Summary.CacheCreationInputTokens),
+			format.FormatNumber(r.Summary.TotalTokens),
 			costStr,
 		))
 		total.InputTokens += r.Summary.InputTokens
@@ -383,11 +347,11 @@ func FormatWeeklyTable(reports []WeeklyReport, useColor bool) string {
 
 	totalRow := fmt.Sprintf(fmtRow,
 		"Total",
-		formatNumber(total.InputTokens),
-		formatNumber(total.OutputTokens),
-		formatNumber(total.CacheReadInputTokens),
-		formatNumber(total.CacheCreationInputTokens),
-		formatNumber(total.TotalTokens),
+		format.FormatNumber(total.InputTokens),
+		format.FormatNumber(total.OutputTokens),
+		format.FormatNumber(total.CacheReadInputTokens),
+		format.FormatNumber(total.CacheCreationInputTokens),
+		format.FormatNumber(total.TotalTokens),
 		formatCost(total.CostUSD),
 	)
 	b.WriteString(format.Colorize(totalRow, format.Bold, useColor))
@@ -424,11 +388,11 @@ func FormatMessagesTable(entries []Entry, useColor bool) string {
 		b.WriteString(fmt.Sprintf(fmtRow,
 			tsStr,
 			modelStr,
-			formatNumber(e.Usage.InputTokens),
-			formatNumber(e.Usage.OutputTokens),
-			formatNumber(e.Usage.CacheReadInputTokens),
-			formatNumber(e.Usage.CacheCreationInputTokens),
-			formatNumber(total),
+			format.FormatNumber(e.Usage.InputTokens),
+			format.FormatNumber(e.Usage.OutputTokens),
+			format.FormatNumber(e.Usage.CacheReadInputTokens),
+			format.FormatNumber(e.Usage.CacheCreationInputTokens),
+			format.FormatNumber(total),
 			costStr,
 		))
 		totalTokens += total
@@ -445,7 +409,7 @@ func FormatMessagesTable(entries []Entry, useColor bool) string {
 		"",
 		"",
 		"",
-		formatNumber(totalTokens),
+		format.FormatNumber(totalTokens),
 		formatCost(totalCost),
 	)
 	b.WriteString(format.Colorize(totalRow, format.Bold, useColor))
@@ -484,7 +448,7 @@ func FormatProjectTable(reports []ProjectReport, useColor bool) string {
 		costStr := format.Colorize(formatCost(r.Summary.CostUSD), costColor(r.Summary.CostUSD), useColor)
 		b.WriteString(fmt.Sprintf(fmtRow,
 			projStr,
-			formatNumber(r.Summary.TotalTokens),
+			format.FormatNumber(r.Summary.TotalTokens),
 			costStr,
 			fmt.Sprintf("%d", r.Summary.EntryCount),
 		))
@@ -498,7 +462,7 @@ func FormatProjectTable(reports []ProjectReport, useColor bool) string {
 
 	totalRow := fmt.Sprintf(fmtRow,
 		"Total",
-		formatNumber(totalTokens),
+		format.FormatNumber(totalTokens),
 		formatCost(totalCost),
 		fmt.Sprintf("%d", totalMsgs),
 	)
@@ -547,8 +511,8 @@ func FormatTrendTable(pairs []TrendPair, useColor bool) string {
 
 		row := fmt.Sprintf(fmtRow,
 			dateStr,
-			formatNumber(p.CurrentTokens),
-			formatNumber(p.PreviousTokens),
+			format.FormatNumber(p.CurrentTokens),
+			format.FormatNumber(p.PreviousTokens),
 			changeStr,
 			formatCost(p.CurrentCost),
 			formatCost(p.PreviousCost),
@@ -609,9 +573,9 @@ func FormatSubagentBreakdown(b SubagentBreakdown, useColor bool) string {
 	subCostStr := format.Colorize(formatCost(b.SubagentCost), format.Yellow, useColor)
 
 	sb.WriteString(fmt.Sprintf("  Main sessions:  %s (%4.1f%%)  [%s tokens, %d msgs]\n",
-		mainCostStr, mainPct, formatNumber(b.MainTokens), b.MainCount))
+		mainCostStr, mainPct, format.FormatNumber(b.MainTokens), b.MainCount))
 	sb.WriteString(fmt.Sprintf("  Subagents:      %s (%4.1f%%)  [%s tokens, %d msgs]\n",
-		subCostStr, subPct, formatNumber(b.SubagentTokens), b.SubagentCount))
+		subCostStr, subPct, format.FormatNumber(b.SubagentTokens), b.SubagentCount))
 
 	return sb.String()
 }
@@ -642,11 +606,11 @@ func FormatDailyMarkdown(reports []DailyReport) string {
 	for _, r := range reports {
 		b.WriteString(fmt.Sprintf("| %s | %s | %s | %s | %s | %s | %s |\n",
 			r.Date,
-			formatNumber(r.Summary.InputTokens),
-			formatNumber(r.Summary.OutputTokens),
-			formatNumber(r.Summary.CacheReadInputTokens),
-			formatNumber(r.Summary.CacheCreationInputTokens),
-			formatNumber(r.Summary.TotalTokens),
+			format.FormatNumber(r.Summary.InputTokens),
+			format.FormatNumber(r.Summary.OutputTokens),
+			format.FormatNumber(r.Summary.CacheReadInputTokens),
+			format.FormatNumber(r.Summary.CacheCreationInputTokens),
+			format.FormatNumber(r.Summary.TotalTokens),
 			formatCost(r.Summary.CostUSD),
 		))
 	}
@@ -740,7 +704,7 @@ func FormatCLIToolTable(reports []CLIToolReport, useColor bool) string {
 		costStr := format.Colorize(formatCost(r.Summary.CostUSD), costColor(r.Summary.CostUSD), useColor)
 		b.WriteString(fmt.Sprintf(fmtRow,
 			toolStr,
-			formatNumber(r.Summary.TotalTokens),
+			format.FormatNumber(r.Summary.TotalTokens),
 			costStr,
 			fmt.Sprintf("%d", r.Summary.EntryCount),
 		))
@@ -754,7 +718,7 @@ func FormatCLIToolTable(reports []CLIToolReport, useColor bool) string {
 
 	totalRow := fmt.Sprintf(fmtRow,
 		"Total",
-		formatNumber(totalTokens),
+		format.FormatNumber(totalTokens),
 		formatCost(totalCost),
 		fmt.Sprintf("%d", totalMsgs),
 	)

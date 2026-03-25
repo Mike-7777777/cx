@@ -18,8 +18,11 @@ import (
 
 	"github.com/Mike-7777777/cx/internal/cache"
 	"github.com/Mike-7777777/cx/internal/config"
+	"github.com/Mike-7777777/cx/internal/format"
 	"github.com/Mike-7777777/cx/internal/usage"
 )
+
+const webStaleThreshold = 10 * time.Minute
 
 //go:embed web/index.html
 var webFS embed.FS
@@ -75,7 +78,7 @@ func runWeb() {
 			return
 		}
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
-		w.Write(data)
+		w.Write(data) // Best effort; client may have disconnected.
 	})
 
 	// API endpoints (registry and config dirs are captured by closure).
@@ -161,14 +164,14 @@ func writeJSON(w http.ResponseWriter, v any) {
 		http.Error(w, `{"error":"marshal failed"}`, http.StatusInternalServerError)
 		return
 	}
-	w.Write(data)
+	w.Write(data) // Best effort; client may have disconnected.
 }
 
 // writeJSONError writes a JSON error response.
 func writeJSONError(w http.ResponseWriter, msg string, code int) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(code)
-	json.NewEncoder(w).Encode(map[string]string{"error": msg})
+	json.NewEncoder(w).Encode(map[string]string{"error": msg}) // Best effort; client may have disconnected.
 }
 
 // --- API Types ---
@@ -232,7 +235,7 @@ func handleAPIStatus(w http.ResponseWriter, r *http.Request, reg *config.Registr
 		}
 
 		age := rc.Age()
-		if age > 10*time.Minute {
+		if age > webStaleThreshold {
 			mins := int(age.Minutes())
 			acc.Note = fmt.Sprintf("stale %dm", mins)
 		}
@@ -245,14 +248,7 @@ func handleAPIStatus(w http.ResponseWriter, r *http.Request, reg *config.Registr
 				acc.FiveHourRst = "reset"
 			} else {
 				acc.FiveHourPct = &rl.FiveHour.UsedPercentage
-				ttr := rl.FiveHour.TimeToReset()
-				h := int(ttr.Hours())
-				m := int(ttr.Minutes()) % 60
-				if h > 0 {
-					acc.FiveHourRst = fmt.Sprintf("%dh%dm", h, m)
-				} else {
-					acc.FiveHourRst = fmt.Sprintf("%dm", m)
-				}
+				acc.FiveHourRst = format.FormatDuration(rl.FiveHour.TimeToReset())
 			}
 		} else {
 			acc.Note = "no data"

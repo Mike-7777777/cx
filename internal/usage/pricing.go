@@ -1,5 +1,25 @@
 package usage
 
+import (
+	"fmt"
+	"os"
+	"time"
+)
+
+// PricingUpdatedAt is the date the pricing table was last updated.
+var PricingUpdatedAt = time.Date(2026, 3, 25, 0, 0, 0, 0, time.UTC)
+
+// CheckPricingStaleness prints a warning to stderr if the pricing data is
+// older than 30 days. Call once at startup, not in hot loops.
+func CheckPricingStaleness() {
+	age := time.Since(PricingUpdatedAt)
+	if age > 30*24*time.Hour {
+		days := int(age.Hours() / 24)
+		fmt.Fprintf(os.Stderr, "[cx] Warning: pricing table is %d days old (last updated %s). Costs may be inaccurate.\n",
+			days, PricingUpdatedAt.Format("2006-01-02"))
+	}
+}
+
 // ModelPricing holds per-million-token prices for a Claude model.
 type ModelPricing struct {
 	InputPerMTok       float64 // $ per million input tokens

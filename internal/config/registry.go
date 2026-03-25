@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+
+	cxerrors "github.com/Mike-7777777/cx/internal/errors"
 )
 
 // Account represents a single named Claude Code account in the registry.
@@ -79,11 +81,11 @@ func (r *Registry) AddAccount(name, configDir string) {
 
 // ResolveConfigDir returns the config directory for the named account.
 // When the stored config_dir is empty, it falls back to DetectConfigDir.
-// Returns an error when the account does not exist.
+// Returns ErrAccountNotFound when the account does not exist.
 func (r *Registry) ResolveConfigDir(name string) (string, error) {
 	acc, ok := r.Accounts[name]
 	if !ok {
-		return "", fmt.Errorf("account %q not found in registry", name)
+		return "", fmt.Errorf("account %q: %w", name, cxerrors.ErrAccountNotFound)
 	}
 	if acc.ConfigDir != "" {
 		return acc.ConfigDir, nil

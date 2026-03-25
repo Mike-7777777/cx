@@ -1,9 +1,12 @@
 package config
 
 import (
+	"errors"
 	"os"
 	"path/filepath"
 	"testing"
+
+	cxerrors "github.com/Mike-7777777/cx/internal/errors"
 )
 
 func TestRegistry_AddAndList(t *testing.T) {
@@ -84,9 +87,12 @@ func TestRegistry_ResolveConfigDir(t *testing.T) {
 		t.Errorf("got %q, want %q", resolved2, explicit)
 	}
 
-	// Unknown account should return an error.
+	// Unknown account should return ErrAccountNotFound.
 	_, err = r.ResolveConfigDir("nonexistent")
 	if err == nil {
 		t.Error("expected error for nonexistent account, got nil")
+	}
+	if !errors.Is(err, cxerrors.ErrAccountNotFound) {
+		t.Errorf("expected ErrAccountNotFound, got: %v", err)
 	}
 }

@@ -1,6 +1,7 @@
 package main
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -8,6 +9,7 @@ import (
 	"strings"
 
 	"github.com/Mike-7777777/cx/internal/config"
+	cxerrors "github.com/Mike-7777777/cx/internal/errors"
 	"github.com/Mike-7777777/cx/internal/platform"
 )
 
@@ -44,7 +46,11 @@ func runSwitch() {
 
 	configDir, err := reg.ResolveConfigDir(name)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "cx switch: %v\n", err)
+		if errors.Is(err, cxerrors.ErrAccountNotFound) {
+			fmt.Fprintf(os.Stderr, "cx switch: account %q not found (run 'cx init %s' first)\n", name, name)
+		} else {
+			fmt.Fprintf(os.Stderr, "cx switch: %v\n", err)
+		}
 		os.Exit(1)
 	}
 
@@ -52,7 +58,7 @@ func runSwitch() {
 	// This prevents command injection via a tampered registry file.
 	configDir = filepath.Clean(configDir)
 	if !filepath.IsAbs(configDir) || !safePathPattern.MatchString(configDir) {
-		fmt.Fprintf(os.Stderr, "cx switch: unsafe config path %q\n", configDir)
+		fmt.Fprintf(os.Stderr, "cx switch: %v\n", cxerrors.ErrUnsafeConfigPath)
 		os.Exit(1)
 	}
 

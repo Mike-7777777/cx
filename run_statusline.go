@@ -199,7 +199,7 @@ func loadOtherAccount(currentCfgDir string) *statusline.OtherAccount {
 				fiveHour = rc.RateLimits.FiveHour.UsedPercentage
 				other.FiveHour = fiveHour
 				if rc.RateLimits.FiveHour.IsReset() {
-					other.Stale = "reset"
+					other.Stale = format.LabelReset
 				}
 			}
 			if rc.RateLimits.SevenDay != nil {

@@ -215,14 +215,14 @@ func handleAPIStatus(w http.ResponseWriter, _ *http.Request, reg *config.Registr
 		acc := apiAccountStatus{Name: name}
 		dir, err := reg.ResolveConfigDir(name)
 		if err != nil {
-			acc.Note = "no data"
+			acc.Note = format.LabelNoData
 			resp.Accounts = append(resp.Accounts, acc)
 			continue
 		}
 
 		rc, err := cache.ReadRateCache(filepath.Join(dir, "rate-cache.json"))
 		if err != nil || rc == nil || rc.RateLimits == nil {
-			acc.Note = "no data"
+			acc.Note = format.LabelNoData
 			resp.Accounts = append(resp.Accounts, acc)
 			continue
 		}
@@ -230,7 +230,7 @@ func handleAPIStatus(w http.ResponseWriter, _ *http.Request, reg *config.Registr
 		age := rc.Age()
 		if age > webStaleThreshold {
 			mins := int(age.Minutes())
-			acc.Note = fmt.Sprintf("stale %dm", mins)
+			acc.Note = fmt.Sprintf("%s %dm", format.LabelStale, mins)
 		}
 
 		rl := rc.RateLimits
@@ -238,13 +238,13 @@ func handleAPIStatus(w http.ResponseWriter, _ *http.Request, reg *config.Registr
 			if rl.FiveHour.IsReset() {
 				zero := 0.0
 				acc.FiveHourPct = &zero
-				acc.FiveHourRst = "reset"
+				acc.FiveHourRst = format.LabelReset
 			} else {
 				acc.FiveHourPct = &rl.FiveHour.UsedPercentage
 				acc.FiveHourRst = format.FormatDuration(rl.FiveHour.TimeToReset())
 			}
 		} else {
-			acc.Note = "no data"
+			acc.Note = format.LabelNoData
 		}
 
 		if rl.SevenDay != nil {

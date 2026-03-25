@@ -16,8 +16,8 @@ import (
 const (
 	staleThreshold    = 10 * time.Minute
 	allStaleThreshold = 1 * time.Hour
-	noDataMarker      = "no data"
-	stalePrefix       = "stale"
+	noDataMarker      = format.LabelNoData
+	stalePrefix       = format.LabelStale
 )
 
 type statusRow struct {
@@ -115,7 +115,7 @@ func buildRow(name string, rc *cache.RateCache, readErr error) statusRow {
 	if rl.FiveHour != nil {
 		if rl.FiveHour.IsReset() {
 			row.fivePct = 0
-			row.fiveResetStr = "reset"
+			row.fiveResetStr = format.LabelReset
 		} else {
 			row.fivePct = rl.FiveHour.UsedPercentage
 			row.fiveResetStr = format.FormatDuration(rl.FiveHour.TimeToReset())
@@ -129,7 +129,7 @@ func buildRow(name string, rc *cache.RateCache, readErr error) statusRow {
 	if rl.SevenDay != nil {
 		row.sevenPct = rl.SevenDay.UsedPercentage
 		if rl.SevenDay.IsReset() {
-			row.sevenResetStr = "reset"
+			row.sevenResetStr = format.LabelReset
 		} else {
 			// Show the actual reset date/time (e.g., "Tue 28 08:00").
 			resetTime := time.Unix(rl.SevenDay.ResetsAt, 0).Local()

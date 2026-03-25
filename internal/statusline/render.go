@@ -109,13 +109,13 @@ func renderCompact(input *Input, opt RenderOpts, useColor bool) string {
 		if input.RateLimits.FiveHour != nil && show5h {
 			pct := int(math.Round(input.RateLimits.FiveHour.UsedPercentage))
 			pctStr := format.Colorize(fmt.Sprintf("%d%%", pct), format.UsageColor(input.RateLimits.FiveHour.UsedPercentage), useColor)
-			parts = append(parts, fmt.Sprintf("5h:%s", pctStr))
+			parts = append(parts, fmt.Sprintf("%s:%s", format.LabelRate5h, pctStr))
 		}
 		show7d := sec == nil || format.IsEnabled(sec.ShowRate7d)
 		if input.RateLimits.SevenDay != nil && show7d {
 			pct := int(math.Round(input.RateLimits.SevenDay.UsedPercentage))
 			pctStr := format.Colorize(fmt.Sprintf("%d%%", pct), format.UsageColor(input.RateLimits.SevenDay.UsedPercentage), useColor)
-			parts = append(parts, fmt.Sprintf("7d:%s", pctStr))
+			parts = append(parts, fmt.Sprintf("%s:%s", format.LabelRate7d, pctStr))
 		}
 	}
 
@@ -141,7 +141,7 @@ func renderMain(input *Input, other *OtherAccount, opt RenderOpts, useColor bool
 	showContext := sec == nil || format.IsEnabled(sec.ShowContext)
 	if showContext {
 		ctxStr := format.Colorize(fmt.Sprintf("%d%%", int(ctxPct)), format.UsageColor(ctxPct), useColor)
-		prefix += fmt.Sprintf("[%s] %s ctx", modelName, ctxStr)
+		prefix += fmt.Sprintf("[%s] %s %s", modelName, ctxStr, format.LabelCtx)
 	} else {
 		prefix += fmt.Sprintf("[%s]", modelName)
 	}
@@ -165,7 +165,7 @@ func renderMain(input *Input, other *OtherAccount, opt RenderOpts, useColor bool
 		bar := colorProgressBar(w.UsedPercentage, barWidth, useColor)
 		pctStr := format.Colorize(fmt.Sprintf("%d%%", int(math.Round(w.UsedPercentage))), format.UsageColor(w.UsedPercentage), useColor)
 		ttl := format.FormatDuration(time.Until(time.Unix(w.ResetsAt, 0)))
-		line += fmt.Sprintf(" | 5h: %s %s (%s)", bar, pctStr, ttl)
+		line += fmt.Sprintf(" | %s: %s %s (%s)", format.LabelRate5h, bar, pctStr, ttl)
 	}
 
 	show7d := sec == nil || format.IsEnabled(sec.ShowRate7d)
@@ -175,7 +175,7 @@ func renderMain(input *Input, other *OtherAccount, opt RenderOpts, useColor bool
 		pctStr := format.Colorize(fmt.Sprintf("%d%%", int(math.Round(w.UsedPercentage))), format.UsageColor(w.UsedPercentage), useColor)
 		resetDate := time.Unix(w.ResetsAt, 0).Local().Format("Mon 2 15:04")
 		resetStr := format.Colorize(resetDate, format.Dim, useColor)
-		line += fmt.Sprintf(" | 7d: %s %s (%s)", bar, pctStr, resetStr)
+		line += fmt.Sprintf(" | %s: %s %s (%s)", format.LabelRate7d, bar, pctStr, resetStr)
 	}
 
 	// Smart switch prompt: when current 5h > 80% and another account has lower usage.
@@ -218,8 +218,8 @@ func renderOther(other *OtherAccount, useColor bool) string {
 	}
 
 	if other.Stale != "" {
-		if other.Stale == "reset" {
-			line += " | " + format.Colorize("reset", format.Green, useColor)
+		if other.Stale == format.LabelReset {
+			line += " | " + format.Colorize(format.LabelReset, format.Green, useColor)
 		} else {
 			line += " | " + format.Colorize(fmt.Sprintf("stale %s", other.Stale), format.Dim, useColor)
 		}

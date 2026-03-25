@@ -424,10 +424,10 @@ func configureStatusline(primaryConfigDir string) bool {
 	}
 
 	// Read existing settings.
-	var settings map[string]interface{}
+	var settings map[string]any
 	data, err := os.ReadFile(settingsPath)
 	if err != nil {
-		settings = make(map[string]interface{})
+		settings = make(map[string]any)
 	} else {
 		if err := json.Unmarshal(data, &settings); err != nil {
 			fmt.Fprintf(os.Stderr, "  Could not parse settings.json: %v\n", err)

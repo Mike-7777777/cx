@@ -167,13 +167,6 @@ func writeJSON(w http.ResponseWriter, v any) {
 	w.Write(data) // Best effort; client may have disconnected.
 }
 
-// writeJSONError writes a JSON error response.
-func writeJSONError(w http.ResponseWriter, msg string, code int) {
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(code)
-	json.NewEncoder(w).Encode(map[string]string{"error": msg}) // Best effort; client may have disconnected.
-}
-
 // --- API Types ---
 
 type apiAccountStatus struct {
@@ -209,7 +202,7 @@ type apiSessionsResponse struct {
 
 // --- API Handlers ---
 
-func handleAPIStatus(w http.ResponseWriter, r *http.Request, reg *config.Registry) {
+func handleAPIStatus(w http.ResponseWriter, _ *http.Request, reg *config.Registry) {
 	names := make([]string, 0, len(reg.Accounts))
 	for name := range reg.Accounts {
 		names = append(names, name)
@@ -264,7 +257,7 @@ func handleAPIStatus(w http.ResponseWriter, r *http.Request, reg *config.Registr
 	writeJSON(w, resp)
 }
 
-func handleAPIDaily(w http.ResponseWriter, r *http.Request, configDirs []string) {
+func handleAPIDaily(w http.ResponseWriter, _ *http.Request, configDirs []string) {
 	// Scan entries for the last 30 days.
 	since := time.Now().UTC().AddDate(0, 0, -30)
 	var entries []usage.Entry
@@ -280,7 +273,7 @@ func handleAPIDaily(w http.ResponseWriter, r *http.Request, configDirs []string)
 	writeJSON(w, reports)
 }
 
-func handleAPIWeekly(w http.ResponseWriter, r *http.Request, configDirs []string) {
+func handleAPIWeekly(w http.ResponseWriter, _ *http.Request, configDirs []string) {
 	var entries []usage.Entry
 	for _, dir := range configDirs {
 		_ = usage.ScanDir(dir, func(e usage.Entry) {
@@ -292,7 +285,7 @@ func handleAPIWeekly(w http.ResponseWriter, r *http.Request, configDirs []string
 	writeJSON(w, reports)
 }
 
-func handleAPIMonthly(w http.ResponseWriter, r *http.Request, configDirs []string) {
+func handleAPIMonthly(w http.ResponseWriter, _ *http.Request, configDirs []string) {
 	var entries []usage.Entry
 	for _, dir := range configDirs {
 		_ = usage.ScanDir(dir, func(e usage.Entry) {
@@ -304,7 +297,7 @@ func handleAPIMonthly(w http.ResponseWriter, r *http.Request, configDirs []strin
 	writeJSON(w, reports)
 }
 
-func handleAPISessions(w http.ResponseWriter, r *http.Request, configDirs []string) {
+func handleAPISessions(w http.ResponseWriter, _ *http.Request, configDirs []string) {
 	// Only show sessions from the last 24 hours for "active" sessions.
 	since := time.Now().UTC().Add(-24 * time.Hour)
 	var entries []usage.Entry
@@ -344,7 +337,7 @@ func handleAPISessions(w http.ResponseWriter, r *http.Request, configDirs []stri
 	writeJSON(w, resp)
 }
 
-func handleAPIROI(w http.ResponseWriter, r *http.Request, configDirs []string) {
+func handleAPIROI(w http.ResponseWriter, _ *http.Request, configDirs []string) {
 	// Scan all entries to calculate total API-equivalent cost.
 	var entries []usage.Entry
 	for _, dir := range configDirs {

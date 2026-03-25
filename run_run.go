@@ -242,22 +242,6 @@ func ensureAllAccounts(reg *config.Registry, scores []accountScore) []accountSco
 	return scores
 }
 
-// fallbackScores returns all accounts with 0% score, sorted alphabetically.
-func fallbackScores(reg *config.Registry) []accountScore {
-	var scores []accountScore
-	for name := range reg.Accounts {
-		dir, err := reg.ResolveConfigDir(name)
-		if err != nil {
-			continue
-		}
-		scores = append(scores, accountScore{name: name, dir: dir, fiveHPct: 0})
-	}
-	sort.Slice(scores, func(i, j int) bool {
-		return scores[i].name < scores[j].name
-	})
-	return scores
-}
-
 // selectLowest picks the account with the best smart score and shows reset info.
 func selectLowest(scores []accountScore) (accountScore, string) {
 	s := scores[0]

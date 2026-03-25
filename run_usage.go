@@ -3,6 +3,8 @@ package main
 import (
 	"fmt"
 	"os"
+	"path/filepath"
+	"sort"
 	"strings"
 	"time"
 
@@ -11,6 +13,10 @@ import (
 	"github.com/MasaYan24/cc-monitor/internal/usage"
 )
 
+// usageCacheFilename is the name of the incremental cache file stored in the
+// user's config directory (next to the registry).
+const usageCacheFilename = "cc-monitor-usage-cache.json"
+
 func runUsage() {
 	// Parse subcommand: cc-monitor usage [daily|session|blocks] [flags]
 	mode := "daily"
@@ -18,6 +24,7 @@ func runUsage() {
 	var accountName string
 	var scanAll bool
 	var sinceStr string
+	var noCache bool
 
 	args := os.Args[2:]
 	flagStart := 0
@@ -55,6 +62,8 @@ func runUsage() {
 			}
 			i++
 			sinceStr = args[i]
+		case "--no-cache":
+			noCache = true
 		default:
 			fmt.Fprintf(os.Stderr, "cc-monitor usage: unknown flag %q\n", args[i])
 			os.Exit(1)
@@ -79,7 +88,17 @@ func runUsage() {
 		os.Exit(1)
 	}
 
-	// Collect entries from all config dirs.
+	// Resolve cache file path (next to the registry, in home dir).
+	cachePath := usageCachePath()
+
+	// Daily mode with caching: fully incremental via cached daily map.
+	if mode == "daily" && !noCache {
+		runUsageDailyCached(configDirs, cachePath, sinceTime, jsonOutput)
+		return
+	}
+
+	// Session/block modes (or --no-cache daily): full scan required because
+	// we need individual Entry structs with session IDs and timestamps.
 	var entries []usage.Entry
 	for _, dir := range configDirs {
 		if err := usage.ScanDir(dir, func(e usage.Entry) {
@@ -108,9 +127,9 @@ func runUsage() {
 	// Color is disabled when --json is set (machine output) or terminal doesn't support it.
 	useColor := !jsonOutput && platform.ANSIEnabled()
 
-	// Aggregate and format.
 	switch mode {
 	case "daily":
+		// Only reachable with --no-cache.
 		reports := usage.AggregateDailies(entries)
 		if jsonOutput {
 			printJSON(reports)
@@ -132,6 +151,73 @@ func runUsage() {
 			fmt.Print(usage.FormatBlockTable(reports, useColor))
 		}
 	}
+}
+
+// runUsageDailyCached implements the fully incremental daily report path.
+// It loads the cache, scans only changed files, merges new entries into the
+// cached daily map, saves the cache, and outputs the report.
+func runUsageDailyCached(configDirs []string, cachePath string, sinceTime time.Time, jsonOutput bool) {
+	cache, err := usage.LoadUsageCache(cachePath)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "cc-monitor usage: loading cache: %v\n", err)
+	}
+
+	// Scan changed files and merge entries into the daily cache.
+	for _, dir := range configDirs {
+		if err := usage.ScanDirCached(dir, cache, func(e usage.Entry) {
+			dateKey := e.Timestamp.UTC().Format("2006-01-02")
+			cache.MergeDailyEntry(dateKey, e)
+		}); err != nil {
+			fmt.Fprintf(os.Stderr, "cc-monitor usage: scanning %s: %v\n", dir, err)
+		}
+	}
+
+	// Save the updated cache.
+	if err := cache.Save(); err != nil {
+		fmt.Fprintf(os.Stderr, "cc-monitor usage: saving cache: %v\n", err)
+	}
+
+	// Convert cached daily map to reports.
+	reports := cache.DailyReports()
+
+	// Apply --since filter.
+	if !sinceTime.IsZero() {
+		sinceKey := sinceTime.Format("2006-01-02")
+		filtered := reports[:0]
+		for _, r := range reports {
+			if r.Date >= sinceKey {
+				filtered = append(filtered, r)
+			}
+		}
+		reports = filtered
+	}
+
+	// Sort by date ascending.
+	sort.Slice(reports, func(i, j int) bool {
+		return reports[i].Date < reports[j].Date
+	})
+
+	if len(reports) == 0 {
+		fmt.Fprintln(os.Stderr, "cc-monitor usage: no usage entries found")
+		os.Exit(0)
+	}
+
+	useColor := !jsonOutput && platform.ANSIEnabled()
+
+	if jsonOutput {
+		printJSON(reports)
+	} else {
+		fmt.Print(usage.FormatDailyTable(reports, useColor))
+	}
+}
+
+// usageCachePath returns the path for the usage cache file.
+func usageCachePath() string {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return filepath.Join(os.TempDir(), usageCacheFilename)
+	}
+	return filepath.Join(home, ".config", "cc-monitor", usageCacheFilename)
 }
 
 // resolveConfigDirs returns the list of config directories to scan based on flags.

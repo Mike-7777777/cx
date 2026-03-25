@@ -109,6 +109,40 @@ func parseLine(line []byte, fn func(Entry)) {
 	})
 }
 
+// ParseFileFrom reads a JSONL file starting from the given byte offset,
+// calling fn for each valid assistant entry. Returns the new offset (end of
+// file position) after parsing. When offset is 0, it is equivalent to ParseFile.
+func ParseFileFrom(path string, offset int64, fn func(Entry)) (int64, error) {
+	f, err := os.Open(path)
+	if err != nil {
+		return 0, err
+	}
+	defer f.Close()
+
+	if offset > 0 {
+		if _, err := f.Seek(offset, io.SeekStart); err != nil {
+			return 0, err
+		}
+	}
+
+	reader := bufio.NewReaderSize(f, 256*1024)
+	pos := offset
+	for {
+		line, err := reader.ReadBytes('\n')
+		if len(line) > 0 {
+			pos += int64(len(line))
+			parseLine(line, fn)
+		}
+		if err != nil {
+			if err == io.EOF {
+				break
+			}
+			return pos, err
+		}
+	}
+	return pos, nil
+}
+
 // ScanDir walks <configDir>/projects/**/*.jsonl and calls ParseFile on each.
 // Includes subagent directories (they contain real token usage).
 // Skips files that fail to parse and continues with remaining files.
@@ -127,6 +161,61 @@ func ScanDir(configDir string, fn func(Entry)) error {
 		}
 		// Per-file errors are non-fatal: skip and continue.
 		_ = ParseFile(path, fn)
+		return nil
+	})
+}
+
+// ScanDirCached walks the same directory tree as ScanDir but uses the cache
+// to skip unchanged files. Changed files are parsed from their cached offset
+// (or from zero if new/truncated). The cache is updated in place.
+// fn receives entries only from newly parsed data.
+func ScanDirCached(configDir string, cache *UsageCache, fn func(Entry)) error {
+	root := filepath.Join(configDir, "projects")
+	return filepath.WalkDir(root, func(path string, d fs.DirEntry, err error) error {
+		if err != nil {
+			return nil
+		}
+		if d.IsDir() {
+			return nil
+		}
+		if !strings.HasSuffix(d.Name(), ".jsonl") {
+			return nil
+		}
+
+		info, err := d.Info()
+		if err != nil {
+			return nil
+		}
+
+		relPath, err := filepath.Rel(root, path)
+		if err != nil {
+			relPath = path
+		}
+		// Normalize to forward slashes for consistent cache keys.
+		relPath = filepath.ToSlash(relPath)
+
+		if !cache.NeedsUpdate(relPath, info) {
+			return nil // file unchanged, skip
+		}
+
+		// Determine starting offset. If the file is new or was truncated,
+		// parse from the beginning. Otherwise resume from the cached offset.
+		var startOffset int64
+		if fs, ok := cache.Files[relPath]; ok && info.Size() >= fs.Offset {
+			startOffset = fs.Offset
+		}
+
+		newOffset, parseErr := ParseFileFrom(path, startOffset, fn)
+		if parseErr != nil {
+			// Non-fatal: skip this file but don't update cache for it.
+			return nil
+		}
+
+		cache.Files[relPath] = FileState{
+			Size:      info.Size(),
+			MtimeUnix: info.ModTime().Unix(),
+			Offset:    newOffset,
+		}
 		return nil
 	})
 }

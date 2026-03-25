@@ -7,9 +7,30 @@ import (
 )
 
 // Model identifies the Claude model in use.
+// Supports both object form {"id":"...","display_name":"..."} (CC <=2.1.81)
+// and plain string form "claude-opus-4-6" (CC >=2.1.83).
 type Model struct {
 	ID          string `json:"id"`
 	DisplayName string `json:"display_name"`
+}
+
+// UnmarshalJSON handles both string and object forms of the model field.
+func (m *Model) UnmarshalJSON(data []byte) error {
+	// Try string first (CC v2.1.83+).
+	var s string
+	if err := json.Unmarshal(data, &s); err == nil {
+		m.ID = s
+		m.DisplayName = s
+		return nil
+	}
+	// Fall back to object form.
+	type modelAlias Model
+	var obj modelAlias
+	if err := json.Unmarshal(data, &obj); err != nil {
+		return err
+	}
+	*m = Model(obj)
+	return nil
 }
 
 // RateWindow holds usage and reset metadata for a single rate-limit window.

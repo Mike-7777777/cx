@@ -247,8 +247,9 @@ func readLine(reader *bufio.Reader) string {
 	return strings.TrimSpace(line)
 }
 
-// installShellWrapper writes the cx() wrapper function to the appropriate
-// shell profile file. Returns true if installation succeeded.
+// installShellWrapper writes or updates the cx() wrapper function in the
+// appropriate shell profile file. If an older wrapper exists, it is replaced
+// (e.g., when the cx binary moves to a new path). Returns true on success.
 func installShellWrapper(shell platform.Shell) bool {
 	profilePath, wrapper := shellWrapperConfig(shell)
 	if profilePath == "" {
@@ -256,14 +257,29 @@ func installShellWrapper(shell platform.Shell) bool {
 		return false
 	}
 
-	// Check if wrapper is already installed.
 	existing, _ := os.ReadFile(profilePath)
-	if strings.Contains(string(existing), "cx") {
-		fmt.Fprintf(os.Stderr, "  Wrapper already exists in %s\n", profilePath)
+	content := string(existing)
+
+	// Detect and replace old wrapper (handles path changes / upgrades).
+	if idx := strings.Index(content, "# cx: Claude Code multi-account"); idx >= 0 {
+		// Find the end of the wrapper block.
+		end := findWrapperEnd(content, idx, shell)
+		oldWrapper := content[idx:end]
+		if oldWrapper == wrapper {
+			fmt.Fprintf(os.Stderr, "  Wrapper already up to date in %s\n", profilePath)
+			return true
+		}
+		// Replace old wrapper with new one.
+		content = content[:idx] + wrapper + "\n" + content[end:]
+		if err := os.WriteFile(profilePath, []byte(content), 0o644); err != nil {
+			fmt.Fprintf(os.Stderr, "  Failed to update %s: %v\n", profilePath, err)
+			return false
+		}
+		fmt.Fprintf(os.Stderr, "  Updated cx() wrapper in %s\n", profilePath)
 		return true
 	}
 
-	// Append wrapper to profile.
+	// No existing wrapper — append.
 	f, err := os.OpenFile(profilePath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o644)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "  Failed to open %s: %v\n", profilePath, err)
@@ -280,22 +296,65 @@ func installShellWrapper(shell platform.Shell) bool {
 	return true
 }
 
+// findWrapperEnd locates the end of the cx wrapper block starting at idx.
+func findWrapperEnd(content string, idx int, shell platform.Shell) int {
+	// Each shell wrapper ends with a closing brace/keyword.
+	var endMarker string
+	switch shell {
+	case platform.ShellFish:
+		endMarker = "end"
+	default: // bash, zsh, powershell all end with "}"
+		endMarker = "}"
+	}
+
+	// Scan forward from idx to find the last closing marker of the block.
+	pos := idx
+	lastEnd := idx
+	for {
+		next := strings.Index(content[pos:], endMarker)
+		if next < 0 {
+			break
+		}
+		candidate := pos + next + len(endMarker)
+		lastEnd = candidate
+		// Stop at first blank line or EOF after the marker.
+		if candidate >= len(content) || content[candidate] == '\n' || content[candidate] == '\r' {
+			break
+		}
+		pos = candidate
+	}
+
+	// Skip trailing newlines.
+	for lastEnd < len(content) && (content[lastEnd] == '\n' || content[lastEnd] == '\r') {
+		lastEnd++
+	}
+	return lastEnd
+}
+
 // shellWrapperConfig returns the profile path and wrapper code for each shell.
+// PowerShell embeds the absolute path to cx.exe because PowerShell has no
+// equivalent of bash's `command` builtin to bypass function name resolution.
+// Bash/Zsh/Fish use `command cx` which requires cx to be in PATH.
 func shellWrapperConfig(shell platform.Shell) (string, string) {
 	home, _ := os.UserHomeDir()
+
+	// Resolve absolute path for PowerShell wrapper.
+	cxPath, _ := os.Executable()
+	cxPath = strings.ReplaceAll(cxPath, "\\", "/") // forward slashes for all shells
 
 	switch shell {
 	case platform.ShellPowerShell:
 		profilePath := powershellProfilePath()
-		wrapper := `# cx: Claude Code multi-account wrapper
+		wrapper := fmt.Sprintf(`# cx: Claude Code multi-account wrapper (path set by cx setup)
+$cxExe = "%s"
 function cx {
     if ($args[0] -eq "switch") {
-        $cmd = & cx switch $args[1] --shell=powershell
-        Invoke-Expression ($cmd -join "` + "`" + `n")
+        $cmd = & $cxExe switch $args[1] --shell=powershell
+        Invoke-Expression ($cmd -join "`+"`"+`n")
     } else {
-        & cx @args
+        & $cxExe @args
     }
-}`
+}`, cxPath)
 		return profilePath, wrapper
 
 	case platform.ShellFish:

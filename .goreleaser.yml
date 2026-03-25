@@ -23,6 +23,22 @@ archives:
         formats:
           - zip
     name_template: "{{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
+brews:
+  - repository:
+      owner: Mike-7777777
+      name: homebrew-tap
+    homepage: https://github.com/Mike-7777777/cx
+    description: Claude Code multi-account manager
+    install: |
+      bin.install "cx"
+    test: |
+      system "#{bin}/cx", "version"
+scoops:
+  - repository:
+      owner: Mike-7777777
+      name: scoop-bucket
+    homepage: https://github.com/Mike-7777777/cx
+    description: Claude Code multi-account manager
 checksum:
   name_template: checksums.txt
 changelog:

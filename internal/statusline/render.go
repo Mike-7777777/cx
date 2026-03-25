@@ -34,11 +34,35 @@ type SectionVisibility struct {
 	ShowSwitchHint   *bool
 }
 
+// labels holds locale-specific UI strings for the statusline.
+type labels struct {
+	Ctx   string // "ctx" / "上下文"
+	Rate5 string // "5h" / "5时"
+	Rate7 string // "7d" / "7天"
+	Stale string // "stale" / "过期"
+	Reset string // "reset" / "已重置"
+}
+
+var localeLabels = map[string]labels{
+	"en": {Ctx: "ctx", Rate5: "5h", Rate7: "7d", Stale: "stale", Reset: "reset"},
+	"zh": {Ctx: "上下文", Rate5: "5时", Rate7: "7天", Stale: "过期", Reset: "已重置"},
+	"ja": {Ctx: "CTX", Rate5: "5時", Rate7: "7日", Stale: "期限切れ", Reset: "リセット"},
+	"ko": {Ctx: "컨텍스트", Rate5: "5시", Rate7: "7일", Stale: "만료", Reset: "초기화"},
+}
+
+func getLabels(locale string) labels {
+	if l, ok := localeLabels[locale]; ok {
+		return l
+	}
+	return localeLabels["en"]
+}
+
 // RenderOpts holds optional rendering parameters.
 type RenderOpts struct {
 	AccountName string             // current account label (empty = omit)
 	Compact     bool               // compact single-line mode
 	Sections    *SectionVisibility // nil = show all sections
+	Locale      string             // "en" (default), "zh", "ja", "ko"
 }
 
 // Render produces one or two status-line strings.
@@ -124,6 +148,7 @@ func renderCompact(input *Input, opt RenderOpts, useColor bool) string {
 
 func renderMain(input *Input, other *OtherAccount, opt RenderOpts, useColor bool) string {
 	sec := opt.Sections
+	l := getLabels(opt.Locale)
 
 	ctxPct := 0.0
 	if input.ContextWindow.UsedPercentage != nil {
@@ -142,7 +167,7 @@ func renderMain(input *Input, other *OtherAccount, opt RenderOpts, useColor bool
 	showContext := sec == nil || format.IsEnabled(sec.ShowContext)
 	if showContext {
 		ctxStr := format.Colorize(fmt.Sprintf("%d%%", int(ctxPct)), format.UsageColor(ctxPct), useColor)
-		prefix += fmt.Sprintf("[%s] %s ctx", modelName, ctxStr)
+		prefix += fmt.Sprintf("[%s] %s %s", modelName, ctxStr, l.Ctx)
 	} else {
 		prefix += fmt.Sprintf("[%s]", modelName)
 	}
@@ -166,7 +191,7 @@ func renderMain(input *Input, other *OtherAccount, opt RenderOpts, useColor bool
 		bar := colorProgressBar(w.UsedPercentage, barWidth, useColor)
 		pctStr := format.Colorize(fmt.Sprintf("%d%%", int(math.Round(w.UsedPercentage))), format.UsageColor(w.UsedPercentage), useColor)
 		ttl := format.FormatDuration(time.Until(time.Unix(w.ResetsAt, 0)))
-		line += fmt.Sprintf(" | 5h: %s %s (%s)", bar, pctStr, ttl)
+		line += fmt.Sprintf(" | %s: %s %s (%s)", l.Rate5, bar, pctStr, ttl)
 	}
 
 	show7d := sec == nil || format.IsEnabled(sec.ShowRate7d)
@@ -176,7 +201,7 @@ func renderMain(input *Input, other *OtherAccount, opt RenderOpts, useColor bool
 		pctStr := format.Colorize(fmt.Sprintf("%d%%", int(math.Round(w.UsedPercentage))), format.UsageColor(w.UsedPercentage), useColor)
 		resetDate := time.Unix(w.ResetsAt, 0).Local().Format("Mon 2 15:04")
 		resetStr := format.Colorize(resetDate, format.Dim, useColor)
-		line += fmt.Sprintf(" | 7d: %s %s (%s)", bar, pctStr, resetStr)
+		line += fmt.Sprintf(" | %s: %s %s (%s)", l.Rate7, bar, pctStr, resetStr)
 	}
 
 	// Smart switch prompt: when current 5h > 80% and another account has lower usage.

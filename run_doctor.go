@@ -1,10 +1,12 @@
 package main
 
 import (
+	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
 	"sort"
+	"strings"
 	"time"
 
 	"github.com/Mike-7777777/cx/internal/cache"
@@ -145,6 +147,12 @@ func runDoctor() {
 				ok: syncOk, warn: !syncOk, label: "settings.json", detail: syncMsg, indent: 1,
 			})
 		}
+
+		// Check statusline path in this account's settings.json.
+		slOk, slMsg := checkStatuslinePath(accDir)
+		results = append(results, checkResult{
+			ok: slOk, warn: !slOk, label: "statusline path", detail: slMsg, indent: 1,
+		})
 	}
 
 	printResults(results, useColor)
@@ -222,6 +230,58 @@ func checkSettingsSync(primaryDir, accDir string) (bool, string) {
 		return true, "in sync"
 	}
 	return false, "differs from primary (run sync)"
+}
+
+// checkStatuslinePath verifies the statusLine command in settings.json uses
+// forward slashes. Backslash paths break Git Bash stdin piping on Windows.
+func checkStatuslinePath(configDir string) (bool, string) {
+	settingsPath := filepath.Join(configDir, "settings.json")
+	data, err := os.ReadFile(settingsPath)
+	if os.IsNotExist(err) {
+		return true, "no settings.json"
+	}
+	if err != nil {
+		return false, fmt.Sprintf("read error: %v", err)
+	}
+
+	var settings map[string]interface{}
+	if err := json.Unmarshal(data, &settings); err != nil {
+		return false, fmt.Sprintf("parse error: %v", err)
+	}
+
+	sl, ok := settings["statusLine"]
+	if !ok {
+		return true, "not configured"
+	}
+
+	slMap, ok := sl.(map[string]interface{})
+	if !ok {
+		return false, "invalid format"
+	}
+
+	cmd, ok := slMap["command"].(string)
+	if !ok {
+		return false, "no command field"
+	}
+
+	if strings.Contains(cmd, "\\") {
+		// Auto-fix: rewrite with forward slashes.
+		fixed := strings.ReplaceAll(cmd, "\\", "/")
+		slMap["command"] = fixed
+		settings["statusLine"] = slMap
+		out, mErr := json.MarshalIndent(settings, "", "  ")
+		if mErr == nil {
+			if wErr := os.WriteFile(settingsPath, out, 0o600); wErr == nil {
+				return true, fmt.Sprintf("auto-fixed backslash path → %s", fixed)
+			}
+		}
+		return false, fmt.Sprintf("backslash in path breaks Git Bash piping: %s", cmd)
+	}
+
+	if strings.Contains(cmd, "cx") || strings.Contains(cmd, "cc-monitor") {
+		return true, "ok"
+	}
+	return true, fmt.Sprintf("custom: %s", cmd)
 }
 
 func printResults(results []checkResult, useColor bool) {

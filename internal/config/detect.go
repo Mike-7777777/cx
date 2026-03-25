@@ -16,7 +16,6 @@ import (
 //  3. ~/.claude/ (fallback)
 //  4. If both #2 and #3 exist, prefer ~/.claude/ and log a warning.
 func DetectConfigDir() (string, error) {
-	// 1. Explicit override takes priority over everything.
 	if v := os.Getenv("CLAUDE_CONFIG_DIR"); v != "" {
 		abs, err := filepath.Abs(v)
 		if err != nil {
@@ -24,7 +23,14 @@ func DetectConfigDir() (string, error) {
 		}
 		return abs, nil
 	}
+	return DefaultConfigDir()
+}
 
+// DefaultConfigDir returns the default Claude Code config directory
+// (ignoring CLAUDE_CONFIG_DIR env var). This is used to resolve accounts
+// with empty config_dir in the registry, which should always point to the
+// default location rather than the active session's override.
+func DefaultConfigDir() (string, error) {
 	home, err := os.UserHomeDir()
 	if err != nil {
 		return "", fmt.Errorf("resolving home directory: %w", err)
@@ -32,7 +38,6 @@ func DetectConfigDir() (string, error) {
 
 	dotClaude := filepath.Join(home, ".claude")
 
-	// 2. XDG path (Unix only).
 	var xdgPath string
 	if runtime.GOOS != "windows" {
 		xdgBase := os.Getenv("XDG_CONFIG_HOME")
@@ -47,7 +52,6 @@ func DetectConfigDir() (string, error) {
 
 	switch {
 	case dotClaudeExists && xdgExists:
-		// Both present: prefer ~/.claude/ and warn.
 		log.Printf("cx: both %q and %q exist; using %q", xdgPath, dotClaude, dotClaude)
 		return dotClaude, nil
 	case dotClaudeExists:

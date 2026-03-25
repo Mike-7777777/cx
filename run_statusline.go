@@ -5,7 +5,9 @@ import (
 	"log"
 	"os"
 	"path/filepath"
+	"runtime"
 	"sort"
+	"strings"
 	"time"
 
 	"github.com/Mike-7777777/cx/internal/cache"
@@ -38,7 +40,10 @@ func runStatusline() {
 func doStatusline() error {
 	input, err := statusline.ParseInput(os.Stdin)
 	if err != nil {
-		return fmt.Errorf("parse stdin: %w", err)
+		// CC may not pipe data to stdin (e.g., Windows Git Bash pipe issue).
+		// Fall back to rendering from cached rate data instead of showing [?].
+		logWarn(fmt.Sprintf("stdin parse failed (%v), attempting cache fallback", err))
+		return doStatuslineFallback()
 	}
 
 	compact := hasFlagFrom("--compact", 2)
@@ -73,6 +78,47 @@ func doStatusline() error {
 	// Resolve current account name from registry.
 	accountName := currentAccountName(cfgDir)
 
+	return renderAndPrint(input, other, accountName, compact)
+}
+
+// doStatuslineFallback renders a minimal statusline from cached rate data
+// when CC fails to pipe JSON to stdin.
+func doStatuslineFallback() error {
+	compact := hasFlagFrom("--compact", 2)
+
+	cfgDir, err := config.DetectConfigDir()
+	if err != nil {
+		return fmt.Errorf("no config dir for fallback: %w", err)
+	}
+
+	accountName := currentAccountName(cfgDir)
+
+	// Try to build a minimal Input from the rate cache.
+	cachePath := filepath.Join(cfgDir, "rate-cache.json")
+	rc, rcErr := cache.ReadRateCache(cachePath)
+
+	input := &statusline.Input{
+		Model: statusline.Model{ID: "unknown", DisplayName: "?"},
+	}
+
+	if rcErr == nil && rc != nil && rc.RateLimits != nil {
+		rl := &statusline.InputRateLimits{}
+		if rc.RateLimits.FiveHour != nil {
+			rl.FiveHour = &statusline.RateWindow{
+				UsedPercentage: rc.RateLimits.FiveHour.UsedPercentage,
+				ResetsAt:       rc.RateLimits.FiveHour.ResetsAt,
+			}
+		}
+		if rc.RateLimits.SevenDay != nil {
+			rl.SevenDay = &statusline.RateWindow{
+				UsedPercentage: rc.RateLimits.SevenDay.UsedPercentage,
+				ResetsAt:       rc.RateLimits.SevenDay.ResetsAt,
+			}
+		}
+		input.RateLimits = rl
+	}
+
+	other := loadOtherAccount(cfgDir)
 	return renderAndPrint(input, other, accountName, compact)
 }
 
@@ -124,10 +170,18 @@ func loadOtherAccount(currentCfgDir string) *statusline.OtherAccount {
 	}
 	var candidates []candidate
 
+	normalizedCurrentDir := normalizePath(currentCfgDir)
 	for _, name := range names {
 		acc := reg.Accounts[name]
 		accDir := acc.ConfigDir
-		if accDir == "" || accDir == currentCfgDir {
+		if accDir == "" {
+			resolved, err := config.DefaultConfigDir()
+			if err != nil {
+				continue
+			}
+			accDir = resolved
+		}
+		if normalizePath(accDir) == normalizedCurrentDir {
 			continue
 		}
 
@@ -192,21 +246,34 @@ func currentAccountName(cfgDir string) string {
 	}
 
 	// The primary account may have an empty ConfigDir (uses default).
-	// Detect by resolving it.
+	// Use DefaultConfigDir (not DetectConfigDir) for empty config_dir to avoid
+	// matching the CLAUDE_CONFIG_DIR override set by cx for the active session.
+	normalizedCfg := normalizePath(cfgDir)
 	for name, acc := range reg.Accounts {
 		dir := acc.ConfigDir
 		if dir == "" {
-			resolved, err := config.DetectConfigDir()
+			resolved, err := config.DefaultConfigDir()
 			if err != nil {
 				continue
 			}
 			dir = resolved
 		}
-		if dir == cfgDir {
+		if normalizePath(dir) == normalizedCfg {
 			return name
 		}
 	}
 	return ""
+}
+
+// normalizePath converts a path to a canonical form for comparison.
+// On Windows, this lowercases and normalizes separators to forward slashes.
+func normalizePath(p string) string {
+	p = filepath.Clean(p)
+	p = strings.ReplaceAll(p, "\\", "/")
+	if runtime.GOOS == "windows" {
+		p = strings.ToLower(p)
+	}
+	return p
 }
 
 func renderAndPrint(input *statusline.Input, other *statusline.OtherAccount, accountName string, compact bool) error {

@@ -17,12 +17,12 @@
 ```
 $ cx status
 
-Account     Auth    5h Usage        Resets In     7d Usage        Note
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-20x         OK      ██░░░  17%      1h 58m        ███░░  62%
-5x          OK      ████░  71%      48m           ██░░░  45%
+  Account     Tier      Auth    5h Usage        Resets In     7d Usage        Note
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  HY          Max 5x    OK      ░░░░░   0%      reset         █░░░░  15%
+★ QM          Max 20x   OK      █░░░░  24%      3h04m         ███░░  67%
 
-Recommended: 20x (lowest 5h usage at 17%)
+✓ Recommended: HY (lowest 5h usage at 0%)
 ```
 
 ## Why cx?
@@ -79,10 +79,11 @@ The interactive setup will:
 After setup, you're done:
 
 ```bash
+cx config             # see all accounts (email, tier, CC version, sessions)
+cx status             # rate limits + routing recommendation
 cx switch 5x          # switch to 5x account
-cx switch 20x         # switch back
-cx status             # see all accounts (auth + rate limits)
 cx run                # auto-select best account + launch claude
+cx run --yolo         # auto-select + skip permissions
 ```
 
 <details>
@@ -173,7 +174,11 @@ cx completion powershell | Out-String | Invoke-Expression
 | `run [-- claude-args]` | Auto-select best account and launch `claude` |
 | `run --prefer <name>` | Prefer a specific account (fall back if >80% usage) |
 | `run --balance` | Round-robin across accounts for max throughput |
-| `status` | All accounts: auth status, rate limits, routing recommendation |
+| `status` | All accounts: auth, tier, rate limits, routing recommendation |
+| `config` | Show full config: email, tier, CC version, session count |
+| `config primary <name>` | Change primary account |
+| `config rename <old> <new>` | Rename an account |
+| `config set <name> email/alias <v>` | Set account metadata |
 
 ### Monitoring
 
@@ -188,7 +193,7 @@ cx completion powershell | Out-String | Invoke-Expression
 | Command | Description |
 |---------|-------------|
 | `setup` | Interactive first-time setup |
-| `doctor` | Health check all accounts |
+| `doctor` | Health check all accounts (auto-fixes common issues) |
 | `sync [--force]` | Sync config from primary to all secondaries |
 | `login [name]` | Re-authenticate an account (rarely needed) |
 | `init <name>` | Create a new account directory |
@@ -219,14 +224,17 @@ cx completion powershell | Out-String | Invoke-Expression
 cx uses Claude Code's `CLAUDE_CONFIG_DIR` environment variable to isolate accounts. Each account gets its own directory with separate credentials and session history, but shares plugins and configuration via junctions (Windows) or symlinks (Unix).
 
 ```
-~/.claude/          <-- primary account (20x)
-~/.claude-5x/       <-- secondary account (5x)
+~/.claude/          <-- primary account (QM, Max 20x)
+~/.claude-5x/       <-- secondary account (HY, Max 5x)
     plugins/cache/  --> junction to ~/.claude/plugins/cache/  (shared)
     settings.json   <-- synced from primary
     .credentials.json  <-- independent (separate login)
+    .claude.json    <-- identity, session stats (auto-read by cx)
 ```
 
 Both accounts stay logged in simultaneously. No re-authentication needed when switching.
+
+Account identity (email, display name, subscription tier, session count) is auto-read from CC's local `.claude.json` and `.credentials.json` files — zero manual configuration needed.
 
 ## Antivirus Notice
 

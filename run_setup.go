@@ -2,6 +2,7 @@ package main
 
 import (
 	"bufio"
+	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -202,7 +203,19 @@ func runSetup() {
 	}
 	fmt.Fprintln(os.Stderr, "  Restart your shell(s) to activate the wrapper.")
 
-	// Step 4: Health check.
+	// Step 4: Configure CC statusline.
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintf(os.Stderr, "  Configure Claude Code statusline? [Y/n]: ")
+	slAnswer := readLine(reader)
+	if slAnswer == "" || strings.ToLower(slAnswer) == "y" {
+		if configureStatusline(primaryDir) {
+			fmt.Fprintln(os.Stderr, "  Statusline configured. cx will show rate limits in CC's status bar.")
+		}
+	} else {
+		fmt.Fprintln(os.Stderr, "  Skipped statusline configuration.")
+	}
+
+	// Step 5: Health check.
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "  Running health check...")
 	fmt.Fprintln(os.Stderr)
@@ -336,4 +349,54 @@ func powershellProfilePath() string {
 	// On Unix, PowerShell profile is in ~/.config/powershell/
 	home, _ := os.UserHomeDir()
 	return filepath.Join(home, ".config", "powershell", "Microsoft.PowerShell_profile.ps1")
+}
+
+// configureStatusline adds the cx statusline command to CC's settings.json.
+// It reads the existing settings, merges the statusLine config, and writes
+// back atomically. Returns true if configuration succeeded.
+func configureStatusline(primaryConfigDir string) bool {
+	settingsPath := filepath.Join(primaryConfigDir, "settings.json")
+
+	// Find the cx binary path.
+	cxPath, err := os.Executable()
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "  Could not determine cx binary path: %v\n", err)
+		return false
+	}
+
+	// Read existing settings.
+	var settings map[string]interface{}
+	data, err := os.ReadFile(settingsPath)
+	if err != nil {
+		settings = make(map[string]interface{})
+	} else {
+		if err := json.Unmarshal(data, &settings); err != nil {
+			fmt.Fprintf(os.Stderr, "  Could not parse settings.json: %v\n", err)
+			return false
+		}
+	}
+
+	// Set statusLine config.
+	// CC runs statusline commands through Git Bash on Windows, so paths
+	// must use forward slashes to avoid broken stdin pipes.
+	cmd := strings.ReplaceAll(cxPath, "\\", "/") + " statusline"
+	settings["statusLine"] = map[string]string{
+		"type":    "command",
+		"command": cmd,
+	}
+
+	// Write back.
+	out, err := json.MarshalIndent(settings, "", "  ")
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "  Could not marshal settings: %v\n", err)
+		return false
+	}
+
+	if err := os.WriteFile(settingsPath, out, 0o600); err != nil {
+		fmt.Fprintf(os.Stderr, "  Could not write settings.json: %v\n", err)
+		return false
+	}
+
+	fmt.Fprintf(os.Stderr, "  Updated %s\n", settingsPath)
+	return true
 }

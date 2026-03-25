@@ -65,6 +65,7 @@ func runRun() {
 	// Parse flags that belong to cx; the rest goes to claude.
 	var preferName string
 	var balance bool
+	var yolo bool
 	var claudeArgs []string
 
 	for i := 0; i < len(args); i++ {
@@ -79,6 +80,8 @@ func runRun() {
 			preferName = strings.TrimPrefix(args[i], "--prefer=")
 		case args[i] == "--balance":
 			balance = true
+		case args[i] == "--yolo":
+			yolo = true
 		case args[i] == "--":
 			// Everything after "--" is forwarded literally to claude.
 			claudeArgs = append(claudeArgs, args[i+1:]...)
@@ -88,6 +91,10 @@ func runRun() {
 			claudeArgs = append(claudeArgs, args[i:]...)
 			i = len(args) // break loop
 		}
+	}
+
+	if yolo {
+		claudeArgs = append(claudeArgs, "--dangerously-skip-permissions")
 	}
 
 	// Load registry.
@@ -109,12 +116,13 @@ func runRun() {
 	}
 
 	// Score all accounts by smart routing (usage + time-to-reset).
+	// Accounts without rate-cache data get 0% usage (treated as fully available).
 	scores := scoreAccounts(reg)
 	if len(scores) == 0 {
 		fmt.Fprintln(os.Stderr, "[cx] No accounts with rate data; picking first account")
-		// Fall back to first account alphabetically.
-		scores = fallbackScores(reg)
 	}
+	// Ensure ALL registered accounts are in the list (with 0% if no data).
+	scores = ensureAllAccounts(reg, scores)
 
 	// Select account based on strategy.
 	var selected accountScore
@@ -166,14 +174,10 @@ func runRun() {
 func scoreAccounts(reg *config.Registry) []accountScore {
 	var scores []accountScore
 
-	for name, acc := range reg.Accounts {
-		dir := acc.ConfigDir
-		if dir == "" {
-			d, err := config.DetectConfigDir()
-			if err != nil {
-				continue
-			}
-			dir = d
+	for name := range reg.Accounts {
+		dir, err := reg.ResolveConfigDir(name)
+		if err != nil {
+			continue
 		}
 
 		rc, err := cache.ReadRateCache(filepath.Join(dir, "rate-cache.json"))
@@ -210,17 +214,41 @@ func scoreAccounts(reg *config.Registry) []accountScore {
 	return scores
 }
 
+// ensureAllAccounts adds any registered accounts missing from scores with 0%.
+// This guarantees --prefer can always find the requested account.
+func ensureAllAccounts(reg *config.Registry, scores []accountScore) []accountScore {
+	have := make(map[string]bool, len(scores))
+	for _, s := range scores {
+		have[s.name] = true
+	}
+	for name := range reg.Accounts {
+		if have[name] {
+			continue
+		}
+		dir, err := reg.ResolveConfigDir(name)
+		if err != nil {
+			continue
+		}
+		scores = append(scores, accountScore{name: name, dir: dir, fiveHPct: 0})
+	}
+	sort.Slice(scores, func(i, j int) bool {
+		si := smartScore(scores[i].fiveHPct, scores[i].timeToReset)
+		sj := smartScore(scores[j].fiveHPct, scores[j].timeToReset)
+		if si != sj {
+			return si < sj
+		}
+		return scores[i].name < scores[j].name
+	})
+	return scores
+}
+
 // fallbackScores returns all accounts with 0% score, sorted alphabetically.
 func fallbackScores(reg *config.Registry) []accountScore {
 	var scores []accountScore
-	for name, acc := range reg.Accounts {
-		dir := acc.ConfigDir
-		if dir == "" {
-			d, err := config.DetectConfigDir()
-			if err != nil {
-				continue
-			}
-			dir = d
+	for name := range reg.Accounts {
+		dir, err := reg.ResolveConfigDir(name)
+		if err != nil {
+			continue
 		}
 		scores = append(scores, accountScore{name: name, dir: dir, fiveHPct: 0})
 	}
@@ -332,13 +360,15 @@ Usage:
   cx run [options] [-- claude-args...]
 
 Options:
+  --yolo            Launch with --dangerously-skip-permissions
   --prefer <name>   Prefer a specific account (falls back if 5h usage >= 80%)
   --balance         Round-robin selection for maximum throughput
   --help, -h        Show this help
 
 Examples:
   cx run                    # pick lowest-usage account
-  cx run --prefer primary   # prefer "primary", fall back if hot
+  cx run --yolo             # skip permissions (same as cx run -- --dangerously-skip-permissions)
+  cx run --prefer personal        # prefer "personal", fall back if hot
   cx run --balance          # alternate between accounts
   cx run -- -p "fix bug"   # pass args to claude after --
 `)

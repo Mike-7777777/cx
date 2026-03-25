@@ -13,6 +13,8 @@ import (
 // Account represents a single named Claude Code account in the registry.
 type Account struct {
 	ConfigDir string `json:"config_dir"`
+	Email     string `json:"email,omitempty"`
+	Alias     string `json:"alias,omitempty"`
 }
 
 // StatuslineConfig controls which sections are shown in the statusline.
@@ -74,13 +76,22 @@ func LoadOrCreateRegistry(path string) (*Registry, error) {
 	return r, nil
 }
 
-// AddAccount inserts or replaces the account identified by name.
+// AddAccount inserts or updates the account identified by name.
+// If the account already exists, only ConfigDir is updated; metadata
+// fields (Email, Alias) are preserved.
 func (r *Registry) AddAccount(name, configDir string) {
-	r.Accounts[name] = Account{ConfigDir: configDir}
+	if existing, ok := r.Accounts[name]; ok {
+		existing.ConfigDir = configDir
+		r.Accounts[name] = existing
+	} else {
+		r.Accounts[name] = Account{ConfigDir: configDir}
+	}
 }
 
 // ResolveConfigDir returns the config directory for the named account.
-// When the stored config_dir is empty, it falls back to DetectConfigDir.
+// When the stored config_dir is empty, it falls back to DefaultConfigDir
+// (ignoring CLAUDE_CONFIG_DIR) because an empty config_dir means "use the
+// default location", not "follow the current session's override".
 // Returns ErrAccountNotFound when the account does not exist.
 func (r *Registry) ResolveConfigDir(name string) (string, error) {
 	acc, ok := r.Accounts[name]
@@ -90,7 +101,7 @@ func (r *Registry) ResolveConfigDir(name string) (string, error) {
 	if acc.ConfigDir != "" {
 		return acc.ConfigDir, nil
 	}
-	return DetectConfigDir()
+	return DefaultConfigDir()
 }
 
 // Save writes the registry to its path with mode 0600.

@@ -410,12 +410,17 @@ func powershellProfilePath() string {
 	return filepath.Join(home, ".config", "powershell", "Microsoft.PowerShell_profile.ps1")
 }
 
-// writeStatuslineWrapper creates a bash wrapper script that execs the cx binary.
-// On Windows, CC's Git Bash doesn't pipe stdin to .exe files correctly;
-// wrapping with bash + exec fixes the pipe.
-func writeStatuslineWrapper(wrapperPath, cxPath string) {
-	content := "#!/bin/bash\nexec \"" + cxPath + "\" statusline\n"
-	_ = os.WriteFile(wrapperPath, []byte(content), 0o755)
+// writeStatuslineWrapper creates a Node.js wrapper that reads stdin and
+// pipes it to cx. On Windows, CC (Node.js) can't pipe stdin directly to
+// native .exe files. A Node.js intermediary fixes this because CC→Node
+// pipe inheritance works correctly within the same runtime.
+func writeStatuslineWrapper(cxDir string) {
+	jsPath := filepath.Join(cxDir, "statusline.js")
+	content := fmt.Sprintf(`const{execFileSync:x}=require("child_process"),{join:j}=require("path");
+const s=require("fs").readFileSync(0,"utf8"),p=j(__dirname,process.platform==="win32"?"cx.exe":"cx");
+try{process.stdout.write(x(p,["statusline"],{input:s,encoding:"utf8"}))}catch{process.stdout.write("[?]")}
+`)
+	_ = os.WriteFile(jsPath, []byte(content), 0o644)
 }
 
 // configureStatusline adds the cx statusline command to CC's settings.json.
@@ -448,12 +453,11 @@ func configureStatusline(primaryConfigDir string) bool {
 	// but direct .exe invocation receives EOF on stdin. Using a bash wrapper
 	// with `exec` fixes the stdin pipe. On Unix, direct invocation works fine.
 	cxPath = strings.ReplaceAll(cxPath, "\\", "/")
+	cxDir := strings.ReplaceAll(filepath.Dir(cxPath), "\\", "/")
 	var cmd string
 	if runtime.GOOS == "windows" {
-		wrapperPath := filepath.Join(filepath.Dir(cxPath), "statusline.sh")
-		wrapperPath = strings.ReplaceAll(wrapperPath, "\\", "/")
-		writeStatuslineWrapper(wrapperPath, cxPath)
-		cmd = "bash " + wrapperPath
+		writeStatuslineWrapper(filepath.Dir(cxPath))
+		cmd = "node " + cxDir + "/statusline.js"
 	} else {
 		cmd = cxPath + " statusline"
 	}

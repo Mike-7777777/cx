@@ -8,9 +8,9 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/Mike-7777777/cc-monitor/internal/cache"
-	"github.com/Mike-7777777/cc-monitor/internal/config"
-	"github.com/Mike-7777777/cc-monitor/internal/platform"
+	"github.com/Mike-7777777/cx/internal/cache"
+	"github.com/Mike-7777777/cx/internal/config"
+	"github.com/Mike-7777777/cx/internal/platform"
 )
 
 const (
@@ -28,7 +28,7 @@ type accountScore struct {
 func runRun() {
 	args := os.Args[2:] // everything after "run"
 
-	// Parse flags that belong to cc-monitor; the rest goes to claude.
+	// Parse flags that belong to cx; the rest goes to claude.
 	var preferName string
 	var balance bool
 	var claudeArgs []string
@@ -59,25 +59,25 @@ func runRun() {
 	// Load registry.
 	regPath, err := config.RegistryPath()
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "[cc-monitor] %v\n", err)
+		fmt.Fprintf(os.Stderr, "[cx] %v\n", err)
 		os.Exit(1)
 	}
 
 	reg, err := config.LoadOrCreateRegistry(regPath)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "[cc-monitor] %v\n", err)
+		fmt.Fprintf(os.Stderr, "[cx] %v\n", err)
 		os.Exit(1)
 	}
 
 	if len(reg.Accounts) == 0 {
-		fmt.Fprintln(os.Stderr, "[cc-monitor] No accounts configured. Run: cc-monitor init <name>")
+		fmt.Fprintln(os.Stderr, "[cx] No accounts configured. Run: cx init <name>")
 		os.Exit(1)
 	}
 
 	// Score all accounts by 5h usage.
 	scores := scoreAccounts(reg)
 	if len(scores) == 0 {
-		fmt.Fprintln(os.Stderr, "[cc-monitor] No accounts with rate data; picking first account")
+		fmt.Fprintln(os.Stderr, "[cx] No accounts with rate data; picking first account")
 		// Fall back to first account alphabetically.
 		scores = fallbackScores(reg)
 	}
@@ -95,15 +95,28 @@ func runRun() {
 		selected, reason = selectLowest(scores)
 	}
 
-	fmt.Fprintf(os.Stderr, "[cc-monitor] Auto-selected: %s (5h: %.0f%%) %s\n",
+	fmt.Fprintf(os.Stderr, "[cx] Auto-selected: %s (5h: %.0f%%) %s\n",
 		selected.name, selected.fiveHPct, reason)
 
 	// Build env with CLAUDE_CONFIG_DIR set.
 	env := replaceOrAppendEnv(os.Environ(), "CLAUDE_CONFIG_DIR", selected.dir)
 
+	// Check credentials locally; launch interactive login if needed.
+	// We do NOT refresh tokens ourselves (Anthropic ToS prohibits third-party
+	// tools from calling their OAuth endpoints). CC handles refresh internally.
+	status := checkCredentials(selected.dir)
+	if status != credentialOK {
+		fmt.Fprintf(os.Stderr, "[cx] %s for %q — launching login...\n",
+			credentialMessage(status), selected.name)
+		if err := launchLogin(selected.dir); err != nil {
+			fmt.Fprintf(os.Stderr, "[cx] login failed: %v\n", err)
+			os.Exit(1)
+		}
+	}
+
 	// Exec into claude.
 	if err := platform.ExecProgram("claude", claudeArgs, env); err != nil {
-		fmt.Fprintf(os.Stderr, "[cc-monitor] failed to exec claude: %v\n", err)
+		fmt.Fprintf(os.Stderr, "[cx] failed to exec claude: %v\n", err)
 		os.Exit(1)
 	}
 }
@@ -210,13 +223,13 @@ func selectBalanced(scores []accountScore) (accountScore, string) {
 	return scores[0], "[balanced, all above threshold]"
 }
 
-// runCounterPath returns ~/.cc-monitor-run-count.
+// runCounterPath returns ~/.cx-run-count.
 func runCounterPath() string {
 	home, err := os.UserHomeDir()
 	if err != nil {
 		return ""
 	}
-	return filepath.Join(home, ".cc-monitor-run-count")
+	return filepath.Join(home, ".cx-run-count")
 }
 
 func readRunCounter() int {
@@ -257,10 +270,10 @@ func replaceOrAppendEnv(env []string, key, value string) []string {
 }
 
 func printRunHelp() {
-	fmt.Print(`cc-monitor run — auto-select best account and launch claude
+	fmt.Print(`cx run — auto-select best account and launch claude
 
 Usage:
-  cc-monitor run [options] [-- claude-args...]
+  cx run [options] [-- claude-args...]
 
 Options:
   --prefer <name>   Prefer a specific account (falls back if 5h usage >= 80%)
@@ -268,9 +281,9 @@ Options:
   --help, -h        Show this help
 
 Examples:
-  cc-monitor run                    # pick lowest-usage account
-  cc-monitor run --prefer primary   # prefer "primary", fall back if hot
-  cc-monitor run --balance          # alternate between accounts
-  cc-monitor run -- -p "fix bug"   # pass args to claude after --
+  cx run                    # pick lowest-usage account
+  cx run --prefer primary   # prefer "primary", fall back if hot
+  cx run --balance          # alternate between accounts
+  cx run -- -p "fix bug"   # pass args to claude after --
 `)
 }

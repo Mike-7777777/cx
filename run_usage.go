@@ -9,14 +9,14 @@ import (
 	"strings"
 	"time"
 
-	"github.com/Mike-7777777/cc-monitor/internal/config"
-	"github.com/Mike-7777777/cc-monitor/internal/platform"
-	"github.com/Mike-7777777/cc-monitor/internal/usage"
+	"github.com/Mike-7777777/cx/internal/config"
+	"github.com/Mike-7777777/cx/internal/platform"
+	"github.com/Mike-7777777/cx/internal/usage"
 )
 
 // usageCacheFilename is the name of the incremental cache file stored in the
 // user's config directory (next to the registry).
-const usageCacheFilename = "cc-monitor-usage-cache.json"
+const usageCacheFilename = "cx-usage-cache.json"
 
 // subscriptionCosts maps plan names to monthly costs in USD.
 var subscriptionCosts = map[string]float64{
@@ -34,7 +34,7 @@ func totalSubscriptionCost() float64 {
 }
 
 func runUsage() {
-	// Parse subcommand: cc-monitor usage [daily|session|blocks|monthly|weekly|messages] [flags]
+	// Parse subcommand: cx usage [daily|session|blocks|monthly|weekly|messages] [flags]
 	mode := "daily"
 	var accountName string
 	var scanAll bool
@@ -59,7 +59,7 @@ func runUsage() {
 			mode = args[0]
 			flagStart = 1
 		default:
-			fmt.Fprintf(os.Stderr, "cc-monitor usage: unknown mode %q (expected daily, session, blocks, monthly, weekly, messages)\n", args[0])
+			fmt.Fprintf(os.Stderr, "cx usage: unknown mode %q (expected daily, session, blocks, monthly, weekly, messages)\n", args[0])
 			os.Exit(1)
 		}
 	}
@@ -71,7 +71,7 @@ func runUsage() {
 			outputFormat = "json"
 		case "--format":
 			if i+1 >= len(args) {
-				fmt.Fprintln(os.Stderr, "cc-monitor usage: --format requires a value (table, json, csv, md)")
+				fmt.Fprintln(os.Stderr, "cx usage: --format requires a value (table, json, csv, md)")
 				os.Exit(1)
 			}
 			i++
@@ -79,7 +79,7 @@ func runUsage() {
 			case "table", "json", "csv", "md":
 				outputFormat = args[i]
 			default:
-				fmt.Fprintf(os.Stderr, "cc-monitor usage: unknown format %q (expected table, json, csv, md)\n", args[i])
+				fmt.Fprintf(os.Stderr, "cx usage: unknown format %q (expected table, json, csv, md)\n", args[i])
 				os.Exit(1)
 			}
 		case "--breakdown":
@@ -94,19 +94,19 @@ func runUsage() {
 			subagents = true
 		case "--limit":
 			if i+1 >= len(args) {
-				fmt.Fprintln(os.Stderr, "cc-monitor usage: --limit requires a numeric value")
+				fmt.Fprintln(os.Stderr, "cx usage: --limit requires a numeric value")
 				os.Exit(1)
 			}
 			i++
 			n, err := strconv.Atoi(args[i])
 			if err != nil || n < 1 {
-				fmt.Fprintf(os.Stderr, "cc-monitor usage: --limit must be a positive integer, got %q\n", args[i])
+				fmt.Fprintf(os.Stderr, "cx usage: --limit must be a positive integer, got %q\n", args[i])
 				os.Exit(1)
 			}
 			limit = n
 		case "--account":
 			if i+1 >= len(args) {
-				fmt.Fprintln(os.Stderr, "cc-monitor usage: --account requires a value")
+				fmt.Fprintln(os.Stderr, "cx usage: --account requires a value")
 				os.Exit(1)
 			}
 			i++
@@ -117,7 +117,7 @@ func runUsage() {
 			allTools = true
 		case "--since":
 			if i+1 >= len(args) {
-				fmt.Fprintln(os.Stderr, "cc-monitor usage: --since requires a YYYY-MM-DD value")
+				fmt.Fprintln(os.Stderr, "cx usage: --since requires a YYYY-MM-DD value")
 				os.Exit(1)
 			}
 			i++
@@ -125,7 +125,7 @@ func runUsage() {
 		case "--no-cache":
 			noCache = true
 		default:
-			fmt.Fprintf(os.Stderr, "cc-monitor usage: unknown flag %q\n", args[i])
+			fmt.Fprintf(os.Stderr, "cx usage: unknown flag %q\n", args[i])
 			os.Exit(1)
 		}
 	}
@@ -135,7 +135,7 @@ func runUsage() {
 	if sinceStr != "" {
 		t, err := time.Parse("2006-01-02", sinceStr)
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "cc-monitor usage: invalid --since date %q: %v\n", sinceStr, err)
+			fmt.Fprintf(os.Stderr, "cx usage: invalid --since date %q: %v\n", sinceStr, err)
 			os.Exit(1)
 		}
 		sinceTime = t
@@ -146,7 +146,7 @@ func runUsage() {
 	// Determine which config directories to scan.
 	configDirs, err := resolveConfigDirs(accountName, scanAll)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "cc-monitor usage: %v\n", err)
+		fmt.Fprintf(os.Stderr, "cx usage: %v\n", err)
 		os.Exit(1)
 	}
 
@@ -166,20 +166,20 @@ func runUsage() {
 		// --all-tools: scan the primary config dir plus all other CLI tool dirs.
 		primaryDir, err := config.DetectConfigDir()
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "cc-monitor usage: detecting primary config dir: %v\n", err)
+			fmt.Fprintf(os.Stderr, "cx usage: detecting primary config dir: %v\n", err)
 			os.Exit(1)
 		}
 		if err := usage.ScanAllCLIs(primaryDir, func(e usage.Entry) {
 			entries = append(entries, e)
 		}); err != nil {
-			fmt.Fprintf(os.Stderr, "cc-monitor usage: scanning all CLIs: %v\n", err)
+			fmt.Fprintf(os.Stderr, "cx usage: scanning all CLIs: %v\n", err)
 		}
 	} else {
 		for _, dir := range configDirs {
 			if err := usage.ScanDir(dir, func(e usage.Entry) {
 				entries = append(entries, e)
 			}); err != nil {
-				fmt.Fprintf(os.Stderr, "cc-monitor usage: scanning %s: %v\n", dir, err)
+				fmt.Fprintf(os.Stderr, "cx usage: scanning %s: %v\n", dir, err)
 			}
 		}
 	}
@@ -199,7 +199,7 @@ func runUsage() {
 	}
 
 	if len(entries) == 0 && !compare {
-		fmt.Fprintln(os.Stderr, "cc-monitor usage: no usage entries found")
+		fmt.Fprintln(os.Stderr, "cx usage: no usage entries found")
 		os.Exit(0)
 	}
 
@@ -337,7 +337,7 @@ func outputDailyReports(reports []usage.DailyReport, outputFormat string, useCol
 func runUsageDailyCached(configDirs []string, cachePath string, sinceTime time.Time, outputFormat string, showROI bool) {
 	cache, err := usage.LoadUsageCache(cachePath)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "cc-monitor usage: loading cache: %v\n", err)
+		fmt.Fprintf(os.Stderr, "cx usage: loading cache: %v\n", err)
 	}
 
 	// Scan changed files and merge entries into the daily cache.
@@ -346,13 +346,13 @@ func runUsageDailyCached(configDirs []string, cachePath string, sinceTime time.T
 			dateKey := e.Timestamp.UTC().Format("2006-01-02")
 			cache.MergeDailyEntry(dateKey, e)
 		}); err != nil {
-			fmt.Fprintf(os.Stderr, "cc-monitor usage: scanning %s: %v\n", dir, err)
+			fmt.Fprintf(os.Stderr, "cx usage: scanning %s: %v\n", dir, err)
 		}
 	}
 
 	// Save the updated cache.
 	if err := cache.Save(); err != nil {
-		fmt.Fprintf(os.Stderr, "cc-monitor usage: saving cache: %v\n", err)
+		fmt.Fprintf(os.Stderr, "cx usage: saving cache: %v\n", err)
 	}
 
 	// Convert cached daily map to reports.
@@ -376,7 +376,7 @@ func runUsageDailyCached(configDirs []string, cachePath string, sinceTime time.T
 	})
 
 	if len(reports) == 0 {
-		fmt.Fprintln(os.Stderr, "cc-monitor usage: no usage entries found")
+		fmt.Fprintln(os.Stderr, "cx usage: no usage entries found")
 		os.Exit(0)
 	}
 
@@ -428,7 +428,7 @@ func usageCachePath() string {
 	if err != nil {
 		return filepath.Join(os.TempDir(), usageCacheFilename)
 	}
-	return filepath.Join(home, ".config", "cc-monitor", usageCacheFilename)
+	return filepath.Join(home, ".config", "cx", usageCacheFilename)
 }
 
 // resolveConfigDirs returns the list of config directories to scan based on flags.
@@ -464,14 +464,14 @@ func allRegistryDirs() ([]string, error) {
 		return nil, err
 	}
 	if len(reg.Accounts) == 0 {
-		return nil, fmt.Errorf("no accounts in registry; run: cc-monitor init <name>")
+		return nil, fmt.Errorf("no accounts in registry; run: cx init <name>")
 	}
 
 	dirs := make([]string, 0, len(reg.Accounts))
 	for name := range reg.Accounts {
 		dir, err := reg.ResolveConfigDir(name)
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "cc-monitor usage: skipping account %q: %v\n", name, err)
+			fmt.Fprintf(os.Stderr, "cx usage: skipping account %q: %v\n", name, err)
 			continue
 		}
 		dirs = append(dirs, dir)
@@ -500,7 +500,7 @@ func registryAccountDir(name string) ([]string, error) {
 func printJSON(v any) {
 	out, err := usage.FormatJSON(v)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "cc-monitor usage: %v\n", err)
+		fmt.Fprintf(os.Stderr, "cx usage: %v\n", err)
 		os.Exit(1)
 	}
 	fmt.Println(out)

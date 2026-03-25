@@ -1,5 +1,5 @@
-cc-monitor
-cc-monitor.exe
+cx
+cx.exe
 *.log
 dist/
 *.old

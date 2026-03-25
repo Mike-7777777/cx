@@ -8,10 +8,10 @@ import (
 	"sort"
 	"time"
 
-	"github.com/Mike-7777777/cc-monitor/internal/cache"
-	"github.com/Mike-7777777/cc-monitor/internal/config"
-	"github.com/Mike-7777777/cc-monitor/internal/platform"
-	"github.com/Mike-7777777/cc-monitor/internal/statusline"
+	"github.com/Mike-7777777/cx/internal/cache"
+	"github.com/Mike-7777777/cx/internal/config"
+	"github.com/Mike-7777777/cx/internal/platform"
+	"github.com/Mike-7777777/cx/internal/statusline"
 )
 
 const (
@@ -282,7 +282,7 @@ func logError(err error) {
 		return // Cannot log if we don't know where to write.
 	}
 
-	logPath := filepath.Join(cfgDir, "cc-monitor.log")
+	logPath := filepath.Join(cfgDir, "cx.log")
 	f, fErr := openLogFile(logPath)
 	if fErr != nil {
 		return
@@ -299,7 +299,7 @@ func logWarn(msg string) {
 		return
 	}
 
-	logPath := filepath.Join(cfgDir, "cc-monitor.log")
+	logPath := filepath.Join(cfgDir, "cx.log")
 	f, fErr := openLogFile(logPath)
 	if fErr != nil {
 		return

@@ -9,8 +9,8 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/Mike-7777777/cc-monitor/internal/config"
-	"github.com/Mike-7777777/cc-monitor/internal/platform"
+	"github.com/Mike-7777777/cx/internal/config"
+	"github.com/Mike-7777777/cx/internal/platform"
 	"github.com/natefinch/atomic"
 )
 
@@ -23,19 +23,19 @@ var syncFileList = []string{
 func runSync() {
 	regPath, err := config.RegistryPath()
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "cc-monitor sync: %v\n", err)
+		fmt.Fprintf(os.Stderr, "cx sync: %v\n", err)
 		os.Exit(1)
 	}
 
 	reg, err := config.LoadOrCreateRegistry(regPath)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "cc-monitor sync: %v\n", err)
+		fmt.Fprintf(os.Stderr, "cx sync: %v\n", err)
 		os.Exit(1)
 	}
 
 	primaryDir, err := reg.ResolveConfigDir(reg.Primary)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "cc-monitor sync: resolving primary account %q: %v\n", reg.Primary, err)
+		fmt.Fprintf(os.Stderr, "cx sync: resolving primary account %q: %v\n", reg.Primary, err)
 		os.Exit(1)
 	}
 
@@ -51,7 +51,7 @@ func runSync() {
 		}
 		fmt.Fprintf(os.Stderr, "syncing %q → %q\n", name, targetDir)
 		if err := syncFiles(primaryDir, targetDir, force); err != nil {
-			fmt.Fprintf(os.Stderr, "cc-monitor sync: %v\n", err)
+			fmt.Fprintf(os.Stderr, "cx sync: %v\n", err)
 			os.Exit(1)
 		}
 	}
@@ -90,7 +90,7 @@ func syncFiles(srcDir, dstDir string, force bool) error {
 
 				srcBase := filepath.Base(srcDir)
 				dstBase := filepath.Base(dstDir)
-				fmt.Fprintf(os.Stderr, "[cc-monitor] %s in %s is newer than %s.\n", rel, dstBase, srcBase)
+				fmt.Fprintf(os.Stderr, "[cx] %s in %s is newer than %s.\n", rel, dstBase, srcBase)
 				fmt.Fprintf(os.Stderr, "  %s: %s (%.1fKB)\n",
 					dstBase,
 					dstInfo.ModTime().Format("2006-01-02 15:04:05"),
@@ -144,7 +144,7 @@ func syncFiles(srcDir, dstDir string, force bool) error {
 	// Bidirectional sync: offer to copy newer files back to primary.
 	if !force && len(newerInDst) > 0 {
 		dstBase := filepath.Base(dstDir)
-		fmt.Fprintf(os.Stderr, "\n[cc-monitor] %s has newer config files: %s\n",
+		fmt.Fprintf(os.Stderr, "\n[cx] %s has newer config files: %s\n",
 			dstBase, strings.Join(newerInDst, ", "))
 		fmt.Fprintf(os.Stderr, "  Sync back to primary? [y/N] ")
 

@@ -1,8 +1,8 @@
 version: 2
 builds:
-  - id: cc-monitor
+  - id: cx
     main: .
-    binary: cc-monitor
+    binary: cx
     ldflags:
       - -s -w -X main.version={{.Version}}
     env:

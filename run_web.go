@@ -13,9 +13,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/Mike-7777777/cc-monitor/internal/cache"
-	"github.com/Mike-7777777/cc-monitor/internal/config"
-	"github.com/Mike-7777777/cc-monitor/internal/usage"
+	"github.com/Mike-7777777/cx/internal/cache"
+	"github.com/Mike-7777777/cx/internal/config"
+	"github.com/Mike-7777777/cx/internal/usage"
 )
 
 //go:embed web/index.html
@@ -30,14 +30,14 @@ func runWeb() {
 		switch args[i] {
 		case "--port":
 			if i+1 >= len(args) {
-				fmt.Fprintln(os.Stderr, "cc-monitor web: --port requires a value")
+				fmt.Fprintln(os.Stderr, "cx web: --port requires a value")
 				os.Exit(1)
 			}
 			i++
 			n := 0
 			for _, c := range args[i] {
 				if c < '0' || c > '9' {
-					fmt.Fprintf(os.Stderr, "cc-monitor web: invalid port %q\n", args[i])
+					fmt.Fprintf(os.Stderr, "cx web: invalid port %q\n", args[i])
 					os.Exit(1)
 				}
 				n = n*10 + int(c-'0')
@@ -46,7 +46,7 @@ func runWeb() {
 		case "--no-open":
 			noOpen = true
 		default:
-			fmt.Fprintf(os.Stderr, "cc-monitor web: unknown flag %q\n", args[i])
+			fmt.Fprintf(os.Stderr, "cx web: unknown flag %q\n", args[i])
 			os.Exit(1)
 		}
 	}
@@ -85,7 +85,7 @@ func runWeb() {
 
 	fmt.Fprintf(os.Stderr, "Dashboard: %s (Ctrl+C to stop)\n", url)
 	if err := http.ListenAndServe(addr, mux); err != nil {
-		fmt.Fprintf(os.Stderr, "cc-monitor web: %v\n", err)
+		fmt.Fprintf(os.Stderr, "cx web: %v\n", err)
 		os.Exit(1)
 	}
 }

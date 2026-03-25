@@ -58,7 +58,15 @@ cx fills a gap that existing tools don't cover: **multi-account management + lig
 ## Install
 
 ```bash
+# Go (recommended)
 go install github.com/Mike-7777777/cx@latest
+
+# macOS
+brew install Mike-7777777/tap/cx
+
+# Windows
+scoop bucket add cx https://github.com/Mike-7777777/scoop-bucket
+scoop install cx
 ```
 
 Or download a pre-built binary from [Releases](https://github.com/Mike-7777777/cx/releases).
@@ -73,8 +81,11 @@ cx setup
 The interactive setup will:
 1. Detect your primary account
 2. Create secondary accounts and log them in (browser opens once per account)
-3. Install the `cx` shell wrapper for your terminal
-4. Run a health check to verify everything works
+3. Install the `cx` shell wrapper for your terminal (PowerShell / Bash / Zsh / Fish)
+4. Configure the CC statusline integration
+5. Run a health check to verify everything works
+
+Re-running `cx setup` is safe — it updates existing wrappers (e.g., after moving the binary) without duplicating them.
 
 After setup, you're done:
 

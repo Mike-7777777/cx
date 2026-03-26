@@ -23,22 +23,25 @@ archives:
         formats:
           - zip
     name_template: "{{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
-brews:
-  - repository:
-      owner: Mike-7777777
-      name: homebrew-tap
-    homepage: https://github.com/Mike-7777777/cx
-    description: Claude Code multi-account manager
-    install: |
-      bin.install "cx"
-    test: |
-      system "#{bin}/cx", "version"
-scoops:
-  - repository:
-      owner: Mike-7777777
-      name: scoop-bucket
-    homepage: https://github.com/Mike-7777777/cx
-    description: Claude Code multi-account manager
+# TODO: enable after setting up PAT with repo write access
+# brews:
+#   - repository:
+#       owner: Mike-7777777
+#       name: homebrew-tap
+#       token: "{{ .Env.HOMEBREW_TAP_TOKEN }}"
+#     homepage: https://github.com/Mike-7777777/cx
+#     description: Claude Code multi-account manager
+#     install: |
+#       bin.install "cx"
+#     test: |
+#       system "#{bin}/cx", "version"
+# scoops:
+#   - repository:
+#       owner: Mike-7777777
+#       name: scoop-bucket
+#       token: "{{ .Env.SCOOP_BUCKET_TOKEN }}"
+#     homepage: https://github.com/Mike-7777777/cx
+#     description: Claude Code multi-account manager
 checksum:
   name_template: checksums.txt
 changelog:

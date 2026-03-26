@@ -25,7 +25,7 @@ $ cx status
 
 ✓ Recommended: work (lowest 5h usage at 0%)
 
-$ cx statusline (shown at bottom of CC)
+$ cx statusline (shown at bottom of Claude Code)
 [work] [Opus 4.6 (1M context)] 43% ctx | $77.67 | 5h: █░░░░ 17% (3h12m) | 7d: ░░░░░ 8% (Tue 31 19:00) ~19%/d
 ```
 
@@ -35,23 +35,32 @@ You have two Claude Max accounts. You want to use whichever has more quota left.
 
 cx fixes this. Both accounts stay logged in. Switch in one command. Or let the tool auto-select the best one.
 
+## Features
+
+- **Instant account switching** — `cx switch 5x` sets `CLAUDE_CONFIG_DIR` in your shell. No re-auth needed.
+- **Smart auto-routing** — `cx run` picks the account with the lowest 5h usage, factoring in reset proximity.
+- **Cross-account session resume** — `cx resume` shows all sessions with first/last message context. Resume any session on any account.
+- **Real-time statusline** — Rate limits, cost, context % in Claude Code's status bar. 16ms latency, ~5MB RAM.
+- **Web dashboard** — `cx web` serves a dark-themed browser dashboard at localhost with usage charts and model breakdown.
+- **Usage analytics** — Daily, weekly, monthly, per-session, per-model cost breakdowns. Export as JSON, CSV, or Markdown.
+- **Claude Code skill** — Use `/cx` inside Claude Code to check status, usage, and diagnostics without leaving the conversation.
+- **Config sync** — Shared settings, plugins, skills, and projects across accounts via junctions/symlinks.
+- **Zero dependencies** — Single static binary. No Node.js, no Python, no runtime requirements.
+
 <details>
 <summary><b>How it compares to ccusage and Claude HUD</b></summary>
-
-cx fills a gap that existing tools don't cover: **multi-account management + lightweight monitoring in a single binary**.
 
 |                          | cx                   | ccusage (11.9k stars)         | Claude HUD (12.6k stars) |
 |--------------------------|----------------------|-------------------------------|--------------------------|
 | Multi-account switching  | Built-in (setup/switch/sync) | No                     | No                       |
 | Cross-account rate limits | Statusline + status table | No                      | No                       |
+| Cross-account session resume | Yes (any session on any account) | No              | No                       |
 | Config sync              | Built-in + conflict detection | No                   | No                       |
-| Statusline performance   | ~16ms, ~5MB RAM      | 30s+ to stabilize, 300%+ CPU, 1.5-2.4GB RAM ([#804](https://github.com/ryoppippi/ccusage/issues/804)) | ~60-100ms (Node.js) |
+| Statusline performance   | ~16ms, ~5MB RAM      | 30s+ to stabilize, 300%+ CPU, 1.5-2.4GB RAM | ~60-100ms (Node.js) |
 | Runtime dependency       | None (single binary) | Node.js / Bun                 | Node.js / Bun            |
 | Usage reports            | daily/weekly/monthly/session/blocks/messages | daily/weekly/monthly/session/blocks | None |
-| MCP Server               | No                   | Yes                           | No                       |
-| Pricing data             | Static (manual update) | LiteLLM (auto-fetch)        | N/A                      |
-| Multi-CLI support        | Claude Code only     | 5 CLIs (Claude Code, Codex, Amp, OpenCode, Pi-agent) | Claude Code only |
-| Incremental caching      | Yes (0.2s warm)      | No (output cache for statusline only) | N/A              |
+| CC Skill integration     | Yes (/cx inside CC)  | No                            | No                       |
+| Incremental caching      | Yes (0.2s warm)      | No (output cache only)        | N/A                      |
 
 **Choose cx if** you manage multiple Claude Code accounts and want one tool for switching, syncing, and monitoring.
 
@@ -83,22 +92,22 @@ cx setup
 ```
 
 The interactive setup will:
-1. Detect your main account
-2. Create secondary accounts and log them in (browser opens once per account)
-3. Install the `cx` shell wrapper for your terminal (PowerShell / Bash / Zsh / Fish)
-4. Configure the CC statusline integration
-5. Run a health check to verify everything works
+1. Detect and register your main account
+2. Create secondary accounts and log them in
+3. Install the `cx` shell wrapper (PowerShell / Bash / Zsh / Fish)
+4. Add `cx` to PATH (for Claude Code and non-interactive shells)
+5. Configure the CC statusline integration
+6. Install the Claude Code skill (`/cx` inside CC)
+7. Run a health check to verify everything works
 
-Re-running `cx setup` is safe — it updates existing wrappers (e.g., after moving the binary) without duplicating them.
-
-After setup, you're done:
+After setup:
 
 ```bash
-cx config             # see all accounts (email, tier, CC version, sessions)
 cx status             # rate limits + routing recommendation
 cx switch 5x          # switch to 5x account
 cx run                # auto-select best account + launch claude
 cx run --yolo         # auto-select + skip permissions
+cx resume             # resume a session (shows topic + account picker)
 ```
 
 <details>
@@ -185,17 +194,15 @@ cx completion powershell | Out-String | Invoke-Expression
 
 | Command | Description |
 |---------|-------------|
-| `switch <name>` | Switch account in current shell (via wrapper: `cx switch 5x`) |
+| `switch <name>` | Switch account in current shell |
 | `run [-- claude-args]` | Auto-select best account and launch `claude` |
 | `run --prefer <name>` | Prefer a specific account (fall back if >80% usage) |
 | `run --balance` | Round-robin across accounts for max throughput |
-| `status` | All accounts: auth, tier, rate limits, 7d reset date |
-| `sessions [--all]` | List recent CC sessions across all accounts |
+| `status` | All accounts: auth, tier, rate limits, recommendation |
+| `sessions [--all]` | List recent sessions with first/last message topic |
 | `resume [term\|--last]` | Resume a session by fuzzy match or picker |
+| `resume --on <acct>` | Resume a session on a specific account (cross-account) |
 | `config` | Show full config: email, tier, CC version, session count |
-| `config main <name>` | Change main account |
-| `config rename <old> <new>` | Rename an account |
-| `config set <name> email/alias <v>` | Set account metadata |
 
 ### Monitoring
 
@@ -212,7 +219,7 @@ cx completion powershell | Out-String | Invoke-Expression
 | `setup` | Interactive first-time setup |
 | `doctor` | Health check all accounts (auto-fixes common issues) |
 | `sync [--force]` | Sync config from main to all secondaries |
-| `login [name]` | Re-authenticate an account (rarely needed) |
+| `login [name]` | Re-authenticate an account |
 | `init <name>` | Create a new account directory |
 | `watch` | Auto-sync config changes (30s daemon) |
 
@@ -238,32 +245,56 @@ cx completion powershell | Out-String | Invoke-Expression
 
 ## How It Works
 
-cx uses Claude Code's `CLAUDE_CONFIG_DIR` environment variable to isolate accounts. Each account gets its own directory with separate credentials and session history, but shares plugins and configuration via junctions (Windows) or symlinks (Unix).
+cx uses Claude Code's `CLAUDE_CONFIG_DIR` environment variable to isolate accounts. Each account gets its own directory with separate credentials, but shares plugins, skills, projects, and configuration via junctions (Windows) or symlinks (Unix).
 
 ```
-~/.claude/          <-- main account (personal, Max 20x)
-~/.claude-work/     <-- secondary account (work, Max 5x)
-    plugins/cache/  --> junction to ~/.claude/plugins/cache/  (shared)
-    settings.json   <-- synced from main
-    .credentials.json  <-- independent (separate login)
-    .claude.json    <-- identity, session stats (auto-read by cx)
+~/.claude/              <-- main account (personal, Max 20x)
+    .credentials.json   <-- independent (separate login)
+    rate-cache.json     <-- rate limit data (written by cx statusline)
+    settings.json       <-- synced to secondaries
+    plugins/cache/      <-- shared via junction/symlink
+    skills/             <-- shared (cx skill installed here)
+    projects/           <-- shared (enables cross-account session resume)
+
+~/.claude-work/         <-- secondary account (work, Max 5x)
+    .credentials.json   <-- independent
+    plugins/cache/  --> junction to ~/.claude/plugins/cache/
+    skills/         --> junction to ~/.claude/skills/
+    projects/       --> junction to ~/.claude/projects/
 ```
 
-Both accounts stay logged in simultaneously. No re-authentication needed when switching.
+Both accounts stay logged in simultaneously. `cx switch` only changes an environment variable — no re-authentication needed.
 
-Account identity (email, display name, subscription tier, session count) is auto-read from CC's local `.claude.json` and `.credentials.json` files — zero manual configuration needed.
+## Architecture
+
+cx is a single Go binary (~12k lines) with a clean command architecture:
+
+- **Runner pattern** — every command implements `Run(ctx, app, args) error`, enabling dependency injection and unit testing
+- **App DI container** — shared `Registry`, `io.Writer`, and color flag injected into every command
+- **context.Context** — threaded through all commands for graceful shutdown
+- **Internal packages** — `config`, `cache`, `format`, `usage`, `statusline`, `platform`, `errors`
+- **125+ tests** across 8 packages with table-driven patterns
+
+Single external dependency: [`natefinch/atomic`](https://github.com/natefinch/atomic) for atomic file writes.
 
 ## Antivirus Notice
 
-Some antivirus software (ESET, Windows Defender, Kaspersky) may flag the binary as a false positive. This is a [known issue with Go binaries](https://go.dev/doc/faq#virus) — the static linking pattern triggers heuristic signatures shared with Go-based security tools.
+Some antivirus software (ESET, Windows Defender, Kaspersky) may flag the binary as a false positive. This is a [known issue with Go binaries](https://go.dev/doc/faq#virus) — the static linking pattern triggers heuristic signatures.
 
 cx contains no networking, scanning, or exploit code. It only reads local JSON/JSONL files and writes cache files. You can verify the source code in this repository.
 
-If flagged, add the binary to your antivirus exclusion list.
+## Contributing
 
-## Cross-Platform
+Contributions are welcome. See [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines.
 
-Pre-built binaries are available for Linux, macOS, and Windows on both amd64 and arm64. Uses NTFS junctions on Windows and symlinks on Unix for shared plugin directories.
+```bash
+# Dev setup
+git clone https://github.com/Mike-7777777/cx.git
+cd cx
+go build -o cx .
+go test ./... -count=1
+golangci-lint run
+```
 
 ## License
 

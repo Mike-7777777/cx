@@ -10,33 +10,43 @@ Repository: `github.com/Mike-7777777/cx` | Go 1.24+ | Single external dep: `nate
 
 ## Architecture
 
-Flat main package with one `run_*.go` file per CLI command. Each file exports a single `func run<Name>()` entry point, registered in the `commands` map in `main.go`.
+Every CLI command implements the `Runner` interface:
+
+```go
+type Runner interface {
+    Run(ctx context.Context, app *App, args []string) error
+}
+```
+
+`App` is a dependency injection container holding `Registry`, `Stdout`, `Stderr`, and `UseColor`. Commands receive `App` from `main()` — they never read `os.Args`, call `os.Exit`, or write to `os.Stdout` directly.
 
 ```
-main.go              # CLI dispatch, help, version
-run_<cmd>.go         # one per command (run, switch, status, setup, ...)
-credentials.go       # credential helpers
+main.go              # CLI dispatch via Runner interface, buildApp()
+app.go               # Runner interface, App struct, parseFlags helper
+run_<cmd>.go         # one xxxCmd struct per command
+credentials.go       # credential checking helpers
 internal/
   config/            # Registry (account storage), DetectConfigDir
   format/            # Labels, colors, ProgressBar, FormatNumber
   errors/            # Sentinel errors (ErrAccountNotFound, ...)
-  cache/             # Rate-limit cache
-  usage/             # Usage parsing, aggregation, pricing
+  cache/             # Rate-limit cache (WriteRateCache, ReadRateCache)
+  usage/             # JSONL parsing, aggregation, pricing, incremental cache
   platform/          # OS-specific code (symlinks, exec, ANSI)
   statusline/        # CC status bar parsing and rendering
 web/                 # Embedded HTML/JS for the web dashboard
+skill/               # Embedded Claude Code skill file
 testdata/            # Fixtures for tests
-skill/               # Claude Code skill files
 ```
 
 ## Key Patterns
 
-- **`format.Label*`** — all user-facing UI strings live in `internal/format/labels.go`. Never use raw string literals for labels; add a `LabelXxx` constant and reference it.
-- **`format.Colorize`** — wrap ANSI color codes; always pass the `enabled` flag.
-- **`config.Registry`** — the account registry (`~/.cx.json`). Use `LoadOrCreateRegistry` / `Save`.
-- **`config.DetectConfigDir`** — resolves the active Claude Code config directory (env override, XDG, fallback).
+- **Runner pattern** — every command is a struct implementing `Runner`. Tests construct the struct directly with a buffer `App`, no I/O mocking needed.
+- **`parseFlags(args, known...)`** — extracts `--key=value` and `--bool` flags from args, returns `(flags map, positional []string)`. Use this instead of reading `os.Args`.
+- **`format.Label*`** — all user-facing UI strings live in `internal/format/labels.go`. Never use raw string literals for labels.
+- **`format.Colorize`** — wrap ANSI color codes; always pass the `app.UseColor` flag.
+- **`config.Registry`** — the account registry (`~/.cx.json`). Use `app.Registry` for reads, `LoadOrCreateRegistry` for writes.
 - **`internal/errors`** — sentinel errors. Use `errors.Is()` for matching.
-- **Adding a command**: create `run_<name>.go`, register in `commands` map + `commandUsageHint` in `main.go`.
+- **Adding a command**: create `run_<name>.go` with `xxxCmd` struct, register `&xxxCmd{}` in `commands` map in `main.go`.
 
 ## Rules
 
@@ -46,6 +56,8 @@ skill/               # Claude Code skill files
 - Forward slashes in any path written to JSON or shell commands.
 - All packages under `internal/` — nothing exported outside the binary.
 - Use `any` not `interface{}`.
+- Write output to `app.Stdout`/`app.Stderr`, never `os.Stdout`/`os.Stderr`.
+- Return `error` from `Run`, never call `os.Exit`.
 - Minimal dependencies — do not add external deps without strong justification.
 - Conventional Commits for commit messages (`feat:`, `fix:`, `refactor:`, `docs:`, `chore:`).
 

@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"path/filepath"
 	"strings"
 
 	"github.com/Mike-7777777/cx/internal/config"
@@ -102,6 +103,31 @@ Usage:
 			}
 			configDir = dir
 			accountName = onAccount
+		}
+	}
+
+	// Cross-account resume: ensure the session file exists in the target
+	// account's projects directory. CC looks for the JSONL file relative
+	// to CLAUDE_CONFIG_DIR, so we symlink/copy it if resuming on a
+	// different account.
+	if configDir != selected.ConfigDir && selected.ProjectDir != "" {
+		srcFile := filepath.Join(selected.ConfigDir, "projects", selected.ProjectDir, selected.ID+".jsonl")
+		dstDir := filepath.Join(configDir, "projects", selected.ProjectDir)
+		dstFile := filepath.Join(dstDir, selected.ID+".jsonl")
+
+		if _, err := os.Stat(dstFile); os.IsNotExist(err) {
+			_ = os.MkdirAll(dstDir, 0o755)
+			// Symlink is preferred (no data duplication); fall back to copy.
+			if linkErr := os.Symlink(srcFile, dstFile); linkErr != nil {
+				data, readErr := os.ReadFile(srcFile)
+				if readErr != nil {
+					return fmt.Errorf("cannot read session file: %v", readErr)
+				}
+				if writeErr := os.WriteFile(dstFile, data, 0o644); writeErr != nil {
+					return fmt.Errorf("cannot copy session file: %v", writeErr)
+				}
+			}
+			fmt.Fprintf(app.Stderr, "[cx] Linked session to %s\n", accountName)
 		}
 	}
 

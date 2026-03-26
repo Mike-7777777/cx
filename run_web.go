@@ -11,6 +11,7 @@ import (
 	"runtime"
 	"sort"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/Mike-7777777/cx/internal/cache"
@@ -26,6 +27,78 @@ const webStaleThreshold = 10 * time.Minute
 
 //go:embed web/index.html
 var webFS embed.FS
+
+// webCache holds pre-computed API responses refreshed in the background.
+type webCache struct {
+	mu       sync.RWMutex
+	daily    []usage.DailyReport
+	sessions []usage.SessionReport
+	// sessEntries keeps the 24h entries used to resolve project names.
+	sessEntries []usage.Entry
+	roi         apiROIResponse
+	lastScan    time.Time
+}
+
+func (wc *webCache) refresh(configDirs []string) {
+	since := time.Now().UTC().AddDate(0, 0, -30)
+	var recent []usage.Entry
+	var totalCost float64
+
+	// Use incremental cache for fast warm loads (~0.2s vs ~8s full scan).
+	cachePath := usageCachePath()
+	uc, _ := usage.LoadUsageCache(cachePath)
+
+	for _, dir := range configDirs {
+		_ = usage.ScanDirCached(dir, uc, func(e usage.Entry) {
+			totalCost += usage.CalculateCost(e.Model, e.Usage)
+			if !e.Timestamp.Before(since) {
+				recent = append(recent, e)
+			}
+		})
+	}
+
+	// Persist cache for next refresh.
+	_ = uc.Save()
+
+	daily := usage.AggregateDailies(recent)
+
+	// Sessions: last 24h.
+	sessionSince := time.Now().UTC().Add(-24 * time.Hour)
+	var sessionEntries []usage.Entry
+	for _, e := range recent {
+		if !e.Timestamp.Before(sessionSince) {
+			sessionEntries = append(sessionEntries, e)
+		}
+	}
+	sessions := usage.AggregateSessions(sessionEntries)
+	sort.Slice(sessions, func(i, j int) bool {
+		return sessions[i].StartTime.After(sessions[j].StartTime)
+	})
+	if len(sessions) > 20 {
+		sessions = sessions[:20]
+	}
+
+	// ROI across all history.
+	subCost := totalSubscriptionCost()
+	savings := totalCost - subCost
+	var pct float64
+	if totalCost > 0 {
+		pct = savings / totalCost * 100
+	}
+
+	wc.mu.Lock()
+	wc.daily = daily
+	wc.sessions = sessions
+	wc.sessEntries = sessionEntries
+	wc.roi = apiROIResponse{
+		SubscriptionCost:  subCost,
+		EquivalentAPICost: totalCost,
+		Savings:           savings,
+		SavingsPct:        pct,
+	}
+	wc.lastScan = time.Now()
+	wc.mu.Unlock()
+}
 
 // Run starts the browser dashboard HTTP server.
 func (c *webCmd) Run(ctx context.Context, app *App, args []string) error {
@@ -61,6 +134,27 @@ func (c *webCmd) Run(ctx context.Context, app *App, args []string) error {
 		return err
 	}
 
+	// Create empty cache; initial load + periodic refresh happen async.
+	// The HTTP server starts immediately so the browser doesn't wait.
+	wc := &webCache{}
+
+	go func() {
+		t0 := time.Now()
+		wc.refresh(configDirs)
+		fmt.Fprintf(w, "Data loaded in %s\n", time.Since(t0).Round(time.Millisecond))
+
+		ticker := time.NewTicker(30 * time.Second)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-ticker.C:
+				wc.refresh(configDirs)
+			}
+		}
+	}()
+
 	mux := http.NewServeMux()
 
 	// Serve embedded HTML.
@@ -78,24 +172,43 @@ func (c *webCmd) Run(ctx context.Context, app *App, args []string) error {
 		hw.Write(data) // Best effort; client may have disconnected.
 	})
 
-	// API endpoints (registry and config dirs are captured by closure).
+	// API endpoints.
 	mux.HandleFunc("/api/status", func(hw http.ResponseWriter, r *http.Request) {
 		handleAPIStatus(hw, r, reg)
 	})
 	mux.HandleFunc("/api/daily", func(hw http.ResponseWriter, r *http.Request) {
-		handleAPIDaily(hw, r, configDirs)
-	})
-	mux.HandleFunc("/api/weekly", func(hw http.ResponseWriter, r *http.Request) {
-		handleAPIWeekly(hw, r, configDirs)
-	})
-	mux.HandleFunc("/api/monthly", func(hw http.ResponseWriter, r *http.Request) {
-		handleAPIMonthly(hw, r, configDirs)
+		wc.mu.RLock()
+		data := wc.daily
+		wc.mu.RUnlock()
+		writeJSON(hw, data)
 	})
 	mux.HandleFunc("/api/sessions", func(hw http.ResponseWriter, r *http.Request) {
-		handleAPISessions(hw, r, configDirs)
+		wc.mu.RLock()
+		sessions := wc.sessions
+		entries := wc.sessEntries
+		wc.mu.RUnlock()
+
+		resp := apiSessionsResponse{Sessions: make([]apiSession, 0, len(sessions))}
+		for _, sr := range sessions {
+			sid := sr.SessionID
+			if len(sid) > 12 {
+				sid = sid[:12]
+			}
+			resp.Sessions = append(resp.Sessions, apiSession{
+				SessionID:   sid,
+				Project:     sessionProject(entries, sr.SessionID),
+				StartTime:   sr.StartTime.Format(time.RFC3339),
+				TotalTokens: sr.Summary.TotalTokens,
+				CostUSD:     sr.Summary.CostUSD,
+			})
+		}
+		writeJSON(hw, resp)
 	})
 	mux.HandleFunc("/api/roi", func(hw http.ResponseWriter, r *http.Request) {
-		handleAPIROI(hw, r, configDirs)
+		wc.mu.RLock()
+		data := wc.roi
+		wc.mu.RUnlock()
+		writeJSON(hw, data)
 	})
 
 	addr := fmt.Sprintf("127.0.0.1:%d", port)
@@ -248,115 +361,6 @@ func handleAPIStatus(w http.ResponseWriter, _ *http.Request, reg *config.Registr
 	}
 
 	writeJSON(w, resp)
-}
-
-func handleAPIDaily(w http.ResponseWriter, _ *http.Request, configDirs []string) {
-	// Scan entries for the last 30 days.
-	since := time.Now().UTC().AddDate(0, 0, -30)
-	var entries []usage.Entry
-	for _, dir := range configDirs {
-		_ = usage.ScanDir(dir, func(e usage.Entry) {
-			if !e.Timestamp.Before(since) {
-				entries = append(entries, e)
-			}
-		})
-	}
-
-	reports := usage.AggregateDailies(entries)
-	writeJSON(w, reports)
-}
-
-func handleAPIWeekly(w http.ResponseWriter, _ *http.Request, configDirs []string) {
-	var entries []usage.Entry
-	for _, dir := range configDirs {
-		_ = usage.ScanDir(dir, func(e usage.Entry) {
-			entries = append(entries, e)
-		})
-	}
-
-	reports := usage.AggregateWeekly(entries)
-	writeJSON(w, reports)
-}
-
-func handleAPIMonthly(w http.ResponseWriter, _ *http.Request, configDirs []string) {
-	var entries []usage.Entry
-	for _, dir := range configDirs {
-		_ = usage.ScanDir(dir, func(e usage.Entry) {
-			entries = append(entries, e)
-		})
-	}
-
-	reports := usage.AggregateMonthly(entries)
-	writeJSON(w, reports)
-}
-
-func handleAPISessions(w http.ResponseWriter, _ *http.Request, configDirs []string) {
-	// Only show sessions from the last 24 hours for "active" sessions.
-	since := time.Now().UTC().Add(-24 * time.Hour)
-	var entries []usage.Entry
-	for _, dir := range configDirs {
-		_ = usage.ScanDir(dir, func(e usage.Entry) {
-			if !e.Timestamp.Before(since) {
-				entries = append(entries, e)
-			}
-		})
-	}
-
-	sessionReports := usage.AggregateSessions(entries)
-
-	// Sort by start time descending (most recent first), limit to 20.
-	sort.Slice(sessionReports, func(i, j int) bool {
-		return sessionReports[i].StartTime.After(sessionReports[j].StartTime)
-	})
-	if len(sessionReports) > 20 {
-		sessionReports = sessionReports[:20]
-	}
-
-	resp := apiSessionsResponse{Sessions: make([]apiSession, 0, len(sessionReports))}
-	for _, sr := range sessionReports {
-		sid := sr.SessionID
-		if len(sid) > 12 {
-			sid = sid[:12]
-		}
-		resp.Sessions = append(resp.Sessions, apiSession{
-			SessionID:   sid,
-			Project:     sessionProject(entries, sr.SessionID),
-			StartTime:   sr.StartTime.Format(time.RFC3339),
-			TotalTokens: sr.Summary.TotalTokens,
-			CostUSD:     sr.Summary.CostUSD,
-		})
-	}
-
-	writeJSON(w, resp)
-}
-
-func handleAPIROI(w http.ResponseWriter, _ *http.Request, configDirs []string) {
-	// Scan all entries to calculate total API-equivalent cost.
-	var entries []usage.Entry
-	for _, dir := range configDirs {
-		_ = usage.ScanDir(dir, func(e usage.Entry) {
-			entries = append(entries, e)
-		})
-	}
-
-	var totalCost float64
-	for _, e := range entries {
-		totalCost += usage.CalculateCost(e.Model, e.Usage)
-	}
-
-	subCost := totalSubscriptionCost()
-	savings := totalCost - subCost
-	var pct float64
-	if totalCost > 0 {
-		pct = savings / totalCost * 100
-	}
-
-	writeJSON(w, apiROIResponse{
-		SubscriptionCost:  subCost,
-		EquivalentAPICost: totalCost,
-		Savings:           savings,
-		SavingsPct:        pct,
-	})
 }
 
 // --- Helpers ---

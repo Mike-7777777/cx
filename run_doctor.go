@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -27,8 +28,12 @@ type checkResult struct {
 	indent int
 }
 
-func runDoctor() {
-	useColor := platform.ANSIEnabled()
+// doctorCmd implements Runner for the "doctor" subcommand.
+type doctorCmd struct{}
+
+// Run performs health checks on all registered accounts.
+func (c *doctorCmd) Run(_ context.Context, app *App, args []string) error {
+	useColor := app.UseColor
 	var results []checkResult
 
 	// Check main config dir.
@@ -37,8 +42,8 @@ func runDoctor() {
 		results = append(results, checkResult{
 			label: "Main config", detail: err.Error(),
 		})
-		printResults(results, useColor)
-		os.Exit(1)
+		printResults(app, results, useColor)
+		return fmt.Errorf("main config: %v", err)
 	}
 	results = append(results, checkResult{
 		ok: true, label: "Main config", detail: mainDir,
@@ -51,22 +56,10 @@ func runDoctor() {
 	})
 
 	// Load registry.
-	regPath, err := config.RegistryPath()
-	if err != nil {
-		results = append(results, checkResult{
-			label: "Registry", detail: err.Error(),
-		})
-		printResults(results, useColor)
-		os.Exit(1)
-	}
-
-	reg, err := config.LoadOrCreateRegistry(regPath)
-	if err != nil {
-		results = append(results, checkResult{
-			label: "Registry", detail: err.Error(),
-		})
-		printResults(results, useColor)
-		os.Exit(1)
+	reg := app.Registry
+	regPath := ""
+	if rp, rpErr := config.RegistryPath(); rpErr == nil {
+		regPath = rp
 	}
 
 	results = append(results, checkResult{
@@ -180,7 +173,8 @@ func runDoctor() {
 		}
 	}
 
-	printResults(results, useColor)
+	printResults(app, results, useColor)
+	return nil
 }
 
 // checkCredentialsForDoctor verifies .credentials.json exists and has claudeAiOauth.
@@ -333,7 +327,7 @@ func checkStatuslinePath(configDir string) (bool, string) {
 	return true, "ok"
 }
 
-func printResults(results []checkResult, useColor bool) {
+func printResults(app *App, results []checkResult, useColor bool) {
 	for _, r := range results {
 		var prefix string
 		indent := ""
@@ -352,9 +346,9 @@ func printResults(results []checkResult, useColor bool) {
 
 		label := r.label
 		if r.detail != "" {
-			fmt.Printf("%s%s %s: %s\n", indent, prefix, label, r.detail)
+			fmt.Fprintf(app.Stdout, "%s%s %s: %s\n", indent, prefix, label, r.detail)
 		} else {
-			fmt.Printf("%s%s %s\n", indent, prefix, label)
+			fmt.Fprintf(app.Stdout, "%s%s %s\n", indent, prefix, label)
 		}
 	}
 }

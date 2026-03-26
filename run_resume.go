@@ -2,6 +2,7 @@ package main
 
 import (
 	"bufio"
+	"context"
 	"fmt"
 	"os"
 	"strings"
@@ -10,11 +11,17 @@ import (
 	"github.com/Mike-7777777/cx/internal/platform"
 )
 
-func runResume() {
-	args := os.Args[2:]
+// resumeCmd implements Runner for the "resume" subcommand.
+type resumeCmd struct{}
 
-	if len(args) > 0 && (args[0] == "--help" || args[0] == "-h") {
-		fmt.Print(`cx resume — resume a CC session with smart matching
+// Run resumes a CC session with smart matching.
+func (c *resumeCmd) Run(_ context.Context, app *App, args []string) error {
+	flags, positional := parseFlags(args, "last", "on")
+
+	// Check for help flag.
+	for _, arg := range args {
+		if arg == "--help" || arg == "-h" {
+			fmt.Fprint(app.Stdout, `cx resume — resume a CC session with smart matching
 
 Usage:
   cx resume              Interactive picker (numbered list)
@@ -22,20 +29,22 @@ Usage:
   cx resume --last       Resume the most recent session (any account)
   cx resume --on <acct>  Run session on a specific account (cross-account resume)
 `)
-		return
+			return nil
+		}
 	}
 
-	isLast := len(args) > 0 && args[0] == "--last"
+	_, isLast := flags["last"]
+	onAccount := flags["on"]
+
 	searchTerm := ""
-	if len(args) > 0 && !isLast {
-		searchTerm = args[0]
+	if len(positional) > 0 {
+		searchTerm = positional[0]
 	}
 
 	// Collect sessions.
 	sessions := collectSessions("", 50)
 	if len(sessions) == 0 {
-		fmt.Fprintln(os.Stderr, "No sessions found.")
-		os.Exit(1)
+		return fmt.Errorf("no sessions found")
 	}
 
 	var selected *sessionEntry
@@ -56,45 +65,31 @@ Usage:
 		}
 
 		if len(matches) == 0 {
-			fmt.Fprintf(os.Stderr, "No session matching %q\n", searchTerm)
-			os.Exit(1)
+			return fmt.Errorf("no session matching %q", searchTerm)
 		}
 		if len(matches) == 1 {
 			selected = &matches[0]
 		} else {
 			// Multiple matches — show picker.
-			selected = pickSession(matches)
+			selected = pickSession(sessions, app.UseColor)
 		}
 	} else {
 		// No args — interactive picker.
-		selected = pickSession(sessions)
+		selected = pickSession(sessions, app.UseColor)
 	}
 
 	if selected == nil {
-		return
+		return nil
 	}
 
 	// Determine which account to run on.
 	configDir := selected.ConfigDir
 	accountName := selected.Account
 
-	// If --on <account> flag is given, use that account instead.
-	onAccount := ""
-	for i := 2; i < len(os.Args); i++ {
-		if os.Args[i] == "--on" && i+1 < len(os.Args) {
-			onAccount = os.Args[i+1]
-			break
-		}
-		if strings.HasPrefix(os.Args[i], "--on=") {
-			onAccount = strings.TrimPrefix(os.Args[i], "--on=")
-			break
-		}
-	}
-
-	if onAccount == "" {
+	if onAccount == "" || onAccount == "true" {
 		// Interactive: if multiple accounts exist, ask which one to use.
 		reg := loadRegistryOrNil()
-		if reg != nil && len(reg.Accounts) > 1 {
+		if reg != nil && len(reg.Accounts) > 1 && onAccount != "true" {
 			configDir, accountName = pickAccount(reg, selected.Account)
 		}
 	} else {
@@ -102,21 +97,20 @@ Usage:
 		if reg != nil {
 			dir, err := reg.ResolveConfigDir(onAccount)
 			if err != nil {
-				fmt.Fprintf(os.Stderr, "[cx] unknown account %q\n", onAccount)
-				os.Exit(1)
+				return fmt.Errorf("unknown account %q", onAccount)
 			}
 			configDir = dir
 			accountName = onAccount
 		}
 	}
 
-	fmt.Fprintf(os.Stderr, "[cx] Resuming %q on account %s\n", displaySlug(selected), accountName)
+	fmt.Fprintf(app.Stderr, "[cx] Resuming %q on account %s\n", displaySlug(selected), accountName)
 
 	env := replaceOrAppendEnv(os.Environ(), "CLAUDE_CONFIG_DIR", configDir)
 	if err := platform.ExecProgram("claude", []string{"--resume", selected.ID}, env); err != nil {
-		fmt.Fprintf(os.Stderr, "[cx] failed to exec claude: %v\n", err)
-		os.Exit(1)
+		return fmt.Errorf("failed to exec claude: %v", err)
 	}
+	return nil
 }
 
 // pickAccount asks the user which account to run the session on.
@@ -159,8 +153,7 @@ func pickAccount(reg *config.Registry, defaultAccount string) (string, string) {
 }
 
 // pickSession shows a numbered list and reads user choice from stdin.
-func pickSession(sessions []sessionEntry) *sessionEntry {
-	useColor := platform.ANSIEnabled()
+func pickSession(sessions []sessionEntry, useColor bool) *sessionEntry {
 	reg := loadRegistryOrNil()
 
 	max := len(sessions)

@@ -8,9 +8,9 @@ import (
 	"github.com/Mike-7777777/cx/internal/config"
 )
 
-// Runner is implemented by commands migrated to the testable pattern.
-// Commands still using the legacy func() signature are dispatched directly
-// by main.go — this interface is adopted incrementally.
+// Runner is implemented by all CLI commands. main() constructs an App,
+// resolves the command, and calls Run. Commands receive their dependencies
+// via App and return errors instead of calling os.Exit.
 type Runner interface {
 	Run(ctx context.Context, app *App, args []string) error
 }

@@ -15,7 +15,7 @@ cx manages multiple Claude Code Max Plan accounts from a single machine. It moni
 | Daily/weekly/monthly usage | `cx usage <daily\|weekly\|monthly>` | Cost breakdown by period |
 | Per-session usage | `cx usage session` | Tokens + cost per session |
 | Usage as JSON (for analysis) | `cx usage daily --format json` | Machine-readable for deeper analysis |
-| Per-block (5h) usage | `cx usage block` | Aggregated by 5-hour rate limit windows |
+| Per-block (5h) usage | `cx usage blocks` | Aggregated by 5-hour rate limit windows |
 | Session history | `cx sessions --all` | All sessions across accounts |
 | Health check | `cx doctor` | Diagnose config/auth issues |
 | Sync config across accounts | `cx sync` | Push main account config to secondaries |

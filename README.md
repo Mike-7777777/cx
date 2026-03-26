@@ -17,12 +17,15 @@
 ```
 $ cx status
 
-  Account     Tier      Auth    5h Usage        Resets In     7d Usage        Note
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-  work        Max 5x    OK      ░░░░░   0%      reset         █░░░░  15%
-★ personal    Max 20x   OK      █░░░░  24%      3h04m         ███░░  67%
+  Account     Tier      Auth    5h Usage    5h Reset    7d Usage    7d Reset      Note
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  work        Max 5x    OK      ░░░░░  0%   reset       █░░░░ 15%   Tue 31 19:00
+★ personal    Max 20x   OK      █░░░░ 24%   3h04m       ███░░ 67%   Sat 28 02:00
 
 ✓ Recommended: work (lowest 5h usage at 0%)
+
+$ cx statusline (shown at bottom of CC)
+[work] [Opus 4.6 (1M context)] 43% ctx | $77.67 | 5h: █░░░░ 17% (3h12m) | 7d: ░░░░░ 8% (Tue 31 19:00) ~19%/d
 ```
 
 ## Why cx?

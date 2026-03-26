@@ -137,6 +137,29 @@ func TestParseFile_SkipsNoUsage(t *testing.T) {
 	}
 }
 
+func TestParseFile_SkipsSyntheticModel(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "synthetic.jsonl")
+	content := `{"type":"assistant","message":{"model":"<synthetic>","usage":{"input_tokens":0,"output_tokens":0,"cache_creation_input_tokens":0,"cache_read_input_tokens":0}},"timestamp":"2026-03-24T10:00:00.000Z","sessionId":"s1"}
+{"type":"assistant","message":{"model":"claude-opus-4-6","usage":{"input_tokens":10,"output_tokens":20,"cache_creation_input_tokens":0,"cache_read_input_tokens":0}},"timestamp":"2026-03-24T10:01:00.000Z","sessionId":"s1"}
+`
+	if err := os.WriteFile(path, []byte(content), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	var entries []Entry
+	err := ParseFile(path, func(e Entry) { entries = append(entries, e) })
+	if err != nil {
+		t.Fatalf("ParseFile returned error: %v", err)
+	}
+	if len(entries) != 1 {
+		t.Errorf("expected 1 entry (skip synthetic), got %d", len(entries))
+	}
+	if len(entries) > 0 && entries[0].Model != "claude-opus-4-6" {
+		t.Errorf("expected model claude-opus-4-6, got %q", entries[0].Model)
+	}
+}
+
 func TestCalculateCost_Opus(t *testing.T) {
 	u := TokenUsage{
 		InputTokens:              1_000_000,

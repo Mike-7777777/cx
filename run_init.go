@@ -19,6 +19,7 @@ var validAccountName = regexp.MustCompile(`^[a-zA-Z0-9_-]+$`)
 var sharedLinkDirs = []string{
 	filepath.Join("plugins", "cache"),
 	"ide",
+	"skills",
 }
 
 func runInit() {

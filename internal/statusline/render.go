@@ -186,20 +186,23 @@ func renderMain(input *Input, other *OtherAccount, opt RenderOpts, useColor bool
 		resetDate := resetTime.Local().Format("Mon 2 15:04")
 		resetStr := format.Colorize(resetDate, format.Dim, useColor)
 
-		// Daily budget: how much % per day is left for the rest of the week.
-		daysLeft := time.Until(resetTime).Hours() / 24
+		// Daily burn rate: average daily usage vs fair daily budget (100%/7 ≈ 14.3%).
+		// Shows how much of the daily budget is being consumed on average.
+		// >100% means burning faster than sustainable; <100% means on track.
+		daysElapsed := 7.0 - time.Until(resetTime).Hours()/24
 		budgetStr := ""
-		if daysLeft > 0.1 {
-			remaining := 100.0 - w.UsedPercentage
-			perDay := remaining / daysLeft
+		if daysElapsed > 0.1 {
+			avgDailyUsage := w.UsedPercentage / daysElapsed
+			dailyBudget := 100.0 / 7.0
+			burnRate := avgDailyUsage / dailyBudget * 100
 			budgetColor := format.Green
-			if perDay < 10 {
+			if burnRate > 100 {
 				budgetColor = format.Yellow
 			}
-			if perDay < 5 {
+			if burnRate > 150 {
 				budgetColor = format.Red
 			}
-			budgetStr = " " + format.Colorize(fmt.Sprintf("~%.0f%%/d", perDay), budgetColor, useColor)
+			budgetStr = " " + format.Colorize(fmt.Sprintf("%.0f%%burn", burnRate), budgetColor, useColor)
 		}
 
 		line += fmt.Sprintf(" | %s: %s %s (%s)%s", format.LabelRate7d, bar, pctStr, resetStr, budgetStr)

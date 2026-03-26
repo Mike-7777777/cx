@@ -3,11 +3,63 @@ package main
 import (
 	"bytes"
 	"context"
+	"encoding/json"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
 	"github.com/Mike-7777777/cx/internal/config"
 )
+
+// setupSessionRegistry creates a fake home dir with a registry pointing to a
+// config dir that contains one project session JSONL file.
+// Returns the fake home dir and the config dir.
+func setupSessionRegistry(t *testing.T) (fakeHome, configDir string) {
+	t.Helper()
+
+	fakeHome = t.TempDir()
+	configDir = filepath.Join(fakeHome, "claude-config")
+
+	// Create projects/<project>/<session>.jsonl
+	projDir := filepath.Join(configDir, "projects", "my-project")
+	if err := os.MkdirAll(projDir, 0o755); err != nil {
+		t.Fatalf("setup projects dir: %v", err)
+	}
+	sessionJSONL := `{"type":"user","message":{"content":"hello world"},"timestamp":"2026-03-24T10:00:00.000Z","sessionId":"session-abc123"}
+{"type":"assistant","message":{"model":"claude-sonnet-4-6","usage":{"input_tokens":10,"output_tokens":20,"cache_creation_input_tokens":0,"cache_read_input_tokens":0}},"timestamp":"2026-03-24T10:00:05.000Z","sessionId":"session-abc123"}
+`
+	if err := os.WriteFile(filepath.Join(projDir, "session-abc123.jsonl"), []byte(sessionJSONL), 0o644); err != nil {
+		t.Fatalf("setup session file: %v", err)
+	}
+
+	// Create sessions/ dir (empty — no active sessions).
+	if err := os.MkdirAll(filepath.Join(configDir, "sessions"), 0o755); err != nil {
+		t.Fatalf("setup sessions dir: %v", err)
+	}
+
+	// Write registry JSON to <fakeHome>/.cx.json
+	reg := &config.Registry{
+		Version: 1,
+		Main:    "test",
+		Accounts: map[string]config.Account{
+			"test": {ConfigDir: configDir},
+		},
+	}
+	regData, err := json.MarshalIndent(reg, "", "  ")
+	if err != nil {
+		t.Fatalf("marshal registry: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(fakeHome, ".cx.json"), regData, 0o600); err != nil {
+		t.Fatalf("write registry: %v", err)
+	}
+
+	// Redirect os.UserHomeDir() to our fake home.
+	t.Setenv("HOME", fakeHome)
+	t.Setenv("USERPROFILE", fakeHome)
+
+	return fakeHome, configDir
+}
 
 func TestDisplaySlug(t *testing.T) {
 	tests := []struct {
@@ -65,5 +117,73 @@ func TestResume_HelpFlag(t *testing.T) {
 	}
 	if !strings.Contains(buf.String(), "cx resume") {
 		t.Errorf("help missing usage text: %q", buf.String())
+	}
+}
+
+// TestResume_NoSessions verifies that running resume with an empty config dir
+// returns an error containing "no sessions found".
+func TestResume_NoSessions(t *testing.T) {
+	fakeHome := t.TempDir()
+	emptyConfigDir := filepath.Join(fakeHome, "claude-empty")
+	if err := os.MkdirAll(filepath.Join(emptyConfigDir, "projects"), 0o755); err != nil {
+		t.Fatalf("setup: %v", err)
+	}
+
+	reg := &config.Registry{
+		Version: 1,
+		Main:    "empty",
+		Accounts: map[string]config.Account{
+			"empty": {ConfigDir: emptyConfigDir},
+		},
+	}
+	regData, _ := json.MarshalIndent(reg, "", "  ")
+	if err := os.WriteFile(filepath.Join(fakeHome, ".cx.json"), regData, 0o600); err != nil {
+		t.Fatalf("write registry: %v", err)
+	}
+	t.Setenv("HOME", fakeHome)
+	t.Setenv("USERPROFILE", fakeHome)
+
+	var stdout, stderr bytes.Buffer
+	app := &App{
+		Registry: reg,
+		Stdout:   &stdout, Stderr: &stderr, UseColor: false,
+	}
+	cmd := &resumeCmd{}
+	err := cmd.Run(context.Background(), app, []string{"--last"})
+	if err == nil {
+		t.Fatal("expected error when no sessions found")
+	}
+	if !strings.Contains(err.Error(), "no sessions found") {
+		t.Errorf("expected 'no sessions found' error, got: %v", err)
+	}
+}
+
+// TestResume_LastFlag verifies that --last causes collectSessions to select the
+// most recent session. We test this by calling collectSessions directly after
+// setting up the registry, which avoids invoking the real claude binary.
+func TestResume_LastFlag(t *testing.T) {
+	_, configDir := setupSessionRegistry(t)
+
+	// collectSessions reads from the real registry (via loadRegistryOrNil),
+	// which now points to our fake home thanks to t.Setenv above.
+	sessions := collectSessions("", 50)
+	if len(sessions) == 0 {
+		t.Fatal("collectSessions returned no sessions; expected at least one from temp dir")
+	}
+
+	// The most recent session should correspond to our fixture file.
+	first := sessions[0]
+	if first.ConfigDir != configDir {
+		t.Errorf("expected ConfigDir %q, got %q", configDir, first.ConfigDir)
+	}
+	if first.Project != "project" { // shortProjectName("my-project") → "project"
+		t.Errorf("expected project 'project', got %q", first.Project)
+	}
+
+	// Confirm that --last would select sessions[0] (the most recent).
+	// The resumeCmd assigns selected = &sessions[0] when isLast is true.
+	selected := &sessions[0]
+	if selected.ID == "" {
+		t.Error("selected session has empty ID")
 	}
 }

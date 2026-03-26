@@ -16,32 +16,36 @@ import (
 	"github.com/Mike-7777777/cx/internal/platform"
 )
 
+// setupCmd implements Runner for the "setup" subcommand.
+type setupCmd struct{}
+
 //go:embed skill/cx.md
 var skillFS embed.FS
 
-func runSetup() {
+// Run performs interactive first-time setup: account registration, shell
+// wrapper installation, statusline configuration, and health check.
+func (c *setupCmd) Run(_ context.Context, app *App, _ []string) error {
+	w := app.Stderr
 	reader := bufio.NewReader(os.Stdin)
-	fmt.Fprintln(os.Stderr, "[cx] Interactive setup")
-	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(w, "[cx] Interactive setup")
+	fmt.Fprintln(w)
 
 	// Step 1: Detect and register main account.
 	mainDir, err := config.DetectConfigDir()
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "[cx] Cannot detect main Claude Code config: %v\n", err)
-		fmt.Fprintln(os.Stderr, "  Make sure Claude Code is installed and you've logged in at least once.")
-		os.Exit(1)
+		fmt.Fprintf(w, "[cx] Cannot detect main Claude Code config: %v\n", err)
+		fmt.Fprintln(w, "  Make sure Claude Code is installed and you've logged in at least once.")
+		return fmt.Errorf("cannot detect main config: %w", err)
 	}
 
 	regPath, err := config.RegistryPath()
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "[cx] %v\n", err)
-		os.Exit(1)
+		return fmt.Errorf("registry path: %w", err)
 	}
 
 	reg, err := config.LoadOrCreateRegistry(regPath)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "[cx] %v\n", err)
-		os.Exit(1)
+		return fmt.Errorf("loading registry: %w", err)
 	}
 
 	// Ask for main account name.
@@ -49,34 +53,31 @@ func runSetup() {
 	if defaultMain == "" {
 		defaultMain = "main"
 	}
-	fmt.Fprintf(os.Stderr, "  Main account detected: %s\n", mainDir)
-	fmt.Fprintf(os.Stderr, "  Name for main account [%s]: ", defaultMain)
+	fmt.Fprintf(w, "  Main account detected: %s\n", mainDir)
+	fmt.Fprintf(w, "  Name for main account [%s]: ", defaultMain)
 	mainName := readLine(reader)
 	if mainName == "" {
 		mainName = defaultMain
 	}
 	if !validAccountName.MatchString(mainName) {
-		fmt.Fprintf(os.Stderr, "[cx] invalid name %q\n", mainName)
-		os.Exit(1)
+		return fmt.Errorf("invalid name %q", mainName)
 	}
 
 	reg.Main = mainName
 	reg.AddAccount(mainName, "")
 	if err := reg.Save(); err != nil {
-		fmt.Fprintf(os.Stderr, "[cx] saving registry: %v\n", err)
-		os.Exit(1)
+		return fmt.Errorf("saving registry: %w", err)
 	}
-	fmt.Fprintf(os.Stderr, "  Registered main account %q\n\n", mainName)
+	fmt.Fprintf(w, "  Registered main account %q\n\n", mainName)
 
 	// Step 2: Create secondary accounts.
-	fmt.Fprint(os.Stderr, "  How many additional accounts? [0]: ")
+	fmt.Fprint(w, "  How many additional accounts? [0]: ")
 	countStr := readLine(reader)
 	count := 0
 	if countStr != "" {
 		for _, c := range countStr {
 			if c < '0' || c > '9' {
-				fmt.Fprintln(os.Stderr, "[cx] invalid number")
-				os.Exit(1)
+				return fmt.Errorf("invalid number %q", countStr)
 			}
 			count = count*10 + int(c-'0')
 		}
@@ -85,14 +86,14 @@ func runSetup() {
 	home, _ := os.UserHomeDir()
 
 	for i := 0; i < count; i++ {
-		fmt.Fprintf(os.Stderr, "\n  Account %d name: ", i+1)
+		fmt.Fprintf(w, "\n  Account %d name: ", i+1)
 		name := readLine(reader)
 		if name == "" {
-			fmt.Fprintln(os.Stderr, "  skipped (empty name)")
+			fmt.Fprintln(w, "  skipped (empty name)")
 			continue
 		}
 		if !validAccountName.MatchString(name) {
-			fmt.Fprintf(os.Stderr, "  invalid name %q, skipping\n", name)
+			fmt.Fprintf(w, "  invalid name %q, skipping\n", name)
 			continue
 		}
 
@@ -101,20 +102,20 @@ func runSetup() {
 		// Check if already exists.
 		if _, statErr := os.Stat(targetDir); statErr == nil {
 			if _, exists := reg.Accounts[name]; exists {
-				fmt.Fprintf(os.Stderr, "  %q already exists, skipping init\n", name)
+				fmt.Fprintf(w, "  %q already exists, skipping init\n", name)
 			} else {
 				// Directory exists but not registered.
 				reg.AddAccount(name, targetDir)
 				if err := reg.Save(); err != nil {
-					fmt.Fprintf(os.Stderr, "  warning: saving registry: %v\n", err)
+					fmt.Fprintf(w, "  warning: saving registry: %v\n", err)
 				}
-				fmt.Fprintf(os.Stderr, "  %q already exists, registered\n", name)
+				fmt.Fprintf(w, "  %q already exists, registered\n", name)
 			}
 		} else {
 			// Create new account directory.
-			fmt.Fprintf(os.Stderr, "  Creating %s...\n", targetDir)
+			fmt.Fprintf(w, "  Creating %s...\n", targetDir)
 			if err := os.MkdirAll(targetDir, 0o700); err != nil {
-				fmt.Fprintf(os.Stderr, "  failed to create dir: %v\n", err)
+				fmt.Fprintf(w, "  failed to create dir: %v\n", err)
 				continue
 			}
 
@@ -128,42 +129,42 @@ func runSetup() {
 				_ = os.MkdirAll(filepath.Dir(dst), 0o700)
 				_ = os.RemoveAll(dst)
 				if linkErr := platform.CreateLink(dst, src); linkErr != nil {
-					fmt.Fprintf(os.Stderr, "  warning: linking %s: %v\n", rel, linkErr)
+					fmt.Fprintf(w, "  warning: linking %s: %v\n", rel, linkErr)
 				} else {
-					fmt.Fprintf(os.Stderr, "  linked %s\n", rel)
+					fmt.Fprintf(w, "  linked %s\n", rel)
 				}
 			}
 
 			// Sync config.
 			if err := syncFiles(mainDir, targetDir, true); err != nil {
-				fmt.Fprintf(os.Stderr, "  warning: syncing config: %v\n", err)
+				fmt.Fprintf(w, "  warning: syncing config: %v\n", err)
 			}
 
 			// Register.
 			reg.AddAccount(name, targetDir)
 			if err := reg.Save(); err != nil {
-				fmt.Fprintf(os.Stderr, "  warning: saving registry: %v\n", err)
+				fmt.Fprintf(w, "  warning: saving registry: %v\n", err)
 			}
-			fmt.Fprintf(os.Stderr, "  Registered %q\n", name)
+			fmt.Fprintf(w, "  Registered %q\n", name)
 		}
 
 		// Check credentials; login if needed.
 		status := checkCredentials(targetDir)
 		if status != credentialOK {
-			fmt.Fprintf(os.Stderr, "  Launching login for %q...\n", name)
+			fmt.Fprintf(w, "  Launching login for %q...\n", name)
 			if loginErr := launchLogin(targetDir); loginErr != nil {
-				fmt.Fprintf(os.Stderr, "  Login failed: %v (retry later with: cc login %s)\n", loginErr, name)
+				fmt.Fprintf(w, "  Login failed: %v (retry later with: cc login %s)\n", loginErr, name)
 			} else {
-				fmt.Fprintf(os.Stderr, "  Login successful for %q\n", name)
+				fmt.Fprintf(w, "  Login successful for %q\n", name)
 			}
 		} else {
-			fmt.Fprintf(os.Stderr, "  %q already has valid credentials\n", name)
+			fmt.Fprintf(w, "  %q already has valid credentials\n", name)
 		}
 	}
 
 	// Step 3: Install shell wrapper for all relevant shells.
-	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, "  Install 'cx' shell wrapper:")
+	fmt.Fprintln(w)
+	fmt.Fprintln(w, "  Install 'cx' shell wrapper:")
 
 	type shellOption struct {
 		shell  platform.Shell
@@ -197,79 +198,80 @@ func runSetup() {
 		if !opt.exists {
 			continue
 		}
-		fmt.Fprintf(os.Stderr, "    Install for %s? [Y/n]: ", opt.name)
+		fmt.Fprintf(w, "    Install for %s? [Y/n]: ", opt.name)
 		answer := readLine(reader)
 		if answer == "" || strings.ToLower(answer) == "y" {
 			if installed := installShellWrapper(opt.shell); installed {
-				fmt.Fprintf(os.Stderr, "    Installed for %s.\n", opt.name)
+				fmt.Fprintf(w, "    Installed for %s.\n", opt.name)
 			}
 		} else {
-			fmt.Fprintf(os.Stderr, "    Skipped %s.\n", opt.name)
+			fmt.Fprintf(w, "    Skipped %s.\n", opt.name)
 		}
 	}
-	fmt.Fprintln(os.Stderr, "  Restart your shell(s) to activate the wrapper.")
+	fmt.Fprintln(w, "  Restart your shell(s) to activate the wrapper.")
 
 	// Step 4: Ensure cx is in PATH (for non-interactive shells like CC's bash).
-	fmt.Fprintln(os.Stderr)
-	fmt.Fprintf(os.Stderr, "  Add cx to PATH (for Claude Code and non-interactive shells)? [Y/n]: ")
+	fmt.Fprintln(w)
+	fmt.Fprintf(w, "  Add cx to PATH (for Claude Code and non-interactive shells)? [Y/n]: ")
 	pathAnswer := readLine(reader)
 	if pathAnswer == "" || strings.ToLower(pathAnswer) == "y" {
 		ensureInPath()
 	} else {
-		fmt.Fprintln(os.Stderr, "  Skipped PATH installation.")
+		fmt.Fprintln(w, "  Skipped PATH installation.")
 	}
 
 	// Step 5: Configure CC statusline.
-	fmt.Fprintln(os.Stderr)
-	fmt.Fprintf(os.Stderr, "  Configure Claude Code statusline? [Y/n]: ")
+	fmt.Fprintln(w)
+	fmt.Fprintf(w, "  Configure Claude Code statusline? [Y/n]: ")
 	slAnswer := readLine(reader)
 	if slAnswer == "" || strings.ToLower(slAnswer) == "y" {
 		if configureStatusline(mainDir) {
-			fmt.Fprintln(os.Stderr, "  Statusline configured. cx will show rate limits in CC's status bar.")
+			fmt.Fprintln(w, "  Statusline configured. cx will show rate limits in CC's status bar.")
 		}
 	} else {
-		fmt.Fprintln(os.Stderr, "  Skipped statusline configuration.")
+		fmt.Fprintln(w, "  Skipped statusline configuration.")
 	}
 
 	// Step 6: Install Claude Code skill.
-	fmt.Fprintln(os.Stderr)
-	fmt.Fprintf(os.Stderr, "  Install Claude Code skill (enables /cx inside CC)? [Y/n]: ")
+	fmt.Fprintln(w)
+	fmt.Fprintf(w, "  Install Claude Code skill (enables /cx inside CC)? [Y/n]: ")
 	skillAnswer := readLine(reader)
 	if skillAnswer == "" || strings.ToLower(skillAnswer) == "y" {
 		if installSkill(mainDir) {
-			fmt.Fprintln(os.Stderr, "  Skill installed. Use /cx inside Claude Code to check status and usage.")
+			fmt.Fprintln(w, "  Skill installed. Use /cx inside Claude Code to check status and usage.")
 		}
 	} else {
-		fmt.Fprintln(os.Stderr, "  Skipped skill installation.")
+		fmt.Fprintln(w, "  Skipped skill installation.")
 	}
 
 	// Step 7: Health check.
-	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, "  Running health check...")
-	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(w)
+	fmt.Fprintln(w, "  Running health check...")
+	fmt.Fprintln(w)
 	// Build a temporary App to run the migrated doctor command.
 	if doctorApp, doctorErr := buildApp(); doctorErr == nil {
 		_ = (&doctorCmd{}).Run(context.Background(), doctorApp, nil)
 	}
 
 	// Step 8: Show usage.
-	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, "  Setup complete! Quick reference:")
-	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(w)
+	fmt.Fprintln(w, "  Setup complete! Quick reference:")
+	fmt.Fprintln(w)
 
 	// List registered accounts.
 	reg, _ = config.LoadOrCreateRegistry(regPath)
 	for name := range reg.Accounts {
 		if name == reg.Main {
-			fmt.Fprintf(os.Stderr, "    cx switch %s     — switch to main\n", name)
+			fmt.Fprintf(w, "    cx switch %s     — switch to main\n", name)
 		} else {
-			fmt.Fprintf(os.Stderr, "    cx switch %s     — switch to %s\n", name, name)
+			fmt.Fprintf(w, "    cx switch %s     — switch to %s\n", name, name)
 		}
 	}
-	fmt.Fprintln(os.Stderr, "    cx run       — auto-select best account")
-	fmt.Fprintln(os.Stderr, "    cx status     — see all accounts")
-	fmt.Fprintln(os.Stderr, "    cx dashboard  — live TUI dashboard")
-	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(w, "    cx run       — auto-select best account")
+	fmt.Fprintln(w, "    cx status     — see all accounts")
+	fmt.Fprintln(w, "    cx dashboard  — live TUI dashboard")
+	fmt.Fprintln(w)
+	return nil
 }
 
 // readLine reads a trimmed line from reader.

@@ -1,11 +1,12 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"math"
 	"os"
-	"os/signal"
 	"path/filepath"
 	"sort"
 	"strconv"
@@ -16,9 +17,11 @@ import (
 	"github.com/Mike-7777777/cx/internal/cache"
 	"github.com/Mike-7777777/cx/internal/config"
 	"github.com/Mike-7777777/cx/internal/format"
-	"github.com/Mike-7777777/cx/internal/platform"
 	"github.com/Mike-7777777/cx/internal/usage"
 )
+
+// dashboardCmd implements Runner for the "dashboard" subcommand.
+type dashboardCmd struct{}
 
 const (
 	defaultDashboardInterval = 5 * time.Second
@@ -40,56 +43,50 @@ type sessionInfo struct {
 	StartedAt time.Time
 }
 
-func runDashboard() {
+// Run starts the live TUI dashboard with periodic refresh.
+func (c *dashboardCmd) Run(ctx context.Context, app *App, args []string) error {
 	interval := defaultDashboardInterval
+	out := app.Stdout
 
 	// Parse --interval flag.
-	args := os.Args[2:]
 	for i := 0; i < len(args); i++ {
 		if args[i] == "--interval" {
 			if i+1 >= len(args) {
-				fmt.Fprintln(os.Stderr, "cx dashboard: --interval requires a value in seconds")
-				os.Exit(1)
+				return fmt.Errorf("--interval requires a value in seconds")
 			}
 			i++
 			n, err := strconv.Atoi(args[i])
 			if err != nil || n < 1 {
-				fmt.Fprintf(os.Stderr, "cx dashboard: --interval must be a positive integer, got %q\n", args[i])
-				os.Exit(1)
+				return fmt.Errorf("--interval must be a positive integer, got %q", args[i])
 			}
 			interval = time.Duration(n) * time.Second
 		} else {
-			fmt.Fprintf(os.Stderr, "cx dashboard: unknown flag %q\n", args[i])
-			os.Exit(1)
+			return fmt.Errorf("unknown flag %q", args[i])
 		}
 	}
 
-	// Handle Ctrl+C / SIGTERM for clean shutdown.
-	quit := make(chan os.Signal, 1)
-	signal.Notify(quit, os.Interrupt, syscall.SIGTERM)
-
-	useColor := platform.ANSIEnabled()
+	useColor := app.UseColor
 
 	// Initial render.
-	renderDashboard(useColor, interval)
+	renderDashboard(out, useColor, interval)
 
 	ticker := time.NewTicker(interval)
 	defer ticker.Stop()
 
 	for {
 		select {
-		case <-quit:
+		case <-ctx.Done():
 			// Restore terminal: show cursor, reset colors.
-			fmt.Print("\033[?25h" + format.Reset)
-			return
+			fmt.Fprint(out, "\033[?25h"+format.Reset)
+			return nil
 		case <-ticker.C:
-			renderDashboard(useColor, interval)
+			renderDashboard(out, useColor, interval)
 		}
 	}
 }
 
 // renderDashboard clears the screen and draws the full dashboard frame.
-func renderDashboard(useColor bool, interval time.Duration) {
+func renderDashboard(out io.Writer, useColor bool, interval time.Duration) {
 	var b strings.Builder
 
 	// Clear screen and move cursor to top-left. Hide cursor during redraw.
@@ -127,7 +124,7 @@ func renderDashboard(useColor bool, interval time.Duration) {
 	// Bottom border.
 	b.WriteString(boxBottom())
 
-	fmt.Print(b.String())
+	fmt.Fprint(out, b.String())
 }
 
 // ---------- ACCOUNTS SECTION ----------

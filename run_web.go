@@ -6,14 +6,11 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
-	"os"
 	"os/exec"
-	"os/signal"
 	"path/filepath"
 	"runtime"
 	"sort"
 	"strings"
-	"syscall"
 	"time"
 
 	"github.com/Mike-7777777/cx/internal/cache"
@@ -22,83 +19,83 @@ import (
 	"github.com/Mike-7777777/cx/internal/usage"
 )
 
+// webCmd implements Runner for the "web" subcommand.
+type webCmd struct{}
+
 const webStaleThreshold = 10 * time.Minute
 
 //go:embed web/index.html
 var webFS embed.FS
 
-func runWeb() {
+// Run starts the browser dashboard HTTP server.
+func (c *webCmd) Run(ctx context.Context, app *App, args []string) error {
+	w := app.Stderr
 	port := 8099
 	noOpen := false
 
-	args := os.Args[2:]
 	for i := 0; i < len(args); i++ {
 		switch args[i] {
 		case "--port":
 			if i+1 >= len(args) {
-				fmt.Fprintln(os.Stderr, "cx web: --port requires a value")
-				os.Exit(1)
+				return fmt.Errorf("--port requires a value")
 			}
 			i++
 			n := 0
-			for _, c := range args[i] {
-				if c < '0' || c > '9' {
-					fmt.Fprintf(os.Stderr, "cx web: invalid port %q\n", args[i])
-					os.Exit(1)
+			for _, ch := range args[i] {
+				if ch < '0' || ch > '9' {
+					return fmt.Errorf("invalid port %q", args[i])
 				}
-				n = n*10 + int(c-'0')
+				n = n*10 + int(ch-'0')
 			}
 			port = n
 		case "--no-open":
 			noOpen = true
 		default:
-			fmt.Fprintf(os.Stderr, "cx web: unknown flag %q\n", args[i])
-			os.Exit(1)
+			return fmt.Errorf("unknown flag %q", args[i])
 		}
 	}
 
 	// Load registry once at server start (it doesn't change during a web session).
 	reg, configDirs, err := loadWebRegistry()
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "cx web: %v\n", err)
-		os.Exit(1)
+		return err
 	}
 
 	mux := http.NewServeMux()
 
 	// Serve embedded HTML.
-	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("/", func(hw http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != "/" {
-			http.NotFound(w, r)
+			http.NotFound(hw, r)
 			return
 		}
 		data, err := webFS.ReadFile("web/index.html")
 		if err != nil {
-			http.Error(w, "internal error", http.StatusInternalServerError)
+			http.Error(hw, "internal error", http.StatusInternalServerError)
 			return
 		}
-		w.Header().Set("Content-Type", "text/html; charset=utf-8")
-		w.Write(data) // Best effort; client may have disconnected.
+		hw.Header().Set("Content-Type", "text/html; charset=utf-8")
+		hw.Write(data) // Best effort; client may have disconnected.
 	})
 
 	// API endpoints (registry and config dirs are captured by closure).
-	mux.HandleFunc("/api/status", func(w http.ResponseWriter, r *http.Request) {
-		handleAPIStatus(w, r, reg)
+	mux.HandleFunc("/api/status", func(hw http.ResponseWriter, r *http.Request) {
+		handleAPIStatus(hw, r, reg)
 	})
-	mux.HandleFunc("/api/daily", func(w http.ResponseWriter, r *http.Request) {
-		handleAPIDaily(w, r, configDirs)
+	mux.HandleFunc("/api/daily", func(hw http.ResponseWriter, r *http.Request) {
+		handleAPIDaily(hw, r, configDirs)
 	})
-	mux.HandleFunc("/api/weekly", func(w http.ResponseWriter, r *http.Request) {
-		handleAPIWeekly(w, r, configDirs)
+	mux.HandleFunc("/api/weekly", func(hw http.ResponseWriter, r *http.Request) {
+		handleAPIWeekly(hw, r, configDirs)
 	})
-	mux.HandleFunc("/api/monthly", func(w http.ResponseWriter, r *http.Request) {
-		handleAPIMonthly(w, r, configDirs)
+	mux.HandleFunc("/api/monthly", func(hw http.ResponseWriter, r *http.Request) {
+		handleAPIMonthly(hw, r, configDirs)
 	})
-	mux.HandleFunc("/api/sessions", func(w http.ResponseWriter, r *http.Request) {
-		handleAPISessions(w, r, configDirs)
+	mux.HandleFunc("/api/sessions", func(hw http.ResponseWriter, r *http.Request) {
+		handleAPISessions(hw, r, configDirs)
 	})
-	mux.HandleFunc("/api/roi", func(w http.ResponseWriter, r *http.Request) {
-		handleAPIROI(w, r, configDirs)
+	mux.HandleFunc("/api/roi", func(hw http.ResponseWriter, r *http.Request) {
+		handleAPIROI(hw, r, configDirs)
 	})
 
 	addr := fmt.Sprintf("127.0.0.1:%d", port)
@@ -113,32 +110,28 @@ func runWeb() {
 		Handler: mux,
 	}
 
-	// Use signal.NotifyContext for graceful shutdown on SIGINT/SIGTERM.
-	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
-	defer stop()
-
 	// Start the server in a goroutine.
 	errCh := make(chan error, 1)
 	go func() {
 		errCh <- srv.ListenAndServe()
 	}()
 
-	fmt.Fprintf(os.Stderr, "Dashboard: %s (Ctrl+C to stop)\n", url)
+	fmt.Fprintf(w, "Dashboard: %s (Ctrl+C to stop)\n", url)
 
 	select {
 	case <-ctx.Done():
-		fmt.Fprintln(os.Stderr, "shutting down...")
+		fmt.Fprintln(w, "shutting down...")
 		shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		if err := srv.Shutdown(shutdownCtx); err != nil {
-			fmt.Fprintf(os.Stderr, "cx web: shutdown error: %v\n", err)
+			fmt.Fprintf(w, "shutdown error: %v\n", err)
 		}
 		cancel()
 	case err := <-errCh:
 		if err != nil && err != http.ErrServerClosed {
-			fmt.Fprintf(os.Stderr, "cx web: %v\n", err)
-			os.Exit(1)
+			return err
 		}
 	}
+	return nil
 }
 
 // openBrowser launches the default browser for the given URL.

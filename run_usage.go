@@ -1,7 +1,9 @@
 package main
 
 import (
+	"context"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"sort"
@@ -10,9 +12,11 @@ import (
 	"time"
 
 	"github.com/Mike-7777777/cx/internal/config"
-	"github.com/Mike-7777777/cx/internal/platform"
 	"github.com/Mike-7777777/cx/internal/usage"
 )
+
+// usageCmd implements Runner for the "usage" subcommand.
+type usageCmd struct{}
 
 // usageCacheFilename is the name of the incremental cache file stored in the
 // user's config directory (next to the registry).
@@ -33,7 +37,11 @@ func totalSubscriptionCost() float64 {
 	return total
 }
 
-func runUsage() {
+// Run performs usage analysis in the requested mode and outputs to app.Stdout.
+func (c *usageCmd) Run(_ context.Context, app *App, args []string) error {
+	out := app.Stdout
+	w := app.Stderr
+
 	usage.CheckPricingStaleness()
 
 	// Parse subcommand: cx usage [daily|session|blocks|monthly|weekly|messages] [flags]
@@ -51,7 +59,6 @@ func runUsage() {
 	var limit int
 	outputFormat := "table" // table, json, csv, md
 
-	args := os.Args[2:]
 	flagStart := 0
 
 	// First positional arg is mode if it doesn't start with "--".
@@ -61,8 +68,7 @@ func runUsage() {
 			mode = args[0]
 			flagStart = 1
 		default:
-			fmt.Fprintf(os.Stderr, "cx usage: unknown mode %q (expected daily, session, blocks, monthly, weekly, messages)\n", args[0])
-			os.Exit(1)
+			return fmt.Errorf("unknown mode %q (expected daily, session, blocks, monthly, weekly, messages)", args[0])
 		}
 	}
 
@@ -73,16 +79,14 @@ func runUsage() {
 			outputFormat = "json"
 		case "--format":
 			if i+1 >= len(args) {
-				fmt.Fprintln(os.Stderr, "cx usage: --format requires a value (table, json, csv, md)")
-				os.Exit(1)
+				return fmt.Errorf("--format requires a value (table, json, csv, md)")
 			}
 			i++
 			switch args[i] {
 			case "table", "json", "csv", "md":
 				outputFormat = args[i]
 			default:
-				fmt.Fprintf(os.Stderr, "cx usage: unknown format %q (expected table, json, csv, md)\n", args[i])
-				os.Exit(1)
+				return fmt.Errorf("unknown format %q (expected table, json, csv, md)", args[i])
 			}
 		case "--breakdown":
 			breakdown = true
@@ -96,20 +100,17 @@ func runUsage() {
 			subagents = true
 		case "--limit":
 			if i+1 >= len(args) {
-				fmt.Fprintln(os.Stderr, "cx usage: --limit requires a numeric value")
-				os.Exit(1)
+				return fmt.Errorf("--limit requires a numeric value")
 			}
 			i++
 			n, err := strconv.Atoi(args[i])
 			if err != nil || n < 1 {
-				fmt.Fprintf(os.Stderr, "cx usage: --limit must be a positive integer, got %q\n", args[i])
-				os.Exit(1)
+				return fmt.Errorf("--limit must be a positive integer, got %q", args[i])
 			}
 			limit = n
 		case "--account":
 			if i+1 >= len(args) {
-				fmt.Fprintln(os.Stderr, "cx usage: --account requires a value")
-				os.Exit(1)
+				return fmt.Errorf("--account requires a value")
 			}
 			i++
 			accountName = args[i]
@@ -119,16 +120,14 @@ func runUsage() {
 			allTools = true
 		case "--since":
 			if i+1 >= len(args) {
-				fmt.Fprintln(os.Stderr, "cx usage: --since requires a YYYY-MM-DD value")
-				os.Exit(1)
+				return fmt.Errorf("--since requires a YYYY-MM-DD value")
 			}
 			i++
 			sinceStr = args[i]
 		case "--no-cache":
 			noCache = true
 		default:
-			fmt.Fprintf(os.Stderr, "cx usage: unknown flag %q\n", args[i])
-			os.Exit(1)
+			return fmt.Errorf("unknown flag %q", args[i])
 		}
 	}
 
@@ -137,8 +136,7 @@ func runUsage() {
 	if sinceStr != "" {
 		t, err := time.Parse("2006-01-02", sinceStr)
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "cx usage: invalid --since date %q: %v\n", sinceStr, err)
-			os.Exit(1)
+			return fmt.Errorf("invalid --since date %q: %v", sinceStr, err)
 		}
 		sinceTime = t
 	}
@@ -148,8 +146,7 @@ func runUsage() {
 	// Determine which config directories to scan.
 	configDirs, err := resolveConfigDirs(accountName, scanAll)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "cx usage: %v\n", err)
-		os.Exit(1)
+		return err
 	}
 
 	// Resolve cache file path (next to the registry, in home dir).
@@ -158,8 +155,7 @@ func runUsage() {
 	// Daily mode with caching (only when format is table/json and no breakdown/project/compare/subagent needed).
 	// --all-tools bypasses the cache because other CLIs are not tracked there.
 	if mode == "daily" && !noCache && !allTools && !breakdown && !byProject && !compare && !subagents && outputFormat != "csv" && outputFormat != "md" {
-		runUsageDailyCached(configDirs, cachePath, sinceTime, outputFormat, showROI)
-		return
+		return doUsageDailyCached(out, w, configDirs, cachePath, sinceTime, outputFormat, showROI, app.UseColor)
 	}
 
 	// All other modes require full scan for individual Entry structs.
@@ -168,20 +164,19 @@ func runUsage() {
 		// --all-tools: scan the main config dir plus all other CLI tool dirs.
 		mainDir, err := config.DetectConfigDir()
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "cx usage: detecting main config dir: %v\n", err)
-			os.Exit(1)
+			return fmt.Errorf("detecting main config dir: %w", err)
 		}
 		if err := usage.ScanAllCLIs(mainDir, func(e usage.Entry) {
 			entries = append(entries, e)
 		}); err != nil {
-			fmt.Fprintf(os.Stderr, "cx usage: scanning all CLIs: %v\n", err)
+			fmt.Fprintf(w, "scanning all CLIs: %v\n", err)
 		}
 	} else {
 		for _, dir := range configDirs {
 			if err := usage.ScanDir(dir, func(e usage.Entry) {
 				entries = append(entries, e)
 			}); err != nil {
-				fmt.Fprintf(os.Stderr, "cx usage: scanning %s: %v\n", dir, err)
+				fmt.Fprintf(w, "scanning %s: %v\n", dir, err)
 			}
 		}
 	}
@@ -201,49 +196,49 @@ func runUsage() {
 	}
 
 	if len(entries) == 0 && !compare {
-		fmt.Fprintln(os.Stderr, "cx usage: no usage entries found")
-		os.Exit(0)
+		fmt.Fprintln(w, "no usage entries found")
+		return nil
 	}
 
 	// Color is disabled for machine-readable output or when terminal doesn't support it.
-	useColor := outputFormat == "table" && !isJSON && platform.ANSIEnabled()
+	useColor := outputFormat == "table" && !isJSON && app.UseColor
 
 	switch mode {
 	case "daily":
 		if byProject {
 			reports := usage.AggregateByProject(entries)
 			if isJSON {
-				printJSON(reports)
+				fprintJSON(out, w, reports)
 			} else {
-				fmt.Print(usage.FormatProjectTable(reports, useColor))
+				fmt.Fprint(out, usage.FormatProjectTable(reports, useColor))
 			}
 		} else if compare {
 			pairs := usage.AggregateTrend(allEntries, sinceTime)
 			if isJSON {
-				printJSON(pairs)
+				fprintJSON(out, w, pairs)
 			} else {
-				fmt.Print(usage.FormatTrendTable(pairs, useColor))
+				fmt.Fprint(out, usage.FormatTrendTable(pairs, useColor))
 			}
 		} else {
 			reports := usage.AggregateDailies(entries)
-			outputDailyReports(reports, outputFormat, useColor, breakdown, showROI)
+			outputDailyReports(out, reports, outputFormat, useColor, breakdown, showROI)
 		}
 
 		if subagents {
 			bd := usage.AggregateSubagents(entries)
 			if isJSON {
-				printJSON(bd)
+				fprintJSON(out, w, bd)
 			} else {
-				fmt.Print(usage.FormatSubagentBreakdown(bd, useColor))
+				fmt.Fprint(out, usage.FormatSubagentBreakdown(bd, useColor))
 			}
 		}
 
 		if allTools {
 			toolReports := usage.AggregateByCLITool(entries)
 			if isJSON {
-				printJSON(toolReports)
+				fprintJSON(out, w, toolReports)
 			} else {
-				fmt.Print(usage.FormatCLIToolTable(toolReports, useColor))
+				fmt.Fprint(out, usage.FormatCLIToolTable(toolReports, useColor))
 			}
 		}
 
@@ -263,102 +258,104 @@ func runUsage() {
 		entries = entries[:msgLimit]
 
 		if isJSON {
-			printJSON(entries)
+			fprintJSON(out, w, entries)
 		} else {
-			fmt.Print(usage.FormatMessagesTable(entries, useColor))
+			fmt.Fprint(out, usage.FormatMessagesTable(entries, useColor))
 		}
 
 	case "monthly":
 		reports := usage.AggregateMonthly(entries)
 		if isJSON {
-			printJSON(reports)
+			fprintJSON(out, w, reports)
 		} else {
-			fmt.Print(usage.FormatMonthlyTable(reports, useColor))
+			fmt.Fprint(out, usage.FormatMonthlyTable(reports, useColor))
 		}
 		if showROI {
 			totalCost := sumMonthlyReportsCost(reports)
-			fmt.Print(usage.FormatROI(totalCost, totalSubscriptionCost(), useColor))
+			fmt.Fprint(out, usage.FormatROI(totalCost, totalSubscriptionCost(), useColor))
 		}
 
 	case "weekly":
 		reports := usage.AggregateWeekly(entries)
 		if isJSON {
-			printJSON(reports)
+			fprintJSON(out, w, reports)
 		} else {
-			fmt.Print(usage.FormatWeeklyTable(reports, useColor))
+			fmt.Fprint(out, usage.FormatWeeklyTable(reports, useColor))
 		}
 		if showROI {
 			totalCost := sumWeeklyReportsCost(reports)
-			fmt.Print(usage.FormatROI(totalCost, totalSubscriptionCost(), useColor))
+			fmt.Fprint(out, usage.FormatROI(totalCost, totalSubscriptionCost(), useColor))
 		}
 
 	case "session":
 		reports := usage.AggregateSessions(entries)
 		if isJSON {
-			printJSON(reports)
+			fprintJSON(out, w, reports)
 		} else {
-			fmt.Print(usage.FormatSessionTable(reports, useColor))
+			fmt.Fprint(out, usage.FormatSessionTable(reports, useColor))
 		}
 
 	case "blocks":
 		reports := usage.AggregateBlocks(entries)
 		if isJSON {
-			printJSON(reports)
+			fprintJSON(out, w, reports)
 		} else {
-			fmt.Print(usage.FormatBlockTable(reports, useColor))
+			fmt.Fprint(out, usage.FormatBlockTable(reports, useColor))
 		}
 	}
+	return nil
 }
 
 // outputDailyReports handles rendering daily reports in all supported formats.
-func outputDailyReports(reports []usage.DailyReport, outputFormat string, useColor, breakdown, showROI bool) {
+func outputDailyReports(out io.Writer, reports []usage.DailyReport, outputFormat string, useColor, breakdown, showROI bool) {
 	switch outputFormat {
 	case "json":
-		printJSON(reports)
+		s, _ := usage.FormatJSON(reports)
+		fmt.Fprintln(out, s)
 	case "csv":
-		fmt.Print(usage.FormatDailyCSV(reports))
+		fmt.Fprint(out, usage.FormatDailyCSV(reports))
 	case "md":
-		fmt.Print(usage.FormatDailyMarkdown(reports))
+		fmt.Fprint(out, usage.FormatDailyMarkdown(reports))
 	default: // "table"
 		if breakdown {
-			fmt.Print(usage.FormatDailyTableWithBreakdown(reports, useColor))
+			fmt.Fprint(out, usage.FormatDailyTableWithBreakdown(reports, useColor))
 		} else {
-			fmt.Print(usage.FormatDailyTable(reports, useColor))
+			fmt.Fprint(out, usage.FormatDailyTable(reports, useColor))
 		}
 	}
 
 	if showROI {
 		totalCost := sumDailyReportsCost(reports)
-		fmt.Print(usage.FormatROI(totalCost, totalSubscriptionCost(), useColor))
+		fmt.Fprint(out, usage.FormatROI(totalCost, totalSubscriptionCost(), useColor))
 	}
 }
 
-// runUsageDailyCached implements the fully incremental daily report path.
+// doUsageDailyCached implements the fully incremental daily report path.
 // It loads the cache, scans only changed files, merges new entries into the
 // cached daily map, saves the cache, and outputs the report.
-func runUsageDailyCached(configDirs []string, cachePath string, sinceTime time.Time, outputFormat string, showROI bool) {
-	cache, err := usage.LoadUsageCache(cachePath)
+func doUsageDailyCached(out, w io.Writer, configDirs []string, cachePath string, sinceTime time.Time, outputFormat string, showROI bool, appUseColor bool) error {
+	uc, err := usage.LoadUsageCache(cachePath)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "cx usage: loading cache: %v\n", err)
+		fmt.Fprintf(w, "loading cache: %v\n", err)
 	}
 
 	// Scan changed files and merge entries into the daily cache.
 	for _, dir := range configDirs {
-		if err := usage.ScanDirCached(dir, cache, func(e usage.Entry) {
+		if err := usage.ScanDirCached(dir, uc, func(e usage.Entry) {
 			dateKey := e.Timestamp.UTC().Format("2006-01-02")
-			cache.MergeDailyEntry(dateKey, e)
+			uc.MergeDailyEntry(dateKey, e)
 		}); err != nil {
-			fmt.Fprintf(os.Stderr, "cx usage: scanning %s: %v\n", dir, err)
+			fmt.Fprintf(w, "scanning %s: %v\n", dir, err)
 		}
 	}
 
 	// Save the updated cache.
-	if err := cache.Save(); err != nil {
-		fmt.Fprintf(os.Stderr, "cx usage: saving cache: %v\n", err)
+	if err := uc.Save(); err != nil {
+		fmt.Fprintf(w, "saving cache: %v\n", err)
 	}
 
 	// Convert cached daily map to reports.
-	reports := cache.DailyReports()
+	reports := uc.DailyReports()
 
 	// Apply --since filter.
 	if !sinceTime.IsZero() {
@@ -378,23 +375,24 @@ func runUsageDailyCached(configDirs []string, cachePath string, sinceTime time.T
 	})
 
 	if len(reports) == 0 {
-		fmt.Fprintln(os.Stderr, "cx usage: no usage entries found")
-		os.Exit(0)
+		fmt.Fprintln(w, "no usage entries found")
+		return nil
 	}
 
 	isJSON := outputFormat == "json"
-	useColor := !isJSON && platform.ANSIEnabled()
+	useColor := !isJSON && appUseColor
 
 	if isJSON {
-		printJSON(reports)
+		fprintJSON(out, w, reports)
 	} else {
-		fmt.Print(usage.FormatDailyTable(reports, useColor))
+		fmt.Fprint(out, usage.FormatDailyTable(reports, useColor))
 	}
 
 	if showROI {
 		totalCost := sumDailyReportsCost(reports)
-		fmt.Print(usage.FormatROI(totalCost, totalSubscriptionCost(), useColor))
+		fmt.Fprint(out, usage.FormatROI(totalCost, totalSubscriptionCost(), useColor))
 	}
+	return nil
 }
 
 // sumDailyReportsCost sums up the total API cost across all daily reports.
@@ -498,12 +496,12 @@ func registryAccountDir(name string) ([]string, error) {
 	return []string{dir}, nil
 }
 
-// printJSON marshals the data as indented JSON and prints to stdout.
-func printJSON(v any) {
-	out, err := usage.FormatJSON(v)
+// fprintJSON marshals the data as indented JSON and writes to out.
+func fprintJSON(out, w io.Writer, v any) {
+	s, err := usage.FormatJSON(v)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "cx usage: %v\n", err)
-		os.Exit(1)
+		fmt.Fprintf(w, "json marshal: %v\n", err)
+		return
 	}
-	fmt.Println(out)
+	fmt.Fprintln(out, s)
 }

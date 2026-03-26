@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"context"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -16,6 +17,9 @@ import (
 	"github.com/Mike-7777777/cx/internal/platform"
 	"github.com/natefinch/atomic"
 )
+
+// runCmd implements Runner for the "run" subcommand.
+type runCmd struct{}
 
 const (
 	preferThreshold  = 80.0 // --prefer: fall back if 5h usage >= this
@@ -59,8 +63,10 @@ func smartScore(usagePct float64, timeToReset time.Duration) float64 {
 	return usagePct * resetFraction
 }
 
-func runRun() {
-	args := os.Args[2:] // everything after "run"
+// Run auto-selects the best account by smart routing and launches claude.
+func (c *runCmd) Run(_ context.Context, app *App, args []string) error {
+	w := app.Stderr
+	reg := app.Registry
 
 	// Parse flags that belong to cx; the rest goes to claude.
 	var preferName string
@@ -71,8 +77,8 @@ func runRun() {
 	for i := 0; i < len(args); i++ {
 		switch {
 		case args[i] == "--help" || args[i] == "-h":
-			printRunHelp()
-			return
+			fmt.Fprint(app.Stdout, runHelpText)
+			return nil
 		case args[i] == "--prefer" && i+1 < len(args):
 			preferName = args[i+1]
 			i++ // skip the value
@@ -97,29 +103,15 @@ func runRun() {
 		claudeArgs = append(claudeArgs, "--dangerously-skip-permissions")
 	}
 
-	// Load registry.
-	regPath, err := config.RegistryPath()
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "[cx] %v\n", err)
-		os.Exit(1)
-	}
-
-	reg, err := config.LoadOrCreateRegistry(regPath)
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "[cx] %v\n", err)
-		os.Exit(1)
-	}
-
 	if len(reg.Accounts) == 0 {
-		fmt.Fprintln(os.Stderr, "[cx] No accounts configured. Run: cx init <name>")
-		os.Exit(1)
+		return fmt.Errorf("no accounts configured. Run: cx init <name>")
 	}
 
 	// Score all accounts by smart routing (usage + time-to-reset).
 	// Accounts without rate-cache data get 0% usage (treated as fully available).
 	scores := scoreAccounts(reg)
 	if len(scores) == 0 {
-		fmt.Fprintln(os.Stderr, "[cx] No accounts with rate data; picking first account")
+		fmt.Fprintln(w, "[cx] No accounts with rate data; picking first account")
 	}
 	// Ensure ALL registered accounts are in the list (with 0% if no data).
 	scores = ensureAllAccounts(reg, scores)
@@ -138,11 +130,11 @@ func runRun() {
 	}
 
 	if selected.timeToReset > 0 {
-		fmt.Fprintf(os.Stderr, "[cx] Auto-selected: %s (5h: %.0f%%, resets in %s) %s\n",
+		fmt.Fprintf(w, "[cx] Auto-selected: %s (5h: %.0f%%, resets in %s) %s\n",
 			selected.name, selected.fiveHPct,
 			format.FormatDuration(selected.timeToReset), reason)
 	} else {
-		fmt.Fprintf(os.Stderr, "[cx] Auto-selected: %s (5h: %.0f%%) %s\n",
+		fmt.Fprintf(w, "[cx] Auto-selected: %s (5h: %.0f%%) %s\n",
 			selected.name, selected.fiveHPct, reason)
 	}
 
@@ -154,19 +146,18 @@ func runRun() {
 	// tools from calling their OAuth endpoints). CC handles refresh internally.
 	status := checkCredentials(selected.dir)
 	if status != credentialOK {
-		fmt.Fprintf(os.Stderr, "[cx] %s for %q — launching login...\n",
+		fmt.Fprintf(w, "[cx] %s for %q — launching login...\n",
 			credentialMessage(status), selected.name)
 		if err := launchLogin(selected.dir); err != nil {
-			fmt.Fprintf(os.Stderr, "[cx] login failed: %v\n", err)
-			os.Exit(1)
+			return fmt.Errorf("login failed: %w", err)
 		}
 	}
 
 	// Exec into claude.
 	if err := platform.ExecProgram("claude", claudeArgs, env); err != nil {
-		fmt.Fprintf(os.Stderr, "[cx] failed to exec claude: %v\n", err)
-		os.Exit(1)
+		return fmt.Errorf("failed to exec claude: %w", err)
 	}
+	return nil
 }
 
 // scoreAccounts reads the rate-cache for each account and returns scored entries
@@ -337,8 +328,7 @@ func replaceOrAppendEnv(env []string, key, value string) []string {
 	return append(env, prefix+value)
 }
 
-func printRunHelp() {
-	fmt.Print(`cx run — auto-select best account and launch claude
+const runHelpText = `cx run — auto-select best account and launch claude
 
 Usage:
   cx run [options] [-- claude-args...]
@@ -355,5 +345,4 @@ Examples:
   cx run --prefer work      # prefer "work", fall back if hot
   cx run --balance          # alternate between accounts
   cx run -- -p "fix bug"   # pass args to claude after --
-`)
-}
+`

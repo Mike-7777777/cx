@@ -123,16 +123,3 @@ func (c *initCmd) Run(_ context.Context, app *App, args []string) error {
 
 	return nil
 }
-
-// hasFlagFrom reports whether flag appears verbatim in os.Args[start:].
-func hasFlagFrom(flag string, start int) bool {
-	if len(os.Args) <= start {
-		return false
-	}
-	for _, arg := range os.Args[start:] {
-		if arg == flag {
-			return true
-		}
-	}
-	return false
-}

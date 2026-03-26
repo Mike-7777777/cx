@@ -1,13 +1,10 @@
 package cache
 
 import (
-	"bytes"
 	"encoding/json"
 	"errors"
 	"os"
 	"time"
-
-	"github.com/natefinch/atomic"
 )
 
 // Window represents a single rate-limit window with usage and reset metadata.
@@ -49,13 +46,16 @@ func (rc *RateCache) Age() time.Duration {
 	return time.Since(time.Unix(rc.UpdatedAt, 0))
 }
 
-// WriteRateCache serialises rc to path atomically (write-to-temp + rename).
+// WriteRateCache serialises rc to path using direct write.
+// The file is small (<512B) so OS-level write is effectively atomic.
+// If a concurrent reader sees a partial write, ReadRateCache treats
+// corrupt JSON as absent (returns nil) and the next write fixes it.
 func WriteRateCache(path string, rc *RateCache) error {
 	data, err := json.Marshal(rc)
 	if err != nil {
 		return err
 	}
-	return atomic.WriteFile(path, bytes.NewReader(data))
+	return os.WriteFile(path, data, 0o644)
 }
 
 // ReadRateCache reads and deserialises the cache at path.

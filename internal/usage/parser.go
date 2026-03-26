@@ -100,6 +100,13 @@ func parseLine(line []byte, fn func(Entry)) {
 		return
 	}
 
+	// Skip synthetic entries — CC uses "<synthetic>" as a placeholder model
+	// for API error responses (500s, timeouts). These have zero tokens and
+	// add noise to model breakdowns.
+	if strings.HasPrefix(je.Message.Model, "<") {
+		return
+	}
+
 	ts, err := time.Parse(time.RFC3339Nano, je.Timestamp)
 	if err != nil {
 		return

@@ -224,3 +224,87 @@ func TestFindPeakHours_NGreaterThanAvailable(t *testing.T) {
 		t.Errorf("expected 1 result (capped), got %d", len(result))
 	}
 }
+
+// TestFormatHourlyTable_ContainsHours verifies that the formatted output includes
+// the expected hour labels and a formatted cost string.
+func TestFormatHourlyTable_ContainsHours(t *testing.T) {
+	entries := []Entry{
+		makeEntry("claude-opus-4-6", 9, 1000, 2000, 0, 0),
+		makeEntry("claude-sonnet-4-6", 14, 500, 1000, 0, 0),
+	}
+	// Inject a cost that results in "$2.50" being present by using a known model
+	// and token count. We verify the hour labels and dollar sign instead.
+	reports := AggregateHourly(entries)
+
+	// Add a custom cost-visible entry: use pricing known to produce a visible cost.
+	// We patch the second report to have a known cost by building reports directly.
+	reports = []HourlyReport{
+		{Hour: 9, Summary: UsageSummary{EntryCount: 1, TotalTokens: 10000, CostUSD: 2.50}},
+		{Hour: 14, Summary: UsageSummary{EntryCount: 1, TotalTokens: 5000, CostUSD: 1.00}},
+	}
+
+	out := FormatHourlyTable(reports, false)
+
+	for _, want := range []string{"09:00", "14:00", "$2.50"} {
+		if !containsStr(out, want) {
+			t.Errorf("FormatHourlyTable output missing %q\nGot:\n%s", want, out)
+		}
+	}
+}
+
+// TestFormatModelDistributionTable_ContainsModels verifies that the formatted output
+// includes model names and a percentage symbol.
+func TestFormatModelDistributionTable_ContainsModels(t *testing.T) {
+	reports := []ModelDistributionReport{
+		{
+			Model:       "claude-opus-4-6",
+			Summary:     UsageSummary{EntryCount: 2, TotalTokens: 8000, CostUSD: 3.00},
+			CostPercent: 75.0,
+		},
+		{
+			Model:       "claude-sonnet-4-6",
+			Summary:     UsageSummary{EntryCount: 1, TotalTokens: 2000, CostUSD: 1.00},
+			CostPercent: 25.0,
+		},
+	}
+
+	out := FormatModelDistributionTable(reports, false)
+
+	for _, want := range []string{"claude-opus-4-6", "claude-sonnet-4-6", "%"} {
+		if !containsStr(out, want) {
+			t.Errorf("FormatModelDistributionTable output missing %q\nGot:\n%s", want, out)
+		}
+	}
+}
+
+// TestFormatEfficiency_ContainsMetrics verifies that the formatted output includes
+// key metric labels.
+func TestFormatEfficiency_ContainsMetrics(t *testing.T) {
+	m := EfficiencyMetrics{
+		CacheHitRatio:    0.65,
+		AvgTokensPerMsg:  1200,
+		AvgCostPerMsg:    0.042,
+		InputOutputRatio: 3.5,
+	}
+
+	out := FormatEfficiency(m, false)
+
+	for _, want := range []string{"Cache hit ratio", "tokens/message"} {
+		if !containsStr(out, want) {
+			t.Errorf("FormatEfficiency output missing %q\nGot:\n%s", want, out)
+		}
+	}
+}
+
+// containsStr is a helper that checks if s contains sub.
+func containsStr(s, sub string) bool {
+	return len(s) >= len(sub) && (s == sub || len(sub) == 0 ||
+		func() bool {
+			for i := 0; i <= len(s)-len(sub); i++ {
+				if s[i:i+len(sub)] == sub {
+					return true
+				}
+			}
+			return false
+		}())
+}

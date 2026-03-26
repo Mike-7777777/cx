@@ -256,24 +256,22 @@
 
   .bar:hover { opacity: 0.8; }
 
-  .bar-tooltip {
+  /* Global tooltip — positioned via JS to avoid overflow clipping */
+  #tooltip {
     display: none;
-    position: absolute;
-    bottom: calc(100% + 8px);
-    left: 50%;
-    transform: translateX(-50%);
+    position: fixed;
     background: #262626;
     border: 1px solid #333;
     border-radius: 8px;
     padding: 8px 12px;
     font-size: 12px;
     white-space: nowrap;
-    z-index: 10;
+    z-index: 1000;
     pointer-events: none;
     font-family: 'IBM Plex Mono', monospace;
+    color: var(--text);
+    box-shadow: 0 4px 12px rgba(0,0,0,0.4);
   }
-
-  .bar:hover .bar-tooltip { display: block; }
 
   .bar-date {
     font-size: 9px;
@@ -376,6 +374,7 @@
 </style>
 </head>
 <body>
+<div id="tooltip"></div>
 <div class="container">
 
 <header>
@@ -500,10 +499,16 @@
       var c = r.Summary.CostUSD > 100 ? 'var(--red)' : r.Summary.CostUSD > 30 ? 'var(--yellow)' : 'var(--blue)';
       var col = document.createElement('div');
       col.className = 'bar-col';
-      col.innerHTML = '<div class="bar" style="height:' + h + '%;background:' + c + '">' +
-        '<div class="bar-tooltip">' + esc(r.Date) + '<br>' + fmt$(r.Summary.CostUSD) +
-        '<br>' + fmtN(r.Summary.TotalTokens) + ' tok</div></div>' +
-        '<div class="bar-date">' + (r.Date||'').substring(5) + '</div>';
+      var bar = document.createElement('div');
+      bar.className = 'bar';
+      bar.style.height = h + '%';
+      bar.style.background = c;
+      bar.dataset.tip = esc(r.Date) + '<br>' + fmt$(r.Summary.CostUSD) + '<br>' + fmtN(r.Summary.TotalTokens) + ' tok';
+      col.appendChild(bar);
+      var label = document.createElement('div');
+      label.className = 'bar-date';
+      label.textContent = (r.Date||'').substring(5);
+      col.appendChild(label);
       el.appendChild(col);
     });
     updateStats(reports);
@@ -550,7 +555,8 @@
       seg.className = 'stacked-segment';
       seg.style.width = pct.toFixed(2) + '%';
       seg.style.background = c;
-      seg.title = short + ': ' + fmt$(models[m].cost);
+      seg.style.cursor = 'pointer';
+      seg.dataset.tip = esc(short) + ': ' + fmt$(models[m].cost) + ' (' + pct.toFixed(1) + '%)';
       bar.appendChild(seg);
       var it = document.createElement('div');
       it.className = 'legend-item';
@@ -611,6 +617,29 @@
 
   fetchAll();
   setInterval(fetchAll, 30000);
+
+  // Global tooltip: any element with data-tip shows the tooltip on hover.
+  var tip = document.getElementById('tooltip');
+  document.addEventListener('mouseover', function(e) {
+    var el = e.target.closest('[data-tip]');
+    if (!el) { tip.style.display = 'none'; return; }
+    tip.innerHTML = el.dataset.tip;
+    tip.style.display = 'block';
+    var rect = el.getBoundingClientRect();
+    var tw = tip.offsetWidth;
+    var th = tip.offsetHeight;
+    var left = rect.left + rect.width / 2 - tw / 2;
+    var top = rect.top - th - 8;
+    // Keep within viewport
+    if (left < 8) left = 8;
+    if (left + tw > window.innerWidth - 8) left = window.innerWidth - tw - 8;
+    if (top < 8) top = rect.bottom + 8;
+    tip.style.left = left + 'px';
+    tip.style.top = top + 'px';
+  });
+  document.addEventListener('mouseout', function(e) {
+    if (e.target.closest('[data-tip]')) tip.style.display = 'none';
+  });
 })();
 </script>
 </body>

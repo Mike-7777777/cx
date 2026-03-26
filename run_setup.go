@@ -580,8 +580,8 @@ func findBinDir(home string) string {
 	return candidates[0]
 }
 
-// installSkill writes the embedded cx skill file to ~/.claude/skills/cx.md
-// so that Claude Code can invoke cx commands via /cx.
+// installSkill writes the embedded cx skill file to the skills/ subdirectory
+// of the main Claude Code config dir, enabling /cx inside CC conversations.
 func installSkill(mainConfigDir string) bool {
 	content, err := skillFS.ReadFile("skill/cx.md")
 	if err != nil {

@@ -76,10 +76,10 @@ var commands = map[string]command{
 	"usage":      {legacy(runUsage), "Usage analysis (daily/weekly/monthly/session/blocks/messages)", catMonitoring},
 	"doctor":     {legacy(runDoctor), "Health check all accounts", catMaintenance},
 	"sync":       {legacy(runSync), "Sync config to secondary accounts", catMaintenance},
-	"login":      {legacy(runLogin), "Re-authenticate an account", catMaintenance},
-	"init":       {legacy(runInit), "Create a new account directory", catMaintenance},
-	"watch":      {legacy(runWatch), "Auto-sync daemon (30s interval)", catMaintenance},
-	"completion": {legacy(runCompletion), "Tab completion (bash/fish/powershell)", catMaintenance},
+	"login":      {&loginCmd{}, "Re-authenticate an account", catMaintenance},
+	"init":       {&initCmd{}, "Create a new account directory", catMaintenance},
+	"watch":      {&watchCmd{}, "Auto-sync daemon (30s interval)", catMaintenance},
+	"completion": {&completionCmd{}, "Tab completion (bash/fish/powershell)", catMaintenance},
 	"statusline": {legacy(runStatusline), "CC status bar integration (internal)", catMaintenance},
 }
 

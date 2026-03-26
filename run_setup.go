@@ -153,7 +153,7 @@ func (c *setupCmd) Run(_ context.Context, app *App, _ []string) error {
 		if status != credentialOK {
 			fmt.Fprintf(w, "  Launching login for %q...\n", name)
 			if loginErr := launchLogin(targetDir); loginErr != nil {
-				fmt.Fprintf(w, "  Login failed: %v (retry later with: cc login %s)\n", loginErr, name)
+				fmt.Fprintf(w, "  Login failed: %v (retry later with: cx login %s)\n", loginErr, name)
 			} else {
 				fmt.Fprintf(w, "  Login successful for %q\n", name)
 			}

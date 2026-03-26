@@ -62,7 +62,7 @@ _cx_completions() {
     COMPREPLY=()
     cur="${COMP_WORDS[COMP_CWORD]}"
     prev="${COMP_WORDS[COMP_CWORD-1]}"
-    commands="run statusline init switch sync status usage completion doctor version help"
+    commands="completion config dashboard doctor init login resume run sessions setup status statusline switch sync usage watch web version help"
 
     case "${prev}" in
         cx)
@@ -106,15 +106,23 @@ func fishCompletion() string {
 complete -c cx -f
 
 # Subcommands
-complete -c cx -n '__fish_use_subcommand' -a 'run' -d 'Auto-select best account and launch claude'
-complete -c cx -n '__fish_use_subcommand' -a 'statusline' -d 'Print compact status line'
-complete -c cx -n '__fish_use_subcommand' -a 'init' -d 'Initialize cx configuration'
+complete -c cx -n '__fish_use_subcommand' -a 'setup' -d 'One-time interactive setup'
 complete -c cx -n '__fish_use_subcommand' -a 'switch' -d 'Switch active Claude Code account'
-complete -c cx -n '__fish_use_subcommand' -a 'sync' -d 'Sync account state'
-complete -c cx -n '__fish_use_subcommand' -a 'status' -d 'Show full account status'
+complete -c cx -n '__fish_use_subcommand' -a 'run' -d 'Auto-select best account and launch claude'
+complete -c cx -n '__fish_use_subcommand' -a 'config' -d 'Manage accounts and metadata'
+complete -c cx -n '__fish_use_subcommand' -a 'sessions' -d 'List recent CC sessions'
+complete -c cx -n '__fish_use_subcommand' -a 'resume' -d 'Resume a CC session'
+complete -c cx -n '__fish_use_subcommand' -a 'status' -d 'Show all accounts status'
+complete -c cx -n '__fish_use_subcommand' -a 'dashboard' -d 'Live TUI dashboard'
+complete -c cx -n '__fish_use_subcommand' -a 'web' -d 'Browser dashboard on localhost'
 complete -c cx -n '__fish_use_subcommand' -a 'usage' -d 'Analyze token usage and costs'
-complete -c cx -n '__fish_use_subcommand' -a 'completion' -d 'Output shell completion script'
 complete -c cx -n '__fish_use_subcommand' -a 'doctor' -d 'Run health checks'
+complete -c cx -n '__fish_use_subcommand' -a 'sync' -d 'Sync config to secondaries'
+complete -c cx -n '__fish_use_subcommand' -a 'login' -d 'Re-authenticate an account'
+complete -c cx -n '__fish_use_subcommand' -a 'init' -d 'Create a new account directory'
+complete -c cx -n '__fish_use_subcommand' -a 'watch' -d 'Auto-sync daemon'
+complete -c cx -n '__fish_use_subcommand' -a 'completion' -d 'Output shell completion script'
+complete -c cx -n '__fish_use_subcommand' -a 'statusline' -d 'CC status bar integration'
 complete -c cx -n '__fish_use_subcommand' -a 'version' -d 'Print version information'
 complete -c cx -n '__fish_use_subcommand' -a 'help' -d 'Show help message'
 
@@ -152,7 +160,7 @@ func powershellCompletion() string {
 Register-ArgumentCompleter -CommandName cx -ScriptBlock {
     param($wordToComplete, $commandAst, $cursorPosition)
 
-    $commands = @('run', 'statusline', 'init', 'switch', 'sync', 'status', 'usage', 'completion', 'doctor', 'version', 'help')
+    $commands = @('setup', 'switch', 'run', 'config', 'sessions', 'resume', 'status', 'dashboard', 'web', 'usage', 'doctor', 'sync', 'login', 'init', 'watch', 'completion', 'statusline', 'version', 'help')
     $accounts = @(%s)
     $usageModes = @('daily', 'weekly', 'monthly', 'session', 'blocks', 'messages')
     $shells = @('bash', 'fish', 'powershell')

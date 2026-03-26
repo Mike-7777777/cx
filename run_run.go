@@ -26,12 +26,14 @@ const (
 	balanceThreshold = 90.0 // --balance: skip account if 5h usage > this
 )
 
-// accountScore pairs an account name with its effective 5h usage and reset timing.
+// accountScore pairs an account name with its effective 5h usage, reset timing,
+// and 7d headroom for tiebreaking.
 type accountScore struct {
-	name        string
-	dir         string
-	fiveHPct    float64
-	timeToReset time.Duration
+	name           string
+	dir            string
+	fiveHPct       float64
+	timeToReset    time.Duration
+	sevenDHeadroom float64 // 7d headroom: remaining daily budget / normal daily budget (0-N, >1 = comfortable)
 }
 
 // smartScore calculates a routing score. Lower = should use first.
@@ -40,7 +42,11 @@ type accountScore struct {
 // Insight: if account A has 3h50m until reset (24% used) and account B has
 // 48m until reset (71% used), B should be used first (it resets soon),
 // saving A for after B resets.
-func smartScore(usagePct float64, timeToReset time.Duration) float64 {
+//
+// The 7d headroom is used as a small tiebreaker: when two accounts have
+// similar 5h scores, prefer the one with more 7d headroom (more remaining
+// daily budget relative to time left in the week).
+func smartScore(usagePct float64, timeToReset time.Duration, sevenDHeadroom float64) float64 {
 	const maxWindow = 5 * time.Hour
 
 	// Normalize timeToReset to [0, 1] where 0 = about to reset, 1 = just started.
@@ -57,10 +63,36 @@ func smartScore(usagePct float64, timeToReset time.Duration) float64 {
 		return 1000 + usagePct
 	}
 
-	// Score: prefer accounts that reset soon AND have remaining capacity.
-	// Low resetFraction (about to reset) + moderate usage = good (low score).
-	// High resetFraction (just started window) + low usage = save for later (higher score).
-	return usagePct * resetFraction
+	// Primary score from 5h window.
+	score := usagePct * resetFraction
+
+	// 7d tiebreaker: subtract a small bonus for high headroom (max 5 points).
+	// headroom=1.0 (on budget) → bonus=0; headroom=2.0 (lots of room) → bonus=-5.
+	// This ensures 7d only matters when 5h scores are close.
+	if sevenDHeadroom > 0 {
+		bonus := (sevenDHeadroom - 1.0) * 5
+		if bonus > 5 {
+			bonus = 5
+		}
+		score -= bonus
+	}
+
+	return score
+}
+
+// sevenDayHeadroom calculates how much daily budget remains relative to
+// a normal daily budget (100%/7 ≈ 14.3%). Returns >1 if comfortable, <1 if tight.
+// Example: 91% used, 1.5 days left → (9/1.5)/14.3 = 0.42 (tight).
+// Example: 50% used, 4 days left → (50/4)/14.3 = 0.87 (slightly tight).
+// Example: 30% used, 5 days left → (70/5)/14.3 = 0.98 (on track).
+func sevenDayHeadroom(usedPct float64, daysLeft float64) float64 {
+	if daysLeft <= 0 {
+		return 1.0 // about to reset, headroom doesn't matter
+	}
+	remaining := 100.0 - usedPct
+	dailyAvailable := remaining / daysLeft
+	dailyBudget := 100.0 / 7.0
+	return dailyAvailable / dailyBudget
 }
 
 // Run auto-selects the best account by smart routing and launches claude.
@@ -185,17 +217,25 @@ func scoreAccounts(reg *config.Registry) []accountScore {
 			ttr = 0
 		}
 
+		// Calculate 7d headroom for tiebreaking.
+		var headroom float64 = 1.0 // default: neutral
+		if rc.RateLimits.SevenDay != nil && !rc.RateLimits.SevenDay.IsReset() {
+			daysLeft := time.Until(time.Unix(rc.RateLimits.SevenDay.ResetsAt, 0)).Hours() / 24
+			headroom = sevenDayHeadroom(rc.RateLimits.SevenDay.UsedPercentage, daysLeft)
+		}
+
 		scores = append(scores, accountScore{
-			name:        name,
-			dir:         dir,
-			fiveHPct:    pct,
-			timeToReset: ttr,
+			name:           name,
+			dir:            dir,
+			fiveHPct:       pct,
+			timeToReset:    ttr,
+			sevenDHeadroom: headroom,
 		})
 	}
 
 	sort.Slice(scores, func(i, j int) bool {
-		si := smartScore(scores[i].fiveHPct, scores[i].timeToReset)
-		sj := smartScore(scores[j].fiveHPct, scores[j].timeToReset)
+		si := smartScore(scores[i].fiveHPct, scores[i].timeToReset, scores[i].sevenDHeadroom)
+		sj := smartScore(scores[j].fiveHPct, scores[j].timeToReset, scores[j].sevenDHeadroom)
 		if si != sj {
 			return si < sj
 		}
@@ -223,8 +263,8 @@ func ensureAllAccounts(reg *config.Registry, scores []accountScore) []accountSco
 		scores = append(scores, accountScore{name: name, dir: dir, fiveHPct: 0})
 	}
 	sort.Slice(scores, func(i, j int) bool {
-		si := smartScore(scores[i].fiveHPct, scores[i].timeToReset)
-		sj := smartScore(scores[j].fiveHPct, scores[j].timeToReset)
+		si := smartScore(scores[i].fiveHPct, scores[i].timeToReset, scores[i].sevenDHeadroom)
+		sj := smartScore(scores[j].fiveHPct, scores[j].timeToReset, scores[j].sevenDHeadroom)
 		if si != sj {
 			return si < sj
 		}

@@ -128,8 +128,15 @@ func checkAndRecommend(app *App, threshold float64) (Recommendation, bool) {
 			}
 		}
 
+		// Calculate 7d headroom for smartScore tiebreaking.
+		var headroom float64 = 1.0
+		if rc != nil && rc.RateLimits != nil && rc.RateLimits.SevenDay != nil && !rc.RateLimits.SevenDay.IsReset() {
+			daysLeft := time.Until(time.Unix(rc.RateLimits.SevenDay.ResetsAt, 0)).Hours() / 24
+			headroom = sevenDayHeadroom(rc.RateLimits.SevenDay.UsedPercentage, daysLeft)
+		}
+
 		est := usage.EstimateExhaustion(pct, ttr, now)
-		score := smartScore(pct, ttr)
+		score := smartScore(pct, ttr, headroom)
 
 		var reason string
 		switch {

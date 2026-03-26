@@ -101,7 +101,12 @@ func (c *doctorCmd) Run(_ context.Context, app *App, args []string) error {
 		})
 
 		// Check junction/symlink for shared dirs; auto-fix missing or plain-copy ones.
+		// Skip main account — its dirs ARE the junction targets, not links.
+		isMainAccount := normalizePath(accDir) == normalizePath(mainDir)
 		for _, rel := range sharedLinkDirs {
+			if isMainAccount {
+				break
+			}
 			linkPath := filepath.Join(accDir, rel)
 			target := filepath.Join(mainDir, rel)
 			linkOk, linkMsg := checkLink(linkPath, target)

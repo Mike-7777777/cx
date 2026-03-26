@@ -324,8 +324,9 @@ func installShellWrapper(shell platform.Shell) bool {
 }
 
 // findWrapperEnd locates the end of the cx wrapper block starting at idx.
+// It searches for the closing marker (} or end) at column 0 — i.e., preceded
+// by a newline. Inner braces are always indented and won't match.
 func findWrapperEnd(content string, idx int, shell platform.Shell) int {
-	// Each shell wrapper ends with a closing brace/keyword.
 	var endMarker string
 	switch shell {
 	case platform.ShellFish:
@@ -334,20 +335,18 @@ func findWrapperEnd(content string, idx int, shell platform.Shell) int {
 		endMarker = "}"
 	}
 
-	// Scan forward from idx to find the last closing marker of the block.
+	// Find the last endMarker at line start (column 0) within the block.
+	needle := "\n" + endMarker
 	pos := idx
 	lastEnd := idx
 	for {
-		next := strings.Index(content[pos:], endMarker)
+		next := strings.Index(content[pos:], needle)
 		if next < 0 {
 			break
 		}
-		candidate := pos + next + len(endMarker)
+		// +1 to skip the \n prefix; endMarker starts after it.
+		candidate := pos + next + len(needle)
 		lastEnd = candidate
-		// Stop at first blank line or EOF after the marker.
-		if candidate >= len(content) || content[candidate] == '\n' || content[candidate] == '\r' {
-			break
-		}
 		pos = candidate
 	}
 

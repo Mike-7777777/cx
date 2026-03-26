@@ -89,10 +89,13 @@ func renderCompact(input *Input, opt RenderOpts, useColor bool) string {
 		parts = append(parts, fmt.Sprintf("[%s]", nameStr))
 	}
 
-	// Shortened model name (first word only) + context.
+	// Shortened model name (first word only) + output style badge.
 	shortModel := input.Model.DisplayName
 	if idx := strings.Index(shortModel, " "); idx > 0 {
 		shortModel = shortModel[:idx]
+	}
+	if input.OutputStyle != nil && input.OutputStyle.Name != "" && input.OutputStyle.Name != "default" {
+		shortModel += " " + strings.ToUpper(input.OutputStyle.Name[:1]) + input.OutputStyle.Name[1:]
 	}
 	modelStr := format.Colorize(shortModel, format.Cyan+format.Bold, useColor)
 	showContext := sec == nil || format.IsEnabled(sec.ShowContext)
@@ -136,7 +139,13 @@ func renderMain(input *Input, other *OtherAccount, opt RenderOpts, useColor bool
 		prefix = fmt.Sprintf("[%s] ", nameStr)
 	}
 
-	modelName := format.Colorize(input.Model.DisplayName, format.Cyan+format.Bold, useColor)
+	displayName := input.Model.DisplayName
+	// Append output style when it's not the default mode (e.g., "fast", "thinking").
+	if input.OutputStyle != nil && input.OutputStyle.Name != "" && input.OutputStyle.Name != "default" {
+		styleName := input.OutputStyle.Name
+		displayName += " " + strings.ToUpper(styleName[:1]) + styleName[1:]
+	}
+	modelName := format.Colorize(displayName, format.Cyan+format.Bold, useColor)
 
 	showContext := sec == nil || format.IsEnabled(sec.ShowContext)
 	if showContext {

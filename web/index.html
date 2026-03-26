@@ -620,8 +620,11 @@
 
   // Global tooltip: any element with data-tip shows the tooltip on hover.
   var tip = document.getElementById('tooltip');
+  var tipTarget = null;
   document.addEventListener('mouseover', function(e) {
     var el = e.target.closest('[data-tip]');
+    if (el === tipTarget) return; // same element, no flicker
+    tipTarget = el;
     if (!el) { tip.style.display = 'none'; return; }
     tip.innerHTML = el.dataset.tip;
     tip.style.display = 'block';
@@ -636,9 +639,6 @@
     if (top < 8) top = rect.bottom + 8;
     tip.style.left = left + 'px';
     tip.style.top = top + 'px';
-  });
-  document.addEventListener('mouseout', function(e) {
-    if (e.target.closest('[data-tip]')) tip.style.display = 'none';
   });
 })();
 </script>

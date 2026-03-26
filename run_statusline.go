@@ -1,7 +1,9 @@
 package main
 
 import (
+	"context"
 	"fmt"
+	"io"
 	"log"
 	"os"
 	"path/filepath"
@@ -17,41 +19,48 @@ import (
 	"github.com/Mike-7777777/cx/internal/statusline"
 )
 
+// statuslineCmd implements Runner for the "statusline" subcommand.
+type statuslineCmd struct{}
+
 const (
 	logMaxSize                    = 1048576 // 1 MB
 	minVersionWarn                = "2.1.80"
 	statuslineStaleCacheThreshold = 30 * time.Minute
 )
 
-func runStatusline() {
-	// On ANY error: print [?] and exit 0 (never blank the status bar).
+// Run reads CC status data from stdin and renders a compact status line to stdout.
+func (c *statuslineCmd) Run(_ context.Context, app *App, args []string) error {
+	out := app.Stdout
+
+	// On ANY error: print [?] and return nil (never blank the status bar).
 	defer func() {
 		if r := recover(); r != nil {
-			fmt.Println("[?]")
+			fmt.Fprintln(out, "[?]")
 		}
 	}()
 
-	if err := doStatusline(); err != nil {
+	if err := doStatusline(out, args); err != nil {
 		logError(err)
-		fmt.Println("[?]")
+		fmt.Fprintln(out, "[?]")
 	}
+	return nil
 }
 
-func doStatusline() error {
+func doStatusline(out io.Writer, args []string) error {
 	input, err := statusline.ParseInput(os.Stdin)
 	if err != nil {
 		// CC may not pipe data to stdin (e.g., Windows Git Bash pipe issue).
 		// Fall back to rendering from cached rate data instead of showing [?].
 		logWarn(fmt.Sprintf("stdin parse failed (%v), attempting cache fallback", err))
-		return doStatuslineFallback()
+		return doStatuslineFallback(out, args)
 	}
 
-	compact := hasFlagFrom("--compact", 2)
+	compact := hasFlag(args, "--compact")
 
 	cfgDir, err := config.DetectConfigDir()
 	if err != nil {
 		// No config dir is non-fatal; render without cache ops.
-		return renderAndPrint(input, nil, "", compact)
+		return renderAndPrint(out, input, nil, "", compact)
 	}
 
 	// Warn when rate_limits is absent and CC version is too old.
@@ -78,13 +87,23 @@ func doStatusline() error {
 	// Resolve current account name from registry.
 	accountName := currentAccountName(cfgDir)
 
-	return renderAndPrint(input, other, accountName, compact)
+	return renderAndPrint(out, input, other, accountName, compact)
+}
+
+// hasFlag reports whether flag appears in the args slice.
+func hasFlag(args []string, flag string) bool {
+	for _, a := range args {
+		if a == flag {
+			return true
+		}
+	}
+	return false
 }
 
 // doStatuslineFallback renders a minimal statusline from cached rate data
 // when CC fails to pipe JSON to stdin.
-func doStatuslineFallback() error {
-	compact := hasFlagFrom("--compact", 2)
+func doStatuslineFallback(out io.Writer, args []string) error {
+	compact := hasFlag(args, "--compact")
 
 	cfgDir, err := config.DetectConfigDir()
 	if err != nil {
@@ -119,7 +138,7 @@ func doStatuslineFallback() error {
 	}
 
 	other := loadOtherAccount(cfgDir)
-	return renderAndPrint(input, other, accountName, compact)
+	return renderAndPrint(out, input, other, accountName, compact)
 }
 
 func buildRateCache(input *statusline.Input) *cache.RateCache {
@@ -276,7 +295,7 @@ func normalizePath(p string) string {
 	return p
 }
 
-func renderAndPrint(input *statusline.Input, other *statusline.OtherAccount, accountName string, compact bool) error {
+func renderAndPrint(out io.Writer, input *statusline.Input, other *statusline.OtherAccount, accountName string, compact bool) error {
 	opts := statusline.RenderOpts{
 		AccountName: accountName,
 		Compact:     compact,
@@ -300,7 +319,7 @@ func renderAndPrint(input *statusline.Input, other *statusline.OtherAccount, acc
 
 	lines := statusline.Render(input, other, platform.ANSIEnabled(), opts)
 	for _, line := range lines {
-		fmt.Println(line)
+		fmt.Fprintln(out, line)
 	}
 	return nil
 }

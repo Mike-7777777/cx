@@ -4,9 +4,11 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"os/signal"
 	"runtime"
 	"sort"
 	"strings"
+	"syscall"
 
 	"github.com/Mike-7777777/cx/internal/config"
 	"github.com/Mike-7777777/cx/internal/platform"
@@ -46,41 +48,25 @@ type command struct {
 	cat    category
 }
 
-// legacyCmd wraps a legacy func() as a Runner. This is a migration aid —
-// each command will be properly migrated to accept (ctx, app, args) and
-// this wrapper will be removed.
-type legacyCmd struct {
-	fn func()
-}
-
-func (c *legacyCmd) Run(_ context.Context, _ *App, _ []string) error {
-	c.fn()
-	return nil
-}
-
-func legacy(fn func()) Runner {
-	return &legacyCmd{fn: fn}
-}
-
 // commands maps subcommand names to their definitions.
 var commands = map[string]command{
-	"setup":      {legacy(runSetup), "One-time interactive setup (accounts + shell wrapper)", catGettingStarted},
+	"setup":      {&setupCmd{}, "One-time interactive setup (accounts + shell wrapper)", catGettingStarted},
 	"switch":     {&switchCmd{}, "Switch account (via wrapper: cx switch 5x)", catDailyUse},
-	"run":        {legacy(runRun), "Auto-select best account and launch claude", catDailyUse},
+	"run":        {&runCmd{}, "Auto-select best account and launch claude", catDailyUse},
 	"config":     {&configCmd{}, "Manage accounts, main, metadata", catDailyUse},
 	"sessions":   {&sessionsCmd{}, "List recent CC sessions across all accounts", catDailyUse},
 	"resume":     {&resumeCmd{}, "Resume a CC session with smart matching", catDailyUse},
 	"status":     {&statusCmd{}, "All accounts: auth status + rate limits", catDailyUse},
-	"dashboard":  {legacy(runDashboard), "Live TUI dashboard", catMonitoring},
-	"web":        {legacy(runWeb), "Browser dashboard on localhost", catMonitoring},
-	"usage":      {legacy(runUsage), "Usage analysis (daily/weekly/monthly/session/blocks/messages)", catMonitoring},
+	"dashboard":  {&dashboardCmd{}, "Live TUI dashboard", catMonitoring},
+	"web":        {&webCmd{}, "Browser dashboard on localhost", catMonitoring},
+	"usage":      {&usageCmd{}, "Usage analysis (daily/weekly/monthly/session/blocks/messages)", catMonitoring},
 	"doctor":     {&doctorCmd{}, "Health check all accounts", catMaintenance},
 	"sync":       {&syncCmd{}, "Sync config to secondary accounts", catMaintenance},
 	"login":      {&loginCmd{}, "Re-authenticate an account", catMaintenance},
 	"init":       {&initCmd{}, "Create a new account directory", catMaintenance},
 	"watch":      {&watchCmd{}, "Auto-sync daemon (30s interval)", catMaintenance},
 	"completion": {&completionCmd{}, "Tab completion (bash/fish/powershell)", catMaintenance},
-	"statusline": {legacy(runStatusline), "CC status bar integration (internal)", catMaintenance},
+	"statusline": {&statuslineCmd{}, "CC status bar integration (internal)", catMaintenance},
 }
 
 func main() {
@@ -108,7 +94,8 @@ func main() {
 		os.Exit(1)
 	}
 
-	ctx := context.Background()
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stop()
 	app, err := buildApp()
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "cx: %v\n", err)

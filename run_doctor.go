@@ -100,13 +100,15 @@ func (c *doctorCmd) Run(_ context.Context, app *App, args []string) error {
 			ok: credOk, label: "credentials", detail: credMsg, indent: 1,
 		})
 
-		// Check junction/symlink for shared dirs; auto-fix missing ones.
+		// Check junction/symlink for shared dirs; auto-fix missing or plain-copy ones.
 		for _, rel := range sharedLinkDirs {
 			linkPath := filepath.Join(accDir, rel)
 			target := filepath.Join(mainDir, rel)
 			linkOk, linkMsg := checkLink(linkPath, target)
-			if !linkOk {
-				// Auto-fix: create the missing junction/symlink.
+
+			needsFix := !linkOk || linkMsg == "exists (copy)"
+			if needsFix {
+				// Auto-fix: replace missing dir or plain copy with a proper junction/symlink.
 				if _, statErr := os.Stat(target); statErr == nil {
 					_ = os.RemoveAll(linkPath)
 					if linkErr := platform.CreateLink(linkPath, target); linkErr == nil {
@@ -209,16 +211,24 @@ func checkLink(linkPath, target string) (bool, string) {
 		return false, fmt.Sprintf("error: %v", err)
 	}
 
-	// On Windows, junctions appear as directories with the reparse point attribute.
-	// On Unix, check for symlink mode bit.
-	isLink := info.Mode()&os.ModeSymlink != 0 || info.Mode()&os.ModeDir != 0
+	isSymlink := info.Mode()&os.ModeSymlink != 0
+
+	// On Windows, junctions appear as regular directories to Go's os.Lstat.
+	// Detect them by checking if the resolved path differs from the link path.
+	isJunction := false
+	if info.IsDir() && !isSymlink {
+		resolved, evalErr := filepath.EvalSymlinks(linkPath)
+		if evalErr == nil {
+			isJunction = normalizePath(resolved) != normalizePath(linkPath)
+		}
+	}
 
 	// Verify the link target is accessible.
 	if _, err := os.Stat(linkPath); err != nil {
 		return false, "broken link"
 	}
 
-	if isLink {
+	if isSymlink || isJunction {
 		return true, "valid"
 	}
 	return true, "exists (copy)"

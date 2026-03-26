@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 )
@@ -30,6 +31,9 @@ func TestCheckStatuslinePath_ValidPath(t *testing.T) {
 }
 
 func TestCheckStatuslinePath_BackslashAutoFixed(t *testing.T) {
+	if runtime.GOOS != "windows" {
+		t.Skip("backslash paths only exist on Windows")
+	}
 	dir := t.TempDir()
 
 	// Create a dummy binary so the binary-existence check passes after fix.

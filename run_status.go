@@ -1,17 +1,20 @@
 package main
 
 import (
+	"context"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"sort"
 	"time"
 
 	"github.com/Mike-7777777/cx/internal/cache"
-	"github.com/Mike-7777777/cx/internal/config"
 	"github.com/Mike-7777777/cx/internal/format"
-	"github.com/Mike-7777777/cx/internal/platform"
 )
+
+// statusCmd implements Runner for the "status" subcommand.
+type statusCmd struct{}
 
 const (
 	staleThreshold    = 10 * time.Minute
@@ -35,22 +38,14 @@ type statusRow struct {
 	email         string
 }
 
-func runStatus() {
-	regPath, err := config.RegistryPath()
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "cx status: %v\n", err)
-		os.Exit(1)
-	}
-
-	reg, err := config.LoadOrCreateRegistry(regPath)
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "cx status: %v\n", err)
-		os.Exit(1)
-	}
+// Run collects status rows from all registered accounts and prints a summary table.
+func (c *statusCmd) Run(_ context.Context, app *App, _ []string) error {
+	reg := app.Registry
+	w := app.Stdout
 
 	if len(reg.Accounts) == 0 {
-		fmt.Println("No accounts configured. Run: cx init <name>")
-		return
+		fmt.Fprintln(w, "No accounts configured. Run: cx init <name>")
+		return nil
 	}
 
 	// Collect account names in stable order.
@@ -88,9 +83,23 @@ func runStatus() {
 		}
 	}
 
-	useColor := platform.ANSIEnabled()
-	printTable(rows, useColor)
-	printRecommendation(rows, allStale, useColor)
+	printTable(w, rows, app.UseColor)
+	printRecommendation(w, rows, allStale, app.UseColor)
+	return nil
+}
+
+func runStatus() {
+	app, err := buildApp()
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "cx status: %v\n", err)
+		os.Exit(1)
+	}
+
+	cmd := &statusCmd{}
+	if err := cmd.Run(context.Background(), app, nil); err != nil {
+		fmt.Fprintf(os.Stderr, "cx status: %v\n", err)
+		os.Exit(1)
+	}
 }
 
 func buildRow(name string, rc *cache.RateCache, readErr error) statusRow {
@@ -140,13 +149,13 @@ func buildRow(name string, rc *cache.RateCache, readErr error) statusRow {
 	return row
 }
 
-func printTable(rows []statusRow, useColor bool) {
+func printTable(w io.Writer, rows []statusRow, useColor bool) {
 	header := fmt.Sprintf("  %-10s  %-8s  %-6s  %-14s  %-10s  %-14s  %-10s  %s",
 		"Account", "Tier", "Auth", "5h Usage", "5h Reset", "7d Usage", "7d Reset", "Note")
 	sep := "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 
-	fmt.Println(format.Colorize(header, format.Bold, useColor))
-	fmt.Println(format.Colorize(sep, format.Dim, useColor))
+	fmt.Fprintln(w, format.Colorize(header, format.Bold, useColor))
+	fmt.Fprintln(w, format.Colorize(sep, format.Dim, useColor))
 
 	for _, row := range rows {
 		marker := "  "
@@ -164,7 +173,7 @@ func printTable(rows []statusRow, useColor bool) {
 
 		if !row.hasData {
 			noteStr := format.Colorize(noDataMarker, format.Dim, useColor)
-			fmt.Printf("%s%-10s  %s  %-6s  %-14s  %-10s  %-14s  %-10s  %s\n",
+			fmt.Fprintf(w, "%s%-10s  %s  %-6s  %-14s  %-10s  %-14s  %-10s  %s\n",
 				marker, nameStr, tierStr, authStr, noteStr, "", "", "", row.note)
 			continue
 		}
@@ -176,7 +185,7 @@ func printTable(rows []statusRow, useColor bool) {
 			noteStr = format.Colorize(row.note, format.Dim, useColor)
 		}
 
-		fmt.Printf("%s%-10s  %s  %-6s  %-14s  %-10s  %-14s  %-10s  %s\n",
+		fmt.Fprintf(w, "%s%-10s  %s  %-6s  %-14s  %-10s  %-14s  %-10s  %s\n",
 			marker, nameStr, tierStr, authStr,
 			fiveBar, row.fiveResetStr,
 			sevenBar, row.sevenResetStr,
@@ -195,7 +204,7 @@ func buildStatusBar(pct float64, useColor bool) string {
 	return fmt.Sprintf("%s %s", bar, pctStr)
 }
 
-func printRecommendation(rows []statusRow, allStale bool, useColor bool) {
+func printRecommendation(w io.Writer, rows []statusRow, allStale bool, useColor bool) {
 	var best *statusRow
 	for i := range rows {
 		r := &rows[i]
@@ -207,13 +216,13 @@ func printRecommendation(rows []statusRow, allStale bool, useColor bool) {
 		}
 	}
 
-	fmt.Println()
+	fmt.Fprintln(w)
 	if best != nil {
 		rec := fmt.Sprintf("✓ Recommended: %s (lowest 5h usage at %.0f%%)", best.name, best.fivePct)
-		fmt.Println(format.Colorize(rec, format.Green+format.Bold, useColor))
+		fmt.Fprintln(w, format.Colorize(rec, format.Green+format.Bold, useColor))
 	}
 
 	if allStale {
-		fmt.Println("Run a session to refresh rate limit data.")
+		fmt.Fprintln(w, "Run a session to refresh rate limit data.")
 	}
 }

@@ -20,17 +20,18 @@ const defaultSessionLimit = 10
 
 // sessionEntry holds metadata for one CC session across any account.
 type sessionEntry struct {
-	ID        string        `json:"id"`
-	Account   string        `json:"account"`
-	ConfigDir string        `json:"-"`
-	Slug      string        `json:"slug,omitempty"`
-	Project   string        `json:"project"`
-	Model     string        `json:"model"`
-	Age       time.Duration `json:"age_seconds"`
-	Tokens    int64         `json:"tokens"`
-	Active    bool          `json:"active"`
-	FirstMsg  string        `json:"first_msg,omitempty"`
-	LastMsg   string        `json:"last_msg,omitempty"`
+	ID         string        `json:"id"`
+	Account    string        `json:"account"`
+	ConfigDir  string        `json:"-"`
+	ProjectDir string        `json:"-"` // raw project directory name (e.g., "I--google-drive-homebase")
+	Slug       string        `json:"slug,omitempty"`
+	Project    string        `json:"project"`
+	Model      string        `json:"model"`
+	Age        time.Duration `json:"age_seconds"`
+	Tokens     int64         `json:"tokens"`
+	Active     bool          `json:"active"`
+	FirstMsg   string        `json:"first_msg,omitempty"`
+	LastMsg    string        `json:"last_msg,omitempty"`
 }
 
 // sessionsCmd implements Runner for the "sessions" subcommand.
@@ -145,12 +146,13 @@ func collectSessions(accountFilter string, limit int) []sessionEntry {
 
 				sessionID := strings.TrimSuffix(f.Name(), ".jsonl")
 				si := sessionEntry{
-					ID:        sessionID,
-					Account:   name,
-					ConfigDir: dir,
-					Project:   shortProjectName(proj.Name()),
-					Age:       time.Since(info.ModTime()),
-					Active:    activeSessions[sessionID],
+					ID:         sessionID,
+					Account:    name,
+					ConfigDir:  dir,
+					ProjectDir: proj.Name(),
+					Project:    shortProjectName(proj.Name()),
+					Age:        time.Since(info.ModTime()),
+					Active:     activeSessions[sessionID],
 				}
 
 				// Read first line for model, last lines for slug/tokens.

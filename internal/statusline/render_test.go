@@ -395,43 +395,43 @@ func TestRender_DailyBudget(t *testing.T) {
 		name       string
 		usedPct    float64
 		daysLeft   float64
-		wantBudget string // expected ~N%/d substring
+		wantBudget string // expected burn rate substring
 		wantColor  string // "green", "yellow", or "red"
 	}{
 		{
-			name:       "high usage, 2 days left -> yellow budget",
+			name:       "high usage, 2 days left -> yellow (burn > 100%)",
 			usedPct:    80,
 			daysLeft:   2,
-			wantBudget: "~10%/d",
-			wantColor:  "green", // perDay=10, >= 10 -> green
+			wantBudget: "112%burn", // 80/5=16%/d, budget=14.3, burn=112%
+			wantColor:  "yellow",
 		},
 		{
-			name:       "low usage, 5 days left -> green budget",
+			name:       "low usage, 5 days left -> green (burn < 100%)",
 			usedPct:    20,
 			daysLeft:   5,
-			wantBudget: "~16%/d",
-			wantColor:  "green", // perDay=16
+			wantBudget: "70%burn", // 20/2=10%/d, budget=14.3, burn=70%
+			wantColor:  "green",
 		},
 		{
-			name:       "very high usage, 2 days left -> yellow budget",
+			name:       "very high usage, 2 days left -> yellow",
 			usedPct:    90,
 			daysLeft:   2,
-			wantBudget: "~5%/d",
-			wantColor:  "yellow", // perDay=5, < 10
+			wantBudget: "126%burn", // 90/5=18%/d, budget=14.3, burn=126%
+			wantColor:  "yellow",
 		},
 		{
-			name:       "zero usage, 7 days left -> green budget",
-			usedPct:    0,
-			daysLeft:   7,
-			wantBudget: "~14%/d",
-			wantColor:  "green", // perDay=14.28
+			name:       "moderate usage, 4 days left -> green",
+			usedPct:    30,
+			daysLeft:   4,
+			wantBudget: "70%burn", // 30/3=10%/d, budget=14.3, burn=70%
+			wantColor:  "green",
 		},
 		{
-			name:       "critical usage, 2 days left -> red budget",
-			usedPct:    96,
-			daysLeft:   2,
-			wantBudget: "~2%/d",
-			wantColor:  "red", // perDay=2, < 5
+			name:       "extreme burn rate -> red (burn > 150%)",
+			usedPct:    70,
+			daysLeft:   4,
+			wantBudget: "163%burn", // 70/3=23.3%/d, budget=14.3, burn=163%
+			wantColor:  "red",
 		},
 	}
 
@@ -464,7 +464,7 @@ func TestRender_DailyBudget(t *testing.T) {
 			colorLines := Render(input, nil, true)
 			colorLine := colorLines[0]
 
-			// The budget string is wrapped in a color code.
+			// The burn rate string is wrapped in a color code.
 			var wantCode string
 			switch tt.wantColor {
 			case "green":
@@ -475,29 +475,29 @@ func TestRender_DailyBudget(t *testing.T) {
 				wantCode = "\033[31m" + tt.wantBudget
 			}
 			if !strings.Contains(colorLine, wantCode) {
-				t.Errorf("budget color mismatch: want %q in %q", wantCode, colorLine)
+				t.Errorf("burn color mismatch: want %q in %q", wantCode, colorLine)
 			}
 		})
 	}
 }
 
-func TestRender_DailyBudgetNotShownWhenDaysLow(t *testing.T) {
-	// When daysLeft <= 0.1, no budget string should appear.
-	resetAt := time.Now().Add(1 * time.Hour) // ~0.04 days
+func TestRender_DailyBudgetNotShownWhenDaysElapsedLow(t *testing.T) {
+	// When daysElapsed <= 0.1 (window just started), no burn rate should appear.
+	resetAt := time.Now().Add(7 * 24 * time.Hour) // just started: daysElapsed ≈ 0
 	input := &Input{
 		Model:         Model{ID: "claude-opus-4-6", DisplayName: "Opus 4.6"},
 		ContextWindow: ContextWindow{UsedPercentage: ptrF64(10.0)},
 		RateLimits: &InputRateLimits{
 			SevenDay: &RateWindow{
-				UsedPercentage: 99,
+				UsedPercentage: 1,
 				ResetsAt:       resetAt.Unix(),
 			},
 		},
 	}
 
 	lines := Render(input, nil, false)
-	if strings.Contains(lines[0], "%/d") {
-		t.Errorf("budget should not appear when daysLeft <= 0.1: %q", lines[0])
+	if strings.Contains(lines[0], "burn") {
+		t.Errorf("burn rate should not appear when daysElapsed <= 0.1: %q", lines[0])
 	}
 }
 

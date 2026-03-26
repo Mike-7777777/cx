@@ -29,6 +29,8 @@ type sessionEntry struct {
 	Age       time.Duration `json:"age_seconds"`
 	Tokens    int64         `json:"tokens"`
 	Active    bool          `json:"active"`
+	FirstMsg  string        `json:"first_msg,omitempty"`
+	LastMsg   string        `json:"last_msg,omitempty"`
 }
 
 func runSessions() {
@@ -174,8 +176,8 @@ func collectSessions(accountFilter string, limit int) []sessionEntry {
 	return all
 }
 
-// readSessionMeta extracts model and slug without reading the entire file.
-// Reads first 10 lines (model) + last 4KB (slug from turn_duration).
+// readSessionMeta extracts model, slug, and first/last user messages.
+// Reads first 20 lines (model + first message) + last 8KB (slug + last message).
 func readSessionMeta(path string, si *sessionEntry) {
 	f, err := os.Open(path)
 	if err != nil {
@@ -183,31 +185,23 @@ func readSessionMeta(path string, si *sessionEntry) {
 	}
 	defer func() { _ = f.Close() }()
 
-	// Read first 10 lines to find model.
+	// Read first 20 lines to find model and first user message.
 	scanner := bufio.NewScanner(f)
 	scanner.Buffer(make([]byte, 256*1024), 256*1024) // handle large lines
-	for i := 0; i < 10 && scanner.Scan(); i++ {
-		line := scanner.Text()
-		var entry struct {
-			Type    string `json:"type"`
-			Message struct {
-				Model string `json:"model"`
-			} `json:"message"`
-		}
-		if json.Unmarshal([]byte(line), &entry) == nil {
-			if entry.Type == "assistant" && entry.Message.Model != "" {
-				si.Model = shortModelName(entry.Message.Model)
-				break
-			}
+	for i := 0; i < 20 && scanner.Scan(); i++ {
+		line := scanner.Bytes()
+		si.Model, si.FirstMsg = extractHeadMeta(line, si.Model, si.FirstMsg)
+		if si.Model != "" && si.FirstMsg != "" {
+			break
 		}
 	}
 
-	// Read last 4KB to find slug (turn_duration entries are near the end).
+	// Read last 8KB to find slug and last user message.
 	info, err := f.Stat()
 	if err != nil {
 		return
 	}
-	tailSize := int64(4096)
+	tailSize := int64(8192)
 	if info.Size() < tailSize {
 		tailSize = info.Size()
 	}
@@ -220,21 +214,121 @@ func readSessionMeta(path string, si *sessionEntry) {
 	}
 	lines := strings.Split(string(tail), "\n")
 	for i := len(lines) - 1; i >= 0; i-- {
-		var entry struct {
-			Type    string `json:"type"`
-			Subtype string `json:"subtype"`
-			Slug    string `json:"slug"`
-		}
-		if json.Unmarshal([]byte(lines[i]), &entry) == nil {
-			if entry.Type == "system" && entry.Subtype == "turn_duration" && entry.Slug != "" {
-				si.Slug = entry.Slug
-				break
-			}
+		if si.Slug == "" || si.LastMsg == "" {
+			extractTailMeta(lines[i], si)
+		} else {
+			break
 		}
 	}
 
 	// Estimate tokens from file size (~1 token per 15 bytes of JSONL).
 	si.Tokens = info.Size() / 15
+}
+
+// extractHeadMeta tries to extract model and first user message from a line.
+func extractHeadMeta(line []byte, curModel, curFirstMsg string) (string, string) {
+	var entry struct {
+		Type    string `json:"type"`
+		Message struct {
+			Model   string `json:"model"`
+			Content json.RawMessage `json:"content"`
+		} `json:"message"`
+	}
+	if json.Unmarshal(line, &entry) != nil {
+		return curModel, curFirstMsg
+	}
+	if curModel == "" && entry.Type == "assistant" && entry.Message.Model != "" {
+		curModel = shortModelName(entry.Message.Model)
+	}
+	if curFirstMsg == "" && entry.Type == "user" {
+		curFirstMsg = extractUserText(entry.Message.Content)
+	}
+	return curModel, curFirstMsg
+}
+
+// extractTailMeta extracts slug and last user message from a tail line.
+func extractTailMeta(line string, si *sessionEntry) {
+	var entry struct {
+		Type    string `json:"type"`
+		Subtype string `json:"subtype"`
+		Slug    string `json:"slug"`
+		Message struct {
+			Content json.RawMessage `json:"content"`
+		} `json:"message"`
+	}
+	if json.Unmarshal([]byte(line), &entry) != nil {
+		return
+	}
+	if si.Slug == "" && entry.Type == "system" && entry.Subtype == "turn_duration" && entry.Slug != "" {
+		si.Slug = entry.Slug
+	}
+	if si.LastMsg == "" && entry.Type == "user" {
+		si.LastMsg = extractUserText(entry.Message.Content)
+	}
+}
+
+// extractUserText extracts display text from a user message content field.
+// Content can be a string or an array of content blocks [{type:"text",text:"..."}].
+func extractUserText(raw json.RawMessage) string {
+	if len(raw) == 0 {
+		return ""
+	}
+
+	// Try string first.
+	var s string
+	if json.Unmarshal(raw, &s) == nil && s != "" {
+		return truncateMsg(s)
+	}
+
+	// Try array of content blocks.
+	var blocks []struct {
+		Type string `json:"type"`
+		Text string `json:"text"`
+	}
+	if json.Unmarshal(raw, &blocks) == nil {
+		for _, b := range blocks {
+			if b.Type == "text" && b.Text != "" {
+				return truncateMsg(b.Text)
+			}
+		}
+	}
+
+	return ""
+}
+
+// truncateMsg shortens a message, stripping newlines and CC internal tags.
+func truncateMsg(s string) string {
+	const maxLen = 40
+	// Strip CC internal XML-like tags (e.g., <command-message>, <local-command-caveat>).
+	s = stripTags(s)
+	// Replace newlines with spaces for single-line display.
+	s = strings.ReplaceAll(s, "\n", " ")
+	s = strings.TrimSpace(s)
+	runes := []rune(s)
+	if len(runes) > maxLen {
+		return string(runes[:maxLen]) + "..."
+	}
+	return s
+}
+
+// stripTags removes XML/HTML-like tags from s.
+func stripTags(s string) string {
+	var out strings.Builder
+	inTag := false
+	for _, r := range s {
+		if r == '<' {
+			inTag = true
+			continue
+		}
+		if r == '>' && inTag {
+			inTag = false
+			continue
+		}
+		if !inTag {
+			out.WriteRune(r)
+		}
+	}
+	return out.String()
 }
 
 // shortProjectName converts a project slug to a short display name.
@@ -248,9 +342,9 @@ func shortProjectName(slug string) string {
 }
 
 func printSessionTable(sessions []sessionEntry, reg *config.Registry, useColor bool) {
-	header := fmt.Sprintf("  %-8s  %-26s  %-8s  %-12s  %-8s  %s",
-		"Account", "Session", "Age", "Project", "Model", "Tokens")
-	sep := strings.Repeat("━", 82)
+	header := fmt.Sprintf("  %-4s  %-8s  %s",
+		"Acct", "Age", "Topic")
+	sep := strings.Repeat("━", 80)
 
 	fmt.Println(format.Colorize(header, format.Bold, useColor))
 	fmt.Println(format.Colorize(sep, format.Dim, useColor))
@@ -263,20 +357,39 @@ func printSessionTable(sessions []sessionEntry, reg *config.Registry, useColor b
 
 		nameStr := format.Colorize(s.Account, format.Cyan, useColor)
 
-		slug := s.Slug
-		if slug == "" {
-			slug = s.ID[:12] + "..."
-		}
+		activeTag := ""
 		if s.Active {
-			slug = format.Colorize(slug, format.Green+format.Bold, useColor)
+			activeTag = format.Colorize("[active] ", format.Green, useColor)
 		}
 
 		ageStr := formatAge(s.Age)
-		tokenStr := formatTokens(s.Tokens)
+		topic := sessionTopic(&s)
 
-		fmt.Printf("%s%-8s  %-26s  %-8s  %-12s  %-8s  %s\n",
-			marker, nameStr, slug, ageStr, s.Project, s.Model, tokenStr)
+		fmt.Printf("%s%-4s  %s%-8s  %s\n",
+			marker, nameStr, activeTag, ageStr, topic)
 	}
+}
+
+// sessionTopic builds a display string showing first and last user messages.
+// Format: "first message..." → "last message..." (or just first if same/empty).
+func sessionTopic(s *sessionEntry) string {
+	first := s.FirstMsg
+	last := s.LastMsg
+
+	if first == "" && last == "" {
+		if s.Slug != "" {
+			return s.Slug
+		}
+		return s.Project
+	}
+
+	if first == "" {
+		return "→ " + last
+	}
+	if last == "" || first == last {
+		return first
+	}
+	return first + "  →  " + last
 }
 
 func formatAge(d time.Duration) string {

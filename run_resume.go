@@ -93,19 +93,22 @@ func pickSession(sessions []sessionEntry) *sessionEntry {
 	}
 
 	fmt.Fprintln(os.Stderr)
+	fmt.Fprintf(os.Stderr, "       %-4s  %-8s  %s\n", "Acct", "Age", "Topic")
+	fmt.Fprintf(os.Stderr, "      %s\n", strings.Repeat("─", 70))
 	for i, s := range sessions[:max] {
 		marker := "  "
 		if reg != nil && s.Account == reg.Main {
 			marker = "★ "
 		}
 
-		slug := displaySlug(&s)
+		activeTag := ""
 		if s.Active {
-			slug = "[active] " + slug
+			activeTag = "[active] "
 		}
 
-		fmt.Fprintf(os.Stderr, "  %s%2d) %-8s  %-26s  %-8s  %s\n",
-			marker, i+1, s.Account, slug, formatAge(s.Age), s.Project)
+		topic := sessionTopic(&s)
+		fmt.Fprintf(os.Stderr, "  %s%2d) %-4s  %s%-8s  %s\n",
+			marker, i+1, s.Account, activeTag, formatAge(s.Age), topic)
 	}
 
 	fmt.Fprintf(os.Stderr, "\n")

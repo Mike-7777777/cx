@@ -6,6 +6,7 @@ import (
 	"os"
 	"strings"
 
+	"github.com/Mike-7777777/cx/internal/config"
 	"github.com/Mike-7777777/cx/internal/platform"
 )
 
@@ -19,6 +20,7 @@ Usage:
   cx resume              Interactive picker (numbered list)
   cx resume <term>       Fuzzy match by slug, project, or account name
   cx resume --last       Resume the most recent session (any account)
+  cx resume --on <acct>  Run session on a specific account (cross-account resume)
 `)
 		return
 	}
@@ -72,14 +74,88 @@ Usage:
 		return
 	}
 
-	// Launch claude --resume with the correct account.
-	fmt.Fprintf(os.Stderr, "[cx] Resuming %q on account %s\n", displaySlug(selected), selected.Account)
+	// Determine which account to run on.
+	configDir := selected.ConfigDir
+	accountName := selected.Account
 
-	env := replaceOrAppendEnv(os.Environ(), "CLAUDE_CONFIG_DIR", selected.ConfigDir)
+	// If --on <account> flag is given, use that account instead.
+	onAccount := ""
+	for i := 2; i < len(os.Args); i++ {
+		if os.Args[i] == "--on" && i+1 < len(os.Args) {
+			onAccount = os.Args[i+1]
+			break
+		}
+		if strings.HasPrefix(os.Args[i], "--on=") {
+			onAccount = strings.TrimPrefix(os.Args[i], "--on=")
+			break
+		}
+	}
+
+	if onAccount == "" {
+		// Interactive: if multiple accounts exist, ask which one to use.
+		reg := loadRegistryOrNil()
+		if reg != nil && len(reg.Accounts) > 1 {
+			configDir, accountName = pickAccount(reg, selected.Account)
+		}
+	} else {
+		reg := loadRegistryOrNil()
+		if reg != nil {
+			dir, err := reg.ResolveConfigDir(onAccount)
+			if err != nil {
+				fmt.Fprintf(os.Stderr, "[cx] unknown account %q\n", onAccount)
+				os.Exit(1)
+			}
+			configDir = dir
+			accountName = onAccount
+		}
+	}
+
+	fmt.Fprintf(os.Stderr, "[cx] Resuming %q on account %s\n", displaySlug(selected), accountName)
+
+	env := replaceOrAppendEnv(os.Environ(), "CLAUDE_CONFIG_DIR", configDir)
 	if err := platform.ExecProgram("claude", []string{"--resume", selected.ID}, env); err != nil {
 		fmt.Fprintf(os.Stderr, "[cx] failed to exec claude: %v\n", err)
 		os.Exit(1)
 	}
+}
+
+// pickAccount asks the user which account to run the session on.
+// Returns the config dir and account name.
+func pickAccount(reg *config.Registry, defaultAccount string) (string, string) {
+	names := sortedNames(reg)
+	if len(names) <= 1 {
+		dir, _ := reg.ResolveConfigDir(defaultAccount)
+		return dir, defaultAccount
+	}
+
+	fmt.Fprintf(os.Stderr, "\n  Run on which account? ")
+	for i, name := range names {
+		marker := ""
+		if name == defaultAccount {
+			marker = "*"
+		}
+		if i > 0 {
+			fmt.Fprint(os.Stderr, " / ")
+		}
+		fmt.Fprintf(os.Stderr, "%s%s", name, marker)
+	}
+	fmt.Fprintf(os.Stderr, " [%s]: ", defaultAccount)
+
+	reader := bufio.NewReader(os.Stdin)
+	line, _ := reader.ReadString('\n')
+	line = strings.TrimSpace(line)
+
+	if line == "" {
+		line = defaultAccount
+	}
+
+	dir, err := reg.ResolveConfigDir(line)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "[cx] unknown account %q, using %s\n", line, defaultAccount)
+		dir, _ = reg.ResolveConfigDir(defaultAccount)
+		return dir, defaultAccount
+	}
+	return dir, line
 }
 
 // pickSession shows a numbered list and reads user choice from stdin.

@@ -230,7 +230,7 @@ func extractHeadMeta(line []byte, curModel, curFirstMsg string) (string, string)
 	var entry struct {
 		Type    string `json:"type"`
 		Message struct {
-			Model   string `json:"model"`
+			Model   string          `json:"model"`
 			Content json.RawMessage `json:"content"`
 		} `json:"message"`
 	}

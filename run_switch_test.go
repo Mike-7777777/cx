@@ -8,7 +8,6 @@ import (
 	"testing"
 
 	"github.com/Mike-7777777/cx/internal/config"
-	"github.com/Mike-7777777/cx/internal/platform"
 )
 
 // testConfigDir returns a safe absolute path usable on the current OS.
@@ -34,8 +33,8 @@ func TestSwitch_BashOutput(t *testing.T) {
 		},
 		Stdout: &buf, Stderr: &buf, UseColor: false,
 	}
-	cmd := &switchCmd{shell: platform.ShellBash, noSync: true}
-	err := cmd.Run(context.Background(), app, []string{"alt"})
+	cmd := &switchCmd{}
+	err := cmd.Run(context.Background(), app, []string{"alt", "--shell=bash", "--no-sync"})
 	if err != nil {
 		t.Fatalf("Run: %v", err)
 	}
@@ -61,8 +60,8 @@ func TestSwitch_MainUnsetsEnv(t *testing.T) {
 		},
 		Stdout: &buf, Stderr: &buf, UseColor: false,
 	}
-	cmd := &switchCmd{shell: platform.ShellBash, noSync: true}
-	err := cmd.Run(context.Background(), app, []string{"main"})
+	cmd := &switchCmd{}
+	err := cmd.Run(context.Background(), app, []string{"main", "--shell=bash", "--no-sync"})
 	if err != nil {
 		t.Fatalf("Run: %v", err)
 	}
@@ -85,8 +84,8 @@ func TestSwitch_UnsafePathRejected(t *testing.T) {
 		},
 		Stdout: &bytes.Buffer{}, Stderr: &bytes.Buffer{}, UseColor: false,
 	}
-	cmd := &switchCmd{shell: platform.ShellBash, noSync: true}
-	err := cmd.Run(context.Background(), app, []string{"evil"})
+	cmd := &switchCmd{}
+	err := cmd.Run(context.Background(), app, []string{"evil", "--shell=bash", "--no-sync"})
 	if err == nil {
 		t.Fatal("expected error for unsafe path")
 	}
@@ -104,8 +103,8 @@ func TestSwitch_UnknownAccount(t *testing.T) {
 		},
 		Stdout: &bytes.Buffer{}, Stderr: &bytes.Buffer{}, UseColor: false,
 	}
-	cmd := &switchCmd{shell: platform.ShellBash, noSync: true}
-	err := cmd.Run(context.Background(), app, []string{"nonexistent"})
+	cmd := &switchCmd{}
+	err := cmd.Run(context.Background(), app, []string{"nonexistent", "--shell=bash", "--no-sync"})
 	if err == nil {
 		t.Fatal("expected error for unknown account")
 	}
@@ -119,8 +118,8 @@ func TestSwitch_InvalidName(t *testing.T) {
 		},
 		Stdout: &bytes.Buffer{}, Stderr: &bytes.Buffer{}, UseColor: false,
 	}
-	cmd := &switchCmd{shell: platform.ShellBash, noSync: true}
-	err := cmd.Run(context.Background(), app, []string{"../etc/passwd"})
+	cmd := &switchCmd{}
+	err := cmd.Run(context.Background(), app, []string{"../etc/passwd", "--shell=bash", "--no-sync"})
 	if err == nil {
 		t.Fatal("expected error for invalid name")
 	}

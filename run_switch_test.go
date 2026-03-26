@@ -3,7 +3,6 @@ package main
 import (
 	"bytes"
 	"context"
-	"path/filepath"
 	"runtime"
 	"strings"
 	"testing"
@@ -15,9 +14,9 @@ import (
 // testConfigDir returns a safe absolute path usable on the current OS.
 func testConfigDir(name string) string {
 	if runtime.GOOS == "windows" {
-		return filepath.Join("C:\\Users\\testuser", name)
+		return "C:\\Users\\testuser\\" + name
 	}
-	return filepath.Join("/home/user", name)
+	return "/home/user/" + name
 }
 
 func TestSwitch_BashOutput(t *testing.T) {

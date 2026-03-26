@@ -56,13 +56,14 @@ GoReleaser uses these prefixes to auto-generate the changelog on release.
 
 ## Adding a New Command
 
-1. Create `run_<name>.go` with a `func run<Name>()` entry point
+1. Create `run_<name>.go` with a `xxxCmd` struct implementing `Runner`
 2. Register in `main.go`:
-   - Add to `commands` map with category
+   - Add `&xxxCmd{}` to `commands` map with category
    - Add usage hint to `commandUsageHint` if it takes args
-3. Add to README.md command table
-4. Add to CHANGELOG.md under `[Unreleased]`
-5. Run full check: `gofmt -w . && make lint test build`
+3. Add tests in `run_<name>_test.go`
+4. Add to README.md command table
+5. Add to CHANGELOG.md under `[Unreleased]`
+6. Run full check: `gofmt -w . && make lint test build`
 
 Example skeleton:
 
@@ -70,16 +71,22 @@ Example skeleton:
 // run_example.go
 package main
 
-import "fmt"
+import (
+    "context"
+    "fmt"
+)
 
-func runExample() {
-    fmt.Println("hello")
+type exampleCmd struct{}
+
+func (c *exampleCmd) Run(_ context.Context, app *App, args []string) error {
+    fmt.Fprintln(app.Stdout, "hello")
+    return nil
 }
 ```
 
 ```go
 // main.go — add to commands map:
-"example": {runExample, "Short description", catDailyUse},
+"example": {&exampleCmd{}, "Short description", catDailyUse},
 ```
 
 ## Adding a New UI Label
@@ -91,6 +98,8 @@ All user-facing strings ("5h", "7d", "ctx", "reset", etc.) live in `internal/for
 - **No hardcoded paths** — use `os.UserHomeDir()`, `filepath.Join()`, `$CLAUDE_PROJECT_DIR`
 - **No personal data** — no emails, names, account IDs in source code
 - **No hardcoded UI strings** — use `format.Label*` constants
+- **Write to `app.Stdout`/`app.Stderr`** — never `os.Stdout`/`os.Stderr` in commands
+- **Return `error` from `Run`** — never call `os.Exit` in commands
 - **Forward slashes** in any path that goes into settings.json or shell commands
 - **`internal/`** for all packages — nothing exported outside the binary
 - **Minimal dependencies** — only `natefinch/atomic` as external dep

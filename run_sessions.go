@@ -401,16 +401,6 @@ func formatAge(d time.Duration) string {
 	}
 }
 
-func formatTokens(t int64) string {
-	if t == 0 {
-		return "-"
-	}
-	if t < 1000 {
-		return fmt.Sprintf("%d", t)
-	}
-	return fmt.Sprintf("%.1fk", float64(t)/1000)
-}
-
 func sortedNames(reg *config.Registry) []string {
 	names := make([]string, 0, len(reg.Accounts))
 	for name := range reg.Accounts {

@@ -29,14 +29,6 @@ type StatuslineConfig struct {
 	ShowSwitchHint   *bool `json:"show_switch_hint,omitempty"`
 }
 
-// IsEnabled returns the value of a *bool field, defaulting to true when nil.
-func (c *StatuslineConfig) IsEnabled(field *bool) bool {
-	if field == nil {
-		return true
-	}
-	return *field
-}
-
 // Registry holds all known accounts and tracks which is main.
 // The path field is intentionally unexported so it is never serialised.
 type Registry struct {

@@ -47,25 +47,3 @@ func TestFormatAge(t *testing.T) {
 		}
 	}
 }
-
-func TestFormatTokens(t *testing.T) {
-	tests := []struct {
-		input int64
-		want  string
-	}{
-		{0, "-"},
-		{500, "500"},
-		{1500, "1.5k"},
-		{150000, "150.0k"},
-		{999, "999"},
-		{1000, "1.0k"},
-		{10000, "10.0k"},
-	}
-
-	for _, tt := range tests {
-		got := formatTokens(tt.input)
-		if got != tt.want {
-			t.Errorf("formatTokens(%d) = %q, want %q", tt.input, got, tt.want)
-		}
-	}
-}

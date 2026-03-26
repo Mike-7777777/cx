@@ -55,7 +55,7 @@ func WriteRateCache(path string, rc *RateCache) error {
 	if err != nil {
 		return err
 	}
-	return os.WriteFile(path, data, 0o644)
+	return os.WriteFile(path, data, 0o600)
 }
 
 // ReadRateCache reads and deserialises the cache at path.

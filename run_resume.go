@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"context"
 	"fmt"
+	"io"
 	"os"
 	"strings"
 
@@ -71,11 +72,11 @@ Usage:
 			selected = &matches[0]
 		} else {
 			// Multiple matches — show picker.
-			selected = pickSession(sessions, app.UseColor)
+			selected = pickSession(sessions, app.UseColor, app.Stderr)
 		}
 	} else {
 		// No args — interactive picker.
-		selected = pickSession(sessions, app.UseColor)
+		selected = pickSession(sessions, app.UseColor, app.Stderr)
 	}
 
 	if selected == nil {
@@ -90,7 +91,7 @@ Usage:
 		// Interactive: if multiple accounts exist, ask which one to use.
 		reg := loadRegistryOrNil()
 		if reg != nil && len(reg.Accounts) > 1 && onAccount != "true" {
-			configDir, accountName = pickAccount(reg, selected.Account)
+			configDir, accountName = pickAccount(reg, selected.Account, app.Stderr)
 		}
 	} else {
 		reg := loadRegistryOrNil()
@@ -115,25 +116,25 @@ Usage:
 
 // pickAccount asks the user which account to run the session on.
 // Returns the config dir and account name.
-func pickAccount(reg *config.Registry, defaultAccount string) (string, string) {
+func pickAccount(reg *config.Registry, defaultAccount string, w io.Writer) (string, string) {
 	names := sortedNames(reg)
 	if len(names) <= 1 {
 		dir, _ := reg.ResolveConfigDir(defaultAccount)
 		return dir, defaultAccount
 	}
 
-	fmt.Fprintf(os.Stderr, "\n  Run on which account? ")
+	fmt.Fprintf(w, "\n  Run on which account? ")
 	for i, name := range names {
 		marker := ""
 		if name == defaultAccount {
 			marker = "*"
 		}
 		if i > 0 {
-			fmt.Fprint(os.Stderr, " / ")
+			fmt.Fprint(w, " / ")
 		}
-		fmt.Fprintf(os.Stderr, "%s%s", name, marker)
+		fmt.Fprintf(w, "%s%s", name, marker)
 	}
-	fmt.Fprintf(os.Stderr, " [%s]: ", defaultAccount)
+	fmt.Fprintf(w, " [%s]: ", defaultAccount)
 
 	reader := bufio.NewReader(os.Stdin)
 	line, _ := reader.ReadString('\n')
@@ -145,7 +146,7 @@ func pickAccount(reg *config.Registry, defaultAccount string) (string, string) {
 
 	dir, err := reg.ResolveConfigDir(line)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "[cx] unknown account %q, using %s\n", line, defaultAccount)
+		fmt.Fprintf(w, "[cx] unknown account %q, using %s\n", line, defaultAccount)
 		dir, _ = reg.ResolveConfigDir(defaultAccount)
 		return dir, defaultAccount
 	}
@@ -153,7 +154,7 @@ func pickAccount(reg *config.Registry, defaultAccount string) (string, string) {
 }
 
 // pickSession shows a numbered list and reads user choice from stdin.
-func pickSession(sessions []sessionEntry, useColor bool) *sessionEntry {
+func pickSession(sessions []sessionEntry, useColor bool, w io.Writer) *sessionEntry {
 	reg := loadRegistryOrNil()
 
 	max := len(sessions)
@@ -161,9 +162,9 @@ func pickSession(sessions []sessionEntry, useColor bool) *sessionEntry {
 		max = 15
 	}
 
-	fmt.Fprintln(os.Stderr)
-	fmt.Fprintf(os.Stderr, "       %-4s  %-8s  %s\n", "Acct", "Age", "Topic")
-	fmt.Fprintf(os.Stderr, "      %s\n", strings.Repeat("─", 70))
+	fmt.Fprintln(w)
+	fmt.Fprintf(w, "       %-4s  %-8s  %s\n", "Acct", "Age", "Topic")
+	fmt.Fprintf(w, "      %s\n", strings.Repeat("─", 70))
 	for i, s := range sessions[:max] {
 		marker := "  "
 		if reg != nil && s.Account == reg.Main {
@@ -176,15 +177,15 @@ func pickSession(sessions []sessionEntry, useColor bool) *sessionEntry {
 		}
 
 		topic := sessionTopic(&s)
-		fmt.Fprintf(os.Stderr, "  %s%2d) %-4s  %s%-8s  %s\n",
+		fmt.Fprintf(w, "  %s%2d) %-4s  %s%-8s  %s\n",
 			marker, i+1, s.Account, activeTag, formatAge(s.Age), topic)
 	}
 
-	fmt.Fprintf(os.Stderr, "\n")
+	fmt.Fprintf(w, "\n")
 	if useColor {
-		fmt.Fprint(os.Stderr, "  Pick [1-", max, "]: ")
+		fmt.Fprint(w, "  Pick [1-", max, "]: ")
 	} else {
-		fmt.Fprintf(os.Stderr, "  Pick [1-%d]: ", max)
+		fmt.Fprintf(w, "  Pick [1-%d]: ", max)
 	}
 
 	reader := bufio.NewReader(os.Stdin)
@@ -198,14 +199,14 @@ func pickSession(sessions []sessionEntry, useColor bool) *sessionEntry {
 	num := 0
 	for _, c := range line {
 		if c < '0' || c > '9' {
-			fmt.Fprintln(os.Stderr, "Invalid choice.")
+			fmt.Fprintln(w, "Invalid choice.")
 			return nil
 		}
 		num = num*10 + int(c-'0')
 	}
 
 	if num < 1 || num > max {
-		fmt.Fprintln(os.Stderr, "Out of range.")
+		fmt.Fprintln(w, "Out of range.")
 		return nil
 	}
 

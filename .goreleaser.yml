@@ -23,6 +23,9 @@ archives:
         formats:
           - zip
     name_template: "{{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
+    files:
+      - LICENSE
+      - README.md
 # TODO: enable after setting up PAT with repo write access
 # brews:
 #   - repository:

@@ -1,0 +1,57 @@
+name: Bug Report
+description: Report a bug in cx
+labels: [bug]
+body:
+  - type: input
+    id: cx-version
+    attributes:
+      label: cx version
+      description: Output of `cx version`
+      placeholder: "cx 0.3.0 (go1.24.0, windows/amd64)"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: os-arch
+    attributes:
+      label: OS + Architecture
+      options:
+        - Windows amd64
+        - Windows arm64
+        - macOS amd64
+        - macOS arm64
+        - Linux amd64
+        - Linux arm64
+    validations:
+      required: true
+
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      description: Minimal steps to reproduce the issue.
+      placeholder: |
+        1. Run `cx status`
+        2. ...
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected-vs-actual
+    attributes:
+      label: Expected vs actual behavior
+      description: What you expected and what actually happened.
+      placeholder: |
+        Expected: ...
+        Actual: ...
+    validations:
+      required: true
+
+  - type: input
+    id: cc-version
+    attributes:
+      label: Claude Code version
+      description: Output of `claude --version` (if relevant)
+      placeholder: "1.0.12"
+    validations:
+      required: false

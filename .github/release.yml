@@ -1,0 +1,32 @@
+changelog:
+  exclude:
+    authors:
+      - dependabot
+      - dependabot[bot]
+  categories:
+    - title: Features
+      labels: []
+      include:
+        - "feat:*"
+        - "feat(*"
+    - title: Bug Fixes
+      labels: []
+      include:
+        - "fix:*"
+        - "fix(*"
+    - title: Documentation
+      labels: []
+      include:
+        - "docs:*"
+        - "docs(*"
+    - title: Maintenance
+      labels: []
+      include:
+        - "chore:*"
+        - "chore(*"
+        - "refactor:*"
+        - "refactor(*"
+        - "ci:*"
+        - "ci(*"
+        - "build:*"
+        - "build(*"

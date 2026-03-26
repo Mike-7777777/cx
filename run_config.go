@@ -1,60 +1,56 @@
 package main
 
 import (
+	"context"
 	"fmt"
-	"os"
 	"path/filepath"
 	"sort"
 	"strings"
 
 	"github.com/Mike-7777777/cx/internal/config"
 	"github.com/Mike-7777777/cx/internal/format"
-	"github.com/Mike-7777777/cx/internal/platform"
 )
 
-func runConfig() {
-	args := os.Args[2:] // everything after "config"
+// configCmd implements Runner for the "config" subcommand.
+type configCmd struct{}
 
+// Run dispatches to config subcommands: show (default), main, rename, set.
+func (c *configCmd) Run(_ context.Context, app *App, args []string) error {
 	if len(args) == 0 || args[0] == "show" {
-		configShow()
-		return
+		return configShow(app)
 	}
 
 	switch args[0] {
 	case "main":
 		if len(args) < 2 {
-			fmt.Fprintln(os.Stderr, "usage: cx config main <account-name>")
-			os.Exit(1)
+			return fmt.Errorf("usage: cx config main <account-name>")
 		}
-		configSetMain(args[1])
+		return configSetMain(app, args[1])
 	case "rename":
 		if len(args) < 3 {
-			fmt.Fprintln(os.Stderr, "usage: cx config rename <old-name> <new-name>")
-			os.Exit(1)
+			return fmt.Errorf("usage: cx config rename <old-name> <new-name>")
 		}
-		configRename(args[1], args[2])
+		return configRename(app, args[1], args[2])
 	case "set":
 		if len(args) < 4 {
-			fmt.Fprintln(os.Stderr, "usage: cx config set <account> <key> <value>")
-			fmt.Fprintln(os.Stderr, "  keys: email, alias")
-			os.Exit(1)
+			return fmt.Errorf("usage: cx config set <account> <key> <value>\n  keys: email, alias")
 		}
-		configSet(args[1], args[2], strings.Join(args[3:], " "))
+		return configSet(app, args[1], args[2], strings.Join(args[3:], " "))
 	case "--help", "-h", "help":
-		configHelp()
+		configHelp(app)
+		return nil
 	default:
-		fmt.Fprintf(os.Stderr, "unknown config subcommand: %s\n", args[0])
-		configHelp()
-		os.Exit(1)
+		configHelp(app)
+		return fmt.Errorf("unknown config subcommand: %s", args[0])
 	}
 }
 
-func configShow() {
-	reg := loadRegistry()
-	useColor := platform.ANSIEnabled()
+func configShow(app *App) error {
+	reg := app.Registry
+	useColor := app.UseColor
 
-	fmt.Println(format.Colorize("cx configuration", format.Bold, useColor))
-	fmt.Println()
+	fmt.Fprintln(app.Stdout, format.Colorize("cx configuration", format.Bold, useColor))
+	fmt.Fprintln(app.Stdout)
 
 	names := sortedAccountNames(reg)
 
@@ -72,22 +68,22 @@ func configShow() {
 		info := readAccountInfo(dir)
 
 		nameStr := format.Colorize(name, format.Cyan+format.Bold, useColor)
-		fmt.Printf("%s%s", marker, nameStr)
+		fmt.Fprintf(app.Stdout, "%s%s", marker, nameStr)
 		if info.Tier != "" {
-			fmt.Printf(" (%s)", format.Colorize(info.Tier, format.Green, useColor))
+			fmt.Fprintf(app.Stdout, " (%s)", format.Colorize(info.Tier, format.Green, useColor))
 		}
-		fmt.Println()
+		fmt.Fprintln(app.Stdout)
 
 		if info.Email != "" {
-			fmt.Printf("    email: %s\n", info.Email)
+			fmt.Fprintf(app.Stdout, "    email: %s\n", info.Email)
 		} else if acc.Email != "" {
-			fmt.Printf("    email: %s\n", acc.Email)
+			fmt.Fprintf(app.Stdout, "    email: %s\n", acc.Email)
 		}
 		if info.DisplayName != "" {
-			fmt.Printf("    user:  %s\n", info.DisplayName)
+			fmt.Fprintf(app.Stdout, "    user:  %s\n", info.DisplayName)
 		}
 		if acc.Alias != "" {
-			fmt.Printf("    alias: %s\n", acc.Alias)
+			fmt.Fprintf(app.Stdout, "    alias: %s\n", acc.Alias)
 		}
 
 		// Stats from .claude.json.
@@ -99,7 +95,7 @@ func configShow() {
 			meta = append(meta, fmt.Sprintf("%d sessions", info.NumStartups))
 		}
 		if len(meta) > 0 {
-			fmt.Printf("    stats: %s\n", format.Colorize(strings.Join(meta, " · "), format.Dim, useColor))
+			fmt.Fprintf(app.Stdout, "    stats: %s\n", format.Colorize(strings.Join(meta, " · "), format.Dim, useColor))
 		}
 
 		// Config dir.
@@ -107,46 +103,51 @@ func configShow() {
 		if acc.ConfigDir == "" {
 			dirLabel += " (default)"
 		}
-		fmt.Printf("    dir:   %s\n", format.Colorize(dirLabel, format.Dim, useColor))
-		fmt.Println()
+		fmt.Fprintf(app.Stdout, "    dir:   %s\n", format.Colorize(dirLabel, format.Dim, useColor))
+		fmt.Fprintln(app.Stdout)
 	}
+	return nil
 }
 
-func configSetMain(name string) {
-	reg := loadRegistry()
+func configSetMain(app *App, name string) error {
+	// Reload from disk since we modify and save.
+	reg, err := reloadRegistry()
+	if err != nil {
+		return err
+	}
 
 	if _, ok := reg.Accounts[name]; !ok {
-		fmt.Fprintf(os.Stderr, "account %q not found\n", name)
-		os.Exit(1)
+		return fmt.Errorf("account %q not found", name)
 	}
 
 	old := reg.Main
 	reg.Main = name
 	if err := reg.Save(); err != nil {
-		fmt.Fprintf(os.Stderr, "saving registry: %v\n", err)
-		os.Exit(1)
+		return fmt.Errorf("saving registry: %v", err)
 	}
 
-	fmt.Fprintf(os.Stderr, "Main changed: %s → %s\n", old, name)
+	fmt.Fprintf(app.Stderr, "Main changed: %s → %s\n", old, name)
+	return nil
 }
 
-func configRename(oldName, newName string) {
-	reg := loadRegistry()
-
+func configRename(app *App, oldName, newName string) error {
 	if !validAccountName.MatchString(newName) {
-		fmt.Fprintf(os.Stderr, "invalid name %q (only letters, digits, hyphens, underscores)\n", newName)
-		os.Exit(1)
+		return fmt.Errorf("invalid name %q (only letters, digits, hyphens, underscores)", newName)
+	}
+
+	// Reload from disk since we modify and save.
+	reg, err := reloadRegistry()
+	if err != nil {
+		return err
 	}
 
 	acc, ok := reg.Accounts[oldName]
 	if !ok {
-		fmt.Fprintf(os.Stderr, "account %q not found\n", oldName)
-		os.Exit(1)
+		return fmt.Errorf("account %q not found", oldName)
 	}
 
 	if _, exists := reg.Accounts[newName]; exists {
-		fmt.Fprintf(os.Stderr, "account %q already exists\n", newName)
-		os.Exit(1)
+		return fmt.Errorf("account %q already exists", newName)
 	}
 
 	// Move the account entry.
@@ -159,25 +160,28 @@ func configRename(oldName, newName string) {
 	}
 
 	if err := reg.Save(); err != nil {
-		fmt.Fprintf(os.Stderr, "saving registry: %v\n", err)
-		os.Exit(1)
+		return fmt.Errorf("saving registry: %v", err)
 	}
 
-	fmt.Fprintf(os.Stderr, "Renamed: %s → %s\n", oldName, newName)
+	fmt.Fprintf(app.Stderr, "Renamed: %s → %s\n", oldName, newName)
 
 	// Hint: directory is not renamed (by design).
 	if acc.ConfigDir != "" {
-		fmt.Fprintf(os.Stderr, "  Note: config directory unchanged at %s\n", acc.ConfigDir)
+		fmt.Fprintf(app.Stderr, "  Note: config directory unchanged at %s\n", acc.ConfigDir)
 	}
+	return nil
 }
 
-func configSet(accountName, key, value string) {
-	reg := loadRegistry()
+func configSet(app *App, accountName, key, value string) error {
+	// Reload from disk since we modify and save.
+	reg, err := reloadRegistry()
+	if err != nil {
+		return err
+	}
 
 	acc, ok := reg.Accounts[accountName]
 	if !ok {
-		fmt.Fprintf(os.Stderr, "account %q not found\n", accountName)
-		os.Exit(1)
+		return fmt.Errorf("account %q not found", accountName)
 	}
 
 	switch key {
@@ -186,21 +190,20 @@ func configSet(accountName, key, value string) {
 	case "alias":
 		acc.Alias = value
 	default:
-		fmt.Fprintf(os.Stderr, "unknown key %q (supported: email, alias)\n", key)
-		os.Exit(1)
+		return fmt.Errorf("unknown key %q (supported: email, alias)", key)
 	}
 
 	reg.Accounts[accountName] = acc
 	if err := reg.Save(); err != nil {
-		fmt.Fprintf(os.Stderr, "saving registry: %v\n", err)
-		os.Exit(1)
+		return fmt.Errorf("saving registry: %v", err)
 	}
 
-	fmt.Fprintf(os.Stderr, "Set %s.%s = %s\n", accountName, key, value)
+	fmt.Fprintf(app.Stderr, "Set %s.%s = %s\n", accountName, key, value)
+	return nil
 }
 
-func configHelp() {
-	fmt.Print(`cx config — manage accounts and settings
+func configHelp(app *App) {
+	fmt.Fprint(app.Stderr, `cx config — manage accounts and settings
 
 Usage:
   cx config                        Show full configuration
@@ -211,19 +214,13 @@ Usage:
 `)
 }
 
-// loadRegistry loads the registry or exits on error.
-func loadRegistry() *config.Registry {
+// reloadRegistry loads a fresh registry from disk for commands that modify and save it.
+func reloadRegistry() (*config.Registry, error) {
 	regPath, err := config.RegistryPath()
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "cx config: %v\n", err)
-		os.Exit(1)
+		return nil, err
 	}
-	reg, err := config.LoadOrCreateRegistry(regPath)
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "cx config: %v\n", err)
-		os.Exit(1)
-	}
-	return reg
+	return config.LoadOrCreateRegistry(regPath)
 }
 
 // resolveDir resolves the config directory for an account.

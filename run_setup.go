@@ -2,6 +2,7 @@ package main
 
 import (
 	"bufio"
+	"context"
 	"embed"
 	"encoding/json"
 	"fmt"
@@ -246,7 +247,10 @@ func runSetup() {
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "  Running health check...")
 	fmt.Fprintln(os.Stderr)
-	runDoctor()
+	// Build a temporary App to run the migrated doctor command.
+	if doctorApp, doctorErr := buildApp(); doctorErr == nil {
+		_ = (&doctorCmd{}).Run(context.Background(), doctorApp, nil)
+	}
 
 	// Step 8: Show usage.
 	fmt.Fprintln(os.Stderr)

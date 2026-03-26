@@ -2,6 +2,7 @@ package main
 
 import (
 	"bufio"
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -13,7 +14,6 @@ import (
 
 	"github.com/Mike-7777777/cx/internal/config"
 	"github.com/Mike-7777777/cx/internal/format"
-	"github.com/Mike-7777777/cx/internal/platform"
 )
 
 const defaultSessionLimit = 10
@@ -33,25 +33,17 @@ type sessionEntry struct {
 	LastMsg   string        `json:"last_msg,omitempty"`
 }
 
-func runSessions() {
-	limit := defaultSessionLimit
-	accountFilter := ""
-	showAll := false
-	jsonOut := false
+// sessionsCmd implements Runner for the "sessions" subcommand.
+type sessionsCmd struct{}
 
-	for i := 2; i < len(os.Args); i++ {
-		switch {
-		case os.Args[i] == "--all":
-			showAll = true
-		case os.Args[i] == "--json":
-			jsonOut = true
-		case os.Args[i] == "--account" && i+1 < len(os.Args):
-			accountFilter = os.Args[i+1]
-			i++
-		case strings.HasPrefix(os.Args[i], "--account="):
-			accountFilter = strings.TrimPrefix(os.Args[i], "--account=")
-		case os.Args[i] == "--help" || os.Args[i] == "-h":
-			fmt.Print(`cx sessions — list recent CC sessions across all accounts
+// Run lists recent CC sessions across all accounts.
+func (c *sessionsCmd) Run(_ context.Context, app *App, args []string) error {
+	flags, _ := parseFlags(args, "all", "json", "account")
+
+	// Check for help flag.
+	for _, arg := range args {
+		if arg == "--help" || arg == "-h" {
+			fmt.Fprint(app.Stdout, `cx sessions — list recent CC sessions across all accounts
 
 Usage:
   cx sessions [options]
@@ -61,29 +53,33 @@ Options:
   --json             JSON output
   --account <name>   Filter by account
 `)
-			return
+			return nil
 		}
 	}
 
+	_, showAll := flags["all"]
+	_, jsonOut := flags["json"]
+	accountFilter := flags["account"]
+
+	limit := defaultSessionLimit
 	if showAll {
 		limit = 0
 	}
 
 	sessions := collectSessions(accountFilter, limit)
 	if len(sessions) == 0 {
-		fmt.Println("No sessions found.")
-		return
+		fmt.Fprintln(app.Stdout, "No sessions found.")
+		return nil
 	}
 
 	if jsonOut {
 		data, _ := json.MarshalIndent(sessions, "", "  ")
-		fmt.Println(string(data))
-		return
+		fmt.Fprintln(app.Stdout, string(data))
+		return nil
 	}
 
-	reg := loadRegistryOrNil()
-	useColor := platform.ANSIEnabled()
-	printSessionTable(sessions, reg, useColor)
+	printSessionTable(app, sessions, app.Registry, app.UseColor)
+	return nil
 }
 
 // collectSessions gathers session metadata from all accounts.
@@ -341,13 +337,13 @@ func shortProjectName(slug string) string {
 	return slug
 }
 
-func printSessionTable(sessions []sessionEntry, reg *config.Registry, useColor bool) {
+func printSessionTable(app *App, sessions []sessionEntry, reg *config.Registry, useColor bool) {
 	header := fmt.Sprintf("  %-4s  %-8s  %s",
 		"Acct", "Age", "Topic")
 	sep := strings.Repeat("━", 80)
 
-	fmt.Println(format.Colorize(header, format.Bold, useColor))
-	fmt.Println(format.Colorize(sep, format.Dim, useColor))
+	fmt.Fprintln(app.Stdout, format.Colorize(header, format.Bold, useColor))
+	fmt.Fprintln(app.Stdout, format.Colorize(sep, format.Dim, useColor))
 
 	for _, s := range sessions {
 		marker := "  "
@@ -365,7 +361,7 @@ func printSessionTable(sessions []sessionEntry, reg *config.Registry, useColor b
 		ageStr := formatAge(s.Age)
 		topic := sessionTopic(&s)
 
-		fmt.Printf("%s%-4s  %s%-8s  %s\n",
+		fmt.Fprintf(app.Stdout, "%s%-4s  %s%-8s  %s\n",
 			marker, nameStr, activeTag, ageStr, topic)
 	}
 }

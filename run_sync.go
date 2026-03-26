@@ -3,13 +3,13 @@ package main
 import (
 	"bufio"
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
 
-	"github.com/Mike-7777777/cx/internal/config"
 	"github.com/Mike-7777777/cx/internal/platform"
 	"github.com/natefinch/atomic"
 )
@@ -20,26 +20,20 @@ var syncFileList = []string{
 	"plugins/blocklist.json", "plugins/known_marketplaces.json",
 }
 
-func runSync() {
-	regPath, err := config.RegistryPath()
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "cx sync: %v\n", err)
-		os.Exit(1)
-	}
+// syncCmd implements Runner for the "sync" subcommand.
+type syncCmd struct{}
 
-	reg, err := config.LoadOrCreateRegistry(regPath)
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "cx sync: %v\n", err)
-		os.Exit(1)
-	}
+// Run syncs config files from the main account to all secondary accounts.
+func (c *syncCmd) Run(_ context.Context, app *App, args []string) error {
+	flags, _ := parseFlags(args, "force")
+	_, force := flags["force"]
+
+	reg := app.Registry
 
 	mainDir, err := reg.ResolveConfigDir(reg.Main)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "cx sync: resolving main account %q: %v\n", reg.Main, err)
-		os.Exit(1)
+		return fmt.Errorf("resolving main account %q: %v", reg.Main, err)
 	}
-
-	force := hasFlagFrom("--force", 2)
 
 	for name, acc := range reg.Accounts {
 		if name == reg.Main {
@@ -49,12 +43,12 @@ func runSync() {
 		if targetDir == "" {
 			continue
 		}
-		fmt.Fprintf(os.Stderr, "syncing %q → %q\n", name, targetDir)
+		fmt.Fprintf(app.Stderr, "syncing %q → %q\n", name, targetDir)
 		if err := syncFiles(mainDir, targetDir, force); err != nil {
-			fmt.Fprintf(os.Stderr, "cx sync: %v\n", err)
-			os.Exit(1)
+			return err
 		}
 	}
+	return nil
 }
 
 // syncFiles copies each file in syncFileList from srcDir to dstDir,

@@ -501,6 +501,39 @@ func TestRender_DailyBudgetNotShownWhenDaysLow(t *testing.T) {
 	}
 }
 
+func TestRender_OutputStyleShown(t *testing.T) {
+	input := &Input{
+		Model:         Model{ID: "claude-opus-4-6", DisplayName: "Opus 4.6"},
+		ContextWindow: ContextWindow{UsedPercentage: ptrF64(20.0), ContextWindowSize: ptrI64(200000)},
+		OutputStyle:   &OutputStyle{Name: "fast"},
+	}
+
+	// Normal mode: should show "Opus 4.6 Fast"
+	lines := Render(input, nil, false)
+	if !strings.Contains(lines[0], "Opus 4.6 Fast") {
+		t.Errorf("normal mode missing output style: %q", lines[0])
+	}
+
+	// Compact mode: should show "Opus Fast" (first word + style)
+	lines = Render(input, nil, false, RenderOpts{Compact: true})
+	if !strings.Contains(lines[0], "Opus Fast") {
+		t.Errorf("compact mode missing output style: %q", lines[0])
+	}
+}
+
+func TestRender_OutputStyleDefaultHidden(t *testing.T) {
+	input := &Input{
+		Model:         Model{ID: "claude-opus-4-6", DisplayName: "Opus 4.6"},
+		ContextWindow: ContextWindow{UsedPercentage: ptrF64(20.0), ContextWindowSize: ptrI64(200000)},
+		OutputStyle:   &OutputStyle{Name: "default"},
+	}
+
+	lines := Render(input, nil, false)
+	if strings.Contains(lines[0], "Default") {
+		t.Errorf("should not show 'Default' style: %q", lines[0])
+	}
+}
+
 func TestRender_FullWithAllFeatures(t *testing.T) {
 	input := &Input{
 		Model:         Model{ID: "claude-opus-4-6", DisplayName: "Opus 4.6"},

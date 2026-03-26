@@ -621,6 +621,10 @@
   // Global tooltip: any element with data-tip shows the tooltip on hover.
   var tip = document.getElementById('tooltip');
   var tipTarget = null;
+  document.documentElement.addEventListener('mouseleave', function() {
+    tipTarget = null;
+    tip.style.display = 'none';
+  });
   document.addEventListener('mouseover', function(e) {
     var el = e.target.closest('[data-tip]');
     if (el === tipTarget) return; // same element, no flicker

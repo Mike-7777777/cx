@@ -336,15 +336,19 @@ func findWrapperEnd(content string, idx int, shell platform.Shell) int {
 	}
 
 	// Find the last endMarker at line start (column 0) within the block.
+	// Check for endMarker at file start (no preceding newline).
 	needle := "\n" + endMarker
 	pos := idx
 	lastEnd := idx
+
+	if strings.HasPrefix(content[idx:], endMarker) {
+		lastEnd = idx + len(endMarker)
+	}
 	for {
 		next := strings.Index(content[pos:], needle)
 		if next < 0 {
 			break
 		}
-		// +1 to skip the \n prefix; endMarker starts after it.
 		candidate := pos + next + len(needle)
 		lastEnd = candidate
 		pos = candidate

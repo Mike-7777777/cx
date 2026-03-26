@@ -20,6 +20,9 @@ cx manages multiple Claude Code Max Plan accounts from a single machine. It moni
 | Health check | `cx doctor` | Diagnose config/auth issues |
 | Sync config across accounts | `cx sync` | Push main account config to secondaries |
 | Re-authenticate | `cx login <name>` | Fix expired OAuth tokens |
+| Usage pattern analysis | `cx insights [--all]` | Hourly heatmap, model distribution, efficiency metrics |
+| Predict rate limit exhaustion | `cx predict` | Velocity, time-to-exhaust, actionable warnings |
+| Auto-switch daemon | `cx auto [--threshold N] [--once]` | Background monitor, writes recommendation file |
 
 ### Workflow
 
@@ -34,6 +37,8 @@ cx manages multiple Claude Code Max Plan accounts from a single machine. It moni
 - "check cx" / "account status" → `cx status` + `cx usage daily` (parallel)
 - "account issues" / "auth error" → `cx doctor`
 - "recent sessions" → `cx sessions --all`
+- "usage patterns" / "peak hours" → `cx insights --all`
+- "will I hit the limit" / "predict" → `cx predict`
 
 ### Composite Analysis
 

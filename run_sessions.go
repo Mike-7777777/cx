@@ -1,8 +1,10 @@
 package main
 
 import (
+	"bufio"
 	"encoding/json"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"sort"
@@ -18,26 +20,29 @@ const defaultSessionLimit = 10
 
 // sessionEntry holds metadata for one CC session across any account.
 type sessionEntry struct {
-	ID        string
-	Account   string
-	ConfigDir string
-	Slug      string
-	Project   string
-	Model     string
-	Age       time.Duration
-	Tokens    int64
-	Active    bool
+	ID        string        `json:"id"`
+	Account   string        `json:"account"`
+	ConfigDir string        `json:"-"`
+	Slug      string        `json:"slug,omitempty"`
+	Project   string        `json:"project"`
+	Model     string        `json:"model"`
+	Age       time.Duration `json:"age_seconds"`
+	Tokens    int64         `json:"tokens"`
+	Active    bool          `json:"active"`
 }
 
 func runSessions() {
 	limit := defaultSessionLimit
 	accountFilter := ""
 	showAll := false
+	jsonOut := false
 
 	for i := 2; i < len(os.Args); i++ {
 		switch {
 		case os.Args[i] == "--all":
 			showAll = true
+		case os.Args[i] == "--json":
+			jsonOut = true
 		case os.Args[i] == "--account" && i+1 < len(os.Args):
 			accountFilter = os.Args[i+1]
 			i++
@@ -51,6 +56,7 @@ Usage:
 
 Options:
   --all              Show all sessions (default: last 10)
+  --json             JSON output
   --account <name>   Filter by account
 `)
 			return
@@ -64,6 +70,12 @@ Options:
 	sessions := collectSessions(accountFilter, limit)
 	if len(sessions) == 0 {
 		fmt.Println("No sessions found.")
+		return
+	}
+
+	if jsonOut {
+		data, _ := json.MarshalIndent(sessions, "", "  ")
+		fmt.Println(string(data))
 		return
 	}
 
@@ -162,46 +174,52 @@ func collectSessions(accountFilter string, limit int) []sessionEntry {
 	return all
 }
 
-// readSessionMeta reads the first and last lines of a JSONL file
-// to extract model, slug, and token count without parsing the whole file.
+// readSessionMeta extracts model and slug without reading the entire file.
+// Reads first 10 lines (model) + last 4KB (slug from turn_duration).
 func readSessionMeta(path string, si *sessionEntry) {
-	data, err := os.ReadFile(path)
+	f, err := os.Open(path)
 	if err != nil {
 		return
 	}
+	defer func() { _ = f.Close() }()
 
-	lines := strings.Split(strings.TrimSpace(string(data)), "\n")
-	if len(lines) == 0 {
-		return
-	}
-
-	// First line: get model from first assistant message.
-	for _, line := range lines {
-		if len(line) < 10 {
-			continue
-		}
+	// Read first 10 lines to find model.
+	scanner := bufio.NewScanner(f)
+	scanner.Buffer(make([]byte, 256*1024), 256*1024) // handle large lines
+	for i := 0; i < 10 && scanner.Scan(); i++ {
+		line := scanner.Text()
 		var entry struct {
 			Type    string `json:"type"`
 			Message struct {
 				Model string `json:"model"`
-				Usage struct {
-					InputTokens  int64 `json:"input_tokens"`
-					OutputTokens int64 `json:"output_tokens"`
-				} `json:"usage"`
 			} `json:"message"`
 		}
 		if json.Unmarshal([]byte(line), &entry) == nil {
-			if entry.Type == "assistant" && entry.Message.Model != "" && si.Model == "" {
+			if entry.Type == "assistant" && entry.Message.Model != "" {
 				si.Model = shortModelName(entry.Message.Model)
-			}
-			if entry.Type == "assistant" {
-				si.Tokens += entry.Message.Usage.InputTokens + entry.Message.Usage.OutputTokens
+				break
 			}
 		}
 	}
 
-	// Scan last lines for slug (from turn_duration system entries).
-	for i := len(lines) - 1; i >= 0 && i >= len(lines)-20; i-- {
+	// Read last 4KB to find slug (turn_duration entries are near the end).
+	info, err := f.Stat()
+	if err != nil {
+		return
+	}
+	tailSize := int64(4096)
+	if info.Size() < tailSize {
+		tailSize = info.Size()
+	}
+	if _, err := f.Seek(-tailSize, 2); err != nil {
+		return
+	}
+	tail, err := io.ReadAll(f)
+	if err != nil {
+		return
+	}
+	lines := strings.Split(string(tail), "\n")
+	for i := len(lines) - 1; i >= 0; i-- {
 		var entry struct {
 			Type    string `json:"type"`
 			Subtype string `json:"subtype"`
@@ -214,6 +232,9 @@ func readSessionMeta(path string, si *sessionEntry) {
 			}
 		}
 	}
+
+	// Estimate tokens from file size (~1 token per 15 bytes of JSONL).
+	si.Tokens = info.Size() / 15
 }
 
 // shortProjectName converts a project slug to a short display name.

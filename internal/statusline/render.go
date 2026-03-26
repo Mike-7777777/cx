@@ -186,23 +186,24 @@ func renderMain(input *Input, other *OtherAccount, opt RenderOpts, useColor bool
 		resetDate := resetTime.Local().Format("Mon 2 15:04")
 		resetStr := format.Colorize(resetDate, format.Dim, useColor)
 
-		// Daily burn rate: average daily usage vs fair daily budget (100%/7 ≈ 14.3%).
-		// Shows how much of the daily budget is being consumed on average.
-		// >100% means burning faster than sustainable; <100% means on track.
-		daysElapsed := 7.0 - time.Until(resetTime).Hours()/24
+		// Headroom: remaining daily budget vs normal daily budget (100%/7 ≈ 14.3%).
+		// Only shown when headroom < 50% (meaning you need to conserve).
+		// "91% used, 1.5 days left" → headroom = (9/1.5)/14.3 = 42% → tight, show warning.
+		// "91% used, 0.5 days left" → headroom = (9/0.5)/14.3 = 126% → fine, hide.
+		daysLeft := time.Until(resetTime).Hours() / 24
 		budgetStr := ""
-		if daysElapsed > 0.1 {
-			avgDailyUsage := w.UsedPercentage / daysElapsed
+		if daysLeft > 0.1 {
+			remaining := 100.0 - w.UsedPercentage
+			dailyAvailable := remaining / daysLeft
 			dailyBudget := 100.0 / 7.0
-			burnRate := avgDailyUsage / dailyBudget * 100
-			budgetColor := format.Green
-			if burnRate > 100 {
-				budgetColor = format.Yellow
+			headroom := dailyAvailable / dailyBudget * 100
+			if headroom < 50 {
+				budgetColor := format.Yellow
+				if headroom < 20 {
+					budgetColor = format.Red
+				}
+				budgetStr = " " + format.Colorize(fmt.Sprintf("%.0f%%avail", headroom), budgetColor, useColor)
 			}
-			if burnRate > 150 {
-				budgetColor = format.Red
-			}
-			budgetStr = " " + format.Colorize(fmt.Sprintf("%.0f%%burn", burnRate), budgetColor, useColor)
 		}
 
 		line += fmt.Sprintf(" | %s: %s %s (%s)%s", format.LabelRate7d, bar, pctStr, resetStr, budgetStr)

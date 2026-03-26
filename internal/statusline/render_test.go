@@ -388,50 +388,47 @@ func TestRender_CompactNoOtherLine(t *testing.T) {
 	}
 }
 
-func TestRender_DailyBudget(t *testing.T) {
+func TestRender_7dHeadroom(t *testing.T) {
 	now := time.Now()
 
 	tests := []struct {
-		name       string
-		usedPct    float64
-		daysLeft   float64
-		wantBudget string // expected burn rate substring
-		wantColor  string // "green", "yellow", or "red"
+		name      string
+		usedPct   float64
+		daysLeft  float64
+		wantShown bool   // whether headroom warning should appear
+		wantColor string // "yellow" or "red" (only when shown)
 	}{
 		{
-			name:       "high usage, 2 days left -> yellow (burn > 100%)",
-			usedPct:    80,
-			daysLeft:   2,
-			wantBudget: "112%burn", // 80/5=16%/d, budget=14.3, burn=112%
-			wantColor:  "yellow",
+			name:      "91% used, 1.5 days left -> headroom 42% -> yellow warning",
+			usedPct:   91,
+			daysLeft:  1.5,
+			wantShown: true,
+			wantColor: "yellow", // headroom=42%, < 50%
 		},
 		{
-			name:       "low usage, 5 days left -> green (burn < 100%)",
-			usedPct:    20,
-			daysLeft:   5,
-			wantBudget: "70%burn", // 20/2=10%/d, budget=14.3, burn=70%
-			wantColor:  "green",
+			name:      "50% used, 4 days left -> headroom 87% -> no warning",
+			usedPct:   50,
+			daysLeft:  4,
+			wantShown: false, // headroom > 50%, hidden
 		},
 		{
-			name:       "very high usage, 2 days left -> yellow",
-			usedPct:    90,
-			daysLeft:   2,
-			wantBudget: "126%burn", // 90/5=18%/d, budget=14.3, burn=126%
-			wantColor:  "yellow",
+			name:      "30% used, 5 days left -> headroom 98% -> no warning",
+			usedPct:   30,
+			daysLeft:  5,
+			wantShown: false,
 		},
 		{
-			name:       "moderate usage, 4 days left -> green",
-			usedPct:    30,
-			daysLeft:   4,
-			wantBudget: "70%burn", // 30/3=10%/d, budget=14.3, burn=70%
-			wantColor:  "green",
+			name:      "95% used, 5 days left -> headroom 7% -> red warning",
+			usedPct:   95,
+			daysLeft:  5,
+			wantShown: true,
+			wantColor: "red", // headroom=7%, < 20%
 		},
 		{
-			name:       "extreme burn rate -> red (burn > 150%)",
-			usedPct:    70,
-			daysLeft:   4,
-			wantBudget: "163%burn", // 70/3=23.3%/d, budget=14.3, burn=163%
-			wantColor:  "red",
+			name:      "91% used, 0.3 days left -> headroom 210% -> no warning",
+			usedPct:   91,
+			daysLeft:  0.3,
+			wantShown: false, // reset imminent, lots of headroom
 		},
 	}
 
@@ -450,54 +447,31 @@ func TestRender_DailyBudget(t *testing.T) {
 				},
 			}
 
-			// Render without color to check the budget value.
 			lines := Render(input, nil, false)
-			if len(lines) != 1 {
-				t.Fatalf("got %d lines, want 1", len(lines))
+			hasAvail := strings.Contains(lines[0], "avail")
+
+			if tt.wantShown && !hasAvail {
+				t.Errorf("expected headroom warning in output: %q", lines[0])
+			}
+			if !tt.wantShown && hasAvail {
+				t.Errorf("headroom warning should be hidden: %q", lines[0])
 			}
 
-			if !strings.Contains(lines[0], tt.wantBudget) {
-				t.Errorf("line missing budget %q: %q", tt.wantBudget, lines[0])
-			}
-
-			// Render with color to verify the budget color.
-			colorLines := Render(input, nil, true)
-			colorLine := colorLines[0]
-
-			// The burn rate string is wrapped in a color code.
-			var wantCode string
-			switch tt.wantColor {
-			case "green":
-				wantCode = "\033[32m" + tt.wantBudget
-			case "yellow":
-				wantCode = "\033[33m" + tt.wantBudget
-			case "red":
-				wantCode = "\033[31m" + tt.wantBudget
-			}
-			if !strings.Contains(colorLine, wantCode) {
-				t.Errorf("burn color mismatch: want %q in %q", wantCode, colorLine)
+			if tt.wantShown && tt.wantColor != "" {
+				colorLines := Render(input, nil, true)
+				colorLine := colorLines[0]
+				var wantCode string
+				switch tt.wantColor {
+				case "yellow":
+					wantCode = "\033[33m"
+				case "red":
+					wantCode = "\033[31m"
+				}
+				if !strings.Contains(colorLine, wantCode) {
+					t.Errorf("headroom color mismatch: want %s code in %q", tt.wantColor, colorLine)
+				}
 			}
 		})
-	}
-}
-
-func TestRender_DailyBudgetNotShownWhenDaysElapsedLow(t *testing.T) {
-	// When daysElapsed <= 0.1 (window just started), no burn rate should appear.
-	resetAt := time.Now().Add(7 * 24 * time.Hour) // just started: daysElapsed ≈ 0
-	input := &Input{
-		Model:         Model{ID: "claude-opus-4-6", DisplayName: "Opus 4.6"},
-		ContextWindow: ContextWindow{UsedPercentage: ptrF64(10.0)},
-		RateLimits: &InputRateLimits{
-			SevenDay: &RateWindow{
-				UsedPercentage: 1,
-				ResetsAt:       resetAt.Unix(),
-			},
-		},
-	}
-
-	lines := Render(input, nil, false)
-	if strings.Contains(lines[0], "burn") {
-		t.Errorf("burn rate should not appear when daysElapsed <= 0.1: %q", lines[0])
 	}
 }
 

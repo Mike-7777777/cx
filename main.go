@@ -1,11 +1,15 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"runtime"
 	"sort"
 	"strings"
+
+	"github.com/Mike-7777777/cx/internal/config"
+	"github.com/Mike-7777777/cx/internal/platform"
 )
 
 var version = "dev"
@@ -36,31 +40,33 @@ var categoryOrder = []category{
 }
 
 // command represents a CLI subcommand with its handler and metadata.
+// Commands migrated to the testable pattern set runner; legacy commands use fn.
 type command struct {
-	fn   func()
-	desc string
-	cat  category
+	runner Runner // new testable pattern (nil = use fn)
+	fn     func() // legacy pattern (migrated incrementally)
+	desc   string
+	cat    category
 }
 
 // commands maps subcommand names to their definitions.
 var commands = map[string]command{
-	"setup":      {runSetup, "One-time interactive setup (accounts + shell wrapper)", catGettingStarted},
-	"switch":     {runSwitch, "Switch account (via wrapper: cx switch 5x)", catDailyUse},
-	"run":        {runRun, "Auto-select best account and launch claude", catDailyUse},
-	"config":     {runConfig, "Manage accounts, main, metadata", catDailyUse},
-	"sessions":   {runSessions, "List recent CC sessions across all accounts", catDailyUse},
-	"resume":     {runResume, "Resume a CC session with smart matching", catDailyUse},
-	"status":     {runStatus, "All accounts: auth status + rate limits", catDailyUse},
-	"dashboard":  {runDashboard, "Live TUI dashboard", catMonitoring},
-	"web":        {runWeb, "Browser dashboard on localhost", catMonitoring},
-	"usage":      {runUsage, "Usage analysis (daily/weekly/monthly/session/blocks/messages)", catMonitoring},
-	"doctor":     {runDoctor, "Health check all accounts", catMaintenance},
-	"sync":       {runSync, "Sync config to secondary accounts", catMaintenance},
-	"login":      {runLogin, "Re-authenticate an account", catMaintenance},
-	"init":       {runInit, "Create a new account directory", catMaintenance},
-	"watch":      {runWatch, "Auto-sync daemon (30s interval)", catMaintenance},
-	"completion": {runCompletion, "Tab completion (bash/fish/powershell)", catMaintenance},
-	"statusline": {runStatusline, "CC status bar integration (internal)", catMaintenance},
+	"setup":      {nil, runSetup, "One-time interactive setup (accounts + shell wrapper)", catGettingStarted},
+	"switch":     {nil, runSwitch, "Switch account (via wrapper: cx switch 5x)", catDailyUse},
+	"run":        {nil, runRun, "Auto-select best account and launch claude", catDailyUse},
+	"config":     {nil, runConfig, "Manage accounts, main, metadata", catDailyUse},
+	"sessions":   {nil, runSessions, "List recent CC sessions across all accounts", catDailyUse},
+	"resume":     {nil, runResume, "Resume a CC session with smart matching", catDailyUse},
+	"status":     {nil, runStatus, "All accounts: auth status + rate limits", catDailyUse},
+	"dashboard":  {nil, runDashboard, "Live TUI dashboard", catMonitoring},
+	"web":        {nil, runWeb, "Browser dashboard on localhost", catMonitoring},
+	"usage":      {nil, runUsage, "Usage analysis (daily/weekly/monthly/session/blocks/messages)", catMonitoring},
+	"doctor":     {nil, runDoctor, "Health check all accounts", catMaintenance},
+	"sync":       {nil, runSync, "Sync config to secondary accounts", catMaintenance},
+	"login":      {nil, runLogin, "Re-authenticate an account", catMaintenance},
+	"init":       {nil, runInit, "Create a new account directory", catMaintenance},
+	"watch":      {nil, runWatch, "Auto-sync daemon (30s interval)", catMaintenance},
+	"completion": {nil, runCompletion, "Tab completion (bash/fish/powershell)", catMaintenance},
+	"statusline": {nil, runStatusline, "CC status bar integration (internal)", catMaintenance},
 }
 
 func main() {
@@ -88,7 +94,38 @@ func main() {
 		os.Exit(1)
 	}
 
+	if cmd.runner != nil {
+		ctx := context.Background()
+		app, err := buildApp()
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "cx: %v\n", err)
+			os.Exit(1)
+		}
+		if err := cmd.runner.Run(ctx, app, os.Args[2:]); err != nil {
+			fmt.Fprintf(os.Stderr, "cx %s: %v\n", arg, err)
+			os.Exit(1)
+		}
+		return
+	}
 	cmd.fn()
+}
+
+// buildApp constructs a production App with the real registry and OS streams.
+func buildApp() (*App, error) {
+	regPath, err := config.RegistryPath()
+	if err != nil {
+		return nil, err
+	}
+	reg, err := config.LoadOrCreateRegistry(regPath)
+	if err != nil {
+		return nil, err
+	}
+	return &App{
+		Registry: reg,
+		Stdout:   os.Stdout,
+		Stderr:   os.Stderr,
+		UseColor: platform.ANSIEnabled(),
+	}, nil
 }
 
 func printVersion() {

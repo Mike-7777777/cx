@@ -1,6 +1,12 @@
 package usage
 
-import "sort"
+import (
+	"fmt"
+	"sort"
+	"strings"
+
+	"github.com/Mike-7777777/cx/internal/format"
+)
 
 // HourlyReport summarizes usage for a single UTC hour (0–23).
 type HourlyReport struct {
@@ -139,8 +145,123 @@ func CalculateEfficiency(entries []Entry) EfficiencyMetrics {
 	return m
 }
 
+// FormatHourlyTable formats hourly distribution reports as a human-readable table
+// with an activity bar chart scaled to the maximum token count across all hours.
+func FormatHourlyTable(reports []HourlyReport, useColor bool) string {
+	const (
+		fmtRow  = "%-6s %6s %12s %10s  %-20s\n"
+		width   = 60
+		maxBars = 20
+	)
+
+	var b strings.Builder
+	b.WriteString("\n")
+	b.WriteString(format.Colorize("Hourly Distribution (UTC)\n", format.Bold, useColor))
+
+	header := fmt.Sprintf(fmtRow, "Hour", "Msgs", "Tokens", "Cost", "Activity")
+	b.WriteString(format.Colorize(header, format.Bold, useColor))
+	b.WriteString(repeatSep(width, useColor))
+	b.WriteString("\n")
+
+	// Find max token count to scale bar chart.
+	var maxTokens int64
+	for _, r := range reports {
+		if r.Summary.TotalTokens > maxTokens {
+			maxTokens = r.Summary.TotalTokens
+		}
+	}
+
+	for _, r := range reports {
+		hourStr := format.Colorize(fmt.Sprintf("%02d:00", r.Hour), format.Cyan, useColor)
+		costStr := format.Colorize(formatCost(r.Summary.CostUSD), costColor(r.Summary.CostUSD), useColor)
+
+		barLen := 0
+		if maxTokens > 0 {
+			barLen = int(float64(r.Summary.TotalTokens) / float64(maxTokens) * maxBars)
+		}
+		pct := float64(barLen) / maxBars * 100
+		bar := strings.Repeat("█", barLen)
+		barStr := format.Colorize(bar, format.UsageColor(pct), useColor)
+
+		b.WriteString(fmt.Sprintf(fmtRow,
+			hourStr,
+			fmt.Sprintf("%d", r.Summary.EntryCount),
+			format.FormatNumber(r.Summary.TotalTokens),
+			costStr,
+			barStr,
+		))
+	}
+
+	return b.String()
+}
+
+// FormatModelDistributionTable formats model distribution reports as a table
+// with a bar chart scaled to the token share percentage.
+func FormatModelDistributionTable(reports []ModelDistributionReport, useColor bool) string {
+	const (
+		fmtRow  = "%-22s %6s %12s %10s %7s  %-20s\n"
+		width   = 83
+		maxBars = 20
+	)
+
+	var b strings.Builder
+	b.WriteString("\n")
+	b.WriteString(format.Colorize("Model Distribution\n", format.Bold, useColor))
+
+	header := fmt.Sprintf(fmtRow, "Model", "Msgs", "Tokens", "Cost", "Share", "")
+	b.WriteString(format.Colorize(header, format.Bold, useColor))
+	b.WriteString(repeatSep(width, useColor))
+	b.WriteString("\n")
+
+	for _, r := range reports {
+		modelStr := format.Colorize(truncateModel(r.Model), format.Cyan, useColor)
+		costStr := format.Colorize(formatCost(r.Summary.CostUSD), costColor(r.Summary.CostUSD), useColor)
+		shareStr := fmt.Sprintf("%.1f%%", r.CostPercent)
+
+		barLen := int(r.CostPercent / 5)
+		if barLen > maxBars {
+			barLen = maxBars
+		}
+		bar := strings.Repeat("█", barLen)
+		barStr := format.Colorize(bar, format.UsageColor(r.CostPercent), useColor)
+
+		b.WriteString(fmt.Sprintf(fmtRow,
+			modelStr,
+			fmt.Sprintf("%d", r.Summary.EntryCount),
+			format.FormatNumber(r.Summary.TotalTokens),
+			costStr,
+			shareStr,
+			barStr,
+		))
+	}
+
+	return b.String()
+}
+
+// FormatEfficiency formats efficiency metrics as a labeled section.
+func FormatEfficiency(m EfficiencyMetrics, useColor bool) string {
+	var b strings.Builder
+	b.WriteString("\n")
+	b.WriteString(format.Colorize("Efficiency Metrics\n", format.Bold, useColor))
+	b.WriteString(repeatSep(40, useColor))
+	b.WriteString("\n")
+
+	cacheColor := format.Yellow
+	if m.CacheHitRatio > 0.5 {
+		cacheColor = format.Green
+	}
+	cacheStr := format.Colorize(fmt.Sprintf("%.1f%%", m.CacheHitRatio*100), cacheColor, useColor)
+	b.WriteString(fmt.Sprintf("  Cache hit ratio:      %s\n", cacheStr))
+	b.WriteString(fmt.Sprintf("  Avg tokens/message:   %s\n", format.FormatNumber(m.AvgTokensPerMsg)))
+	b.WriteString(fmt.Sprintf("  Avg cost/message:     %s\n", formatCost(m.AvgCostPerMsg)))
+	b.WriteString(fmt.Sprintf("  Input/output ratio:   %.1f:1\n", m.InputOutputRatio))
+
+	return b.String()
+}
+
 // FindPeakHours returns the top n hourly reports ranked by total token count
 // in descending order. If n >= number of distinct hours, all hours are returned.
+// If n <= 0, an empty slice is returned.
 func FindPeakHours(entries []Entry, n int) []HourlyReport {
 	all := AggregateHourly(entries)
 
@@ -149,6 +270,9 @@ func FindPeakHours(entries []Entry, n int) []HourlyReport {
 		return all[i].Summary.TotalTokens > all[j].Summary.TotalTokens
 	})
 
+	if n <= 0 {
+		return nil
+	}
 	if n > len(all) {
 		n = len(all)
 	}

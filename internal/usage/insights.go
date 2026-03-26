@@ -218,10 +218,7 @@ func FormatModelDistributionTable(reports []ModelDistributionReport, useColor bo
 		costStr := format.Colorize(formatCost(r.Summary.CostUSD), costColor(r.Summary.CostUSD), useColor)
 		shareStr := fmt.Sprintf("%.1f%%", r.CostPercent)
 
-		barLen := int(r.CostPercent / 5)
-		if barLen > maxBars {
-			barLen = maxBars
-		}
+		barLen := min(int(r.CostPercent/5), maxBars)
 		bar := strings.Repeat("█", barLen)
 		barStr := format.Colorize(bar, format.UsageColor(r.CostPercent), useColor)
 

@@ -92,15 +92,18 @@ func ReadRecommendation() *Recommendation {
 }
 
 // checkAndRecommend reads all accounts' rate caches, scores them, and returns
-// the best account recommendation.
-func checkAndRecommend(app *App, threshold float64) Recommendation {
+// the best account recommendation. The bool indicates whether any account
+// needs urgent switching (above threshold, exhausted, or predicted to exhaust soon).
+func checkAndRecommend(app *App, threshold float64) (Recommendation, bool) {
 	reg := app.Registry
 	now := time.Now()
 
 	type scoredAccount struct {
-		name   string
-		score  float64
-		reason string
+		name     string
+		pct      float64
+		estimate usage.ExhaustionEstimate
+		score    float64
+		reason   string
 	}
 
 	var candidates []scoredAccount
@@ -141,9 +144,11 @@ func checkAndRecommend(app *App, threshold float64) Recommendation {
 		}
 
 		candidates = append(candidates, scoredAccount{
-			name:   name,
-			score:  score,
-			reason: reason,
+			name:     name,
+			pct:      pct,
+			estimate: est,
+			score:    score,
+			reason:   reason,
 		})
 	}
 
@@ -152,6 +157,15 @@ func checkAndRecommend(app *App, threshold float64) Recommendation {
 			Account:   "",
 			Reason:    "no accounts configured",
 			UpdatedAt: now,
+		}, false
+	}
+
+	// Check if any account needs urgent switching.
+	urgent := false
+	for _, c := range candidates {
+		if shouldSwitch(c.pct, c.estimate, threshold) {
+			urgent = true
+			break
 		}
 	}
 
@@ -167,7 +181,7 @@ func checkAndRecommend(app *App, threshold float64) Recommendation {
 		Account:   best.name,
 		Reason:    best.reason,
 		UpdatedAt: now,
-	}
+	}, urgent
 }
 
 // Run implements the auto subcommand: daemon that polls rate caches and
@@ -208,12 +222,16 @@ func (c *autoCmd) Run(ctx context.Context, app *App, args []string) error {
 		len(app.Registry.Accounts), interval, threshold)
 
 	doCheck := func() {
-		rec := checkAndRecommend(app, threshold)
+		rec, urgent := checkAndRecommend(app, threshold)
 		if err := writeRecommendation(rec); err != nil {
 			fmt.Fprintf(app.Stderr, "[cx auto] write recommendation: %v\n", err)
 			return
 		}
-		fmt.Fprintf(app.Stderr, "[cx auto] Best: %s (%s)\n", rec.Account, rec.Reason)
+		if urgent {
+			fmt.Fprintf(app.Stderr, "[cx auto] SWITCH → %s (%s)\n", rec.Account, rec.Reason)
+		} else {
+			fmt.Fprintf(app.Stderr, "[cx auto] Best: %s (%s)\n", rec.Account, rec.Reason)
+		}
 	}
 
 	doCheck()

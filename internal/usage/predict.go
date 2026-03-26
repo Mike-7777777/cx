@@ -11,7 +11,7 @@ type ExhaustionEstimate struct {
 	VelocityPctH  float64       `json:"VelocityPctPerHour"`
 	TimeToExhaust time.Duration `json:"TimeToExhaust"` // 0 means never (within window)
 	Exhausted     bool          `json:"Exhausted"`
-	ExhaustAt     time.Time     `json:"ExhaustAt,omitempty"`
+	ExhaustAt     time.Time     `json:"ExhaustAt,omitzero"`
 }
 
 // EstimateExhaustion predicts when the rate window will be exhausted.

@@ -62,7 +62,7 @@ _cx_completions() {
     COMPREPLY=()
     cur="${COMP_WORDS[COMP_CWORD]}"
     prev="${COMP_WORDS[COMP_CWORD-1]}"
-    commands="completion config dashboard doctor init login resume run sessions setup status statusline switch sync usage watch web version help"
+    commands="auto completion config dashboard doctor init insights login predict resume run sessions setup status statusline switch sync usage watch web version help"
 
     case "${prev}" in
         cx)
@@ -122,6 +122,9 @@ complete -c cx -n '__fish_use_subcommand' -a 'login' -d 'Re-authenticate an acco
 complete -c cx -n '__fish_use_subcommand' -a 'init' -d 'Create a new account directory'
 complete -c cx -n '__fish_use_subcommand' -a 'watch' -d 'Auto-sync daemon'
 complete -c cx -n '__fish_use_subcommand' -a 'completion' -d 'Output shell completion script'
+complete -c cx -n '__fish_use_subcommand' -a 'insights' -d 'Usage pattern analysis'
+complete -c cx -n '__fish_use_subcommand' -a 'predict' -d 'Forecast rate limit exhaustion'
+complete -c cx -n '__fish_use_subcommand' -a 'auto' -d 'Auto-switching daemon'
 complete -c cx -n '__fish_use_subcommand' -a 'statusline' -d 'CC status bar integration'
 complete -c cx -n '__fish_use_subcommand' -a 'version' -d 'Print version information'
 complete -c cx -n '__fish_use_subcommand' -a 'help' -d 'Show help message'
@@ -160,7 +163,7 @@ func powershellCompletion() string {
 Register-ArgumentCompleter -CommandName cx -ScriptBlock {
     param($wordToComplete, $commandAst, $cursorPosition)
 
-    $commands = @('setup', 'switch', 'run', 'config', 'sessions', 'resume', 'status', 'dashboard', 'web', 'usage', 'doctor', 'sync', 'login', 'init', 'watch', 'completion', 'statusline', 'version', 'help')
+    $commands = @('auto', 'setup', 'switch', 'run', 'config', 'sessions', 'resume', 'status', 'dashboard', 'web', 'usage', 'insights', 'predict', 'doctor', 'sync', 'login', 'init', 'watch', 'completion', 'statusline', 'version', 'help')
     $accounts = @(%s)
     $usageModes = @('daily', 'weekly', 'monthly', 'session', 'blocks', 'messages')
     $shells = @('bash', 'fish', 'powershell')

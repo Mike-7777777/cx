@@ -1,6 +1,13 @@
 package main
 
-import "testing"
+import (
+	"bytes"
+	"context"
+	"strings"
+	"testing"
+
+	"github.com/Mike-7777777/cx/internal/config"
+)
 
 func TestDisplaySlug(t *testing.T) {
 	tests := []struct {
@@ -42,5 +49,21 @@ func TestDisplaySlug(t *testing.T) {
 				t.Errorf("displaySlug() = %q, want %q", got, tt.want)
 			}
 		})
+	}
+}
+
+func TestResume_HelpFlag(t *testing.T) {
+	var buf bytes.Buffer
+	app := &App{
+		Registry: &config.Registry{Main: "main", Accounts: map[string]config.Account{}},
+		Stdout:   &buf, Stderr: &buf, UseColor: false,
+	}
+	cmd := &resumeCmd{}
+	err := cmd.Run(context.Background(), app, []string{"--help"})
+	if err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+	if !strings.Contains(buf.String(), "cx resume") {
+		t.Errorf("help missing usage text: %q", buf.String())
 	}
 }

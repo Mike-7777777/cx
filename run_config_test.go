@@ -1,6 +1,9 @@
 package main
 
 import (
+	"bytes"
+	"context"
+	"strings"
 	"testing"
 
 	"github.com/Mike-7777777/cx/internal/config"
@@ -77,5 +80,21 @@ func TestResolveDir_Error(t *testing.T) {
 	got := resolveDir(reg, "nonexistent")
 	if got != "?" {
 		t.Errorf("resolveDir for missing account = %q, want %q", got, "?")
+	}
+}
+
+func TestConfig_ShowEmpty(t *testing.T) {
+	var buf bytes.Buffer
+	app := &App{
+		Registry: &config.Registry{Main: "main", Accounts: map[string]config.Account{}},
+		Stdout:   &buf, Stderr: &buf, UseColor: false,
+	}
+	cmd := &configCmd{}
+	err := cmd.Run(context.Background(), app, []string{"show"})
+	if err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+	if !strings.Contains(buf.String(), "cx configuration") {
+		t.Errorf("expected header 'cx configuration', got: %q", buf.String())
 	}
 }

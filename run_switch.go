@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"os"
 	"path/filepath"
 	"regexp"
 	"strings"
@@ -19,19 +18,32 @@ import (
 var safePathPattern = regexp.MustCompile(`^[a-zA-Z0-9/\\.:\-_ ~]+$`)
 
 // switchCmd implements Runner for the "switch" subcommand.
-type switchCmd struct {
-	shell  platform.Shell
-	noSync bool
-}
+type switchCmd struct{}
 
 // Run validates the account, optionally syncs config files, checks credentials,
 // and writes shell commands to app.Stdout for eval by the shell wrapper.
 func (c *switchCmd) Run(_ context.Context, app *App, args []string) error {
-	if len(args) == 0 {
+	flags, positional := parseFlags(args, "shell", "no-sync")
+
+	shell := platform.DetectShell()
+	if val, ok := flags["shell"]; ok {
+		switch strings.ToLower(val) {
+		case "fish":
+			shell = platform.ShellFish
+		case "powershell":
+			shell = platform.ShellPowerShell
+		default:
+			shell = platform.ShellBash
+		}
+	}
+
+	_, noSync := flags["no-sync"]
+
+	if len(positional) == 0 {
 		return fmt.Errorf("usage: cx switch <name> [--shell=bash|fish|powershell] [--no-sync]")
 	}
 
-	name := args[0]
+	name := positional[0]
 	if !validAccountName.MatchString(name) {
 		return fmt.Errorf("invalid account name %q (only letters, digits, hyphens, underscores)", name)
 	}
@@ -53,7 +65,7 @@ func (c *switchCmd) Run(_ context.Context, app *App, args []string) error {
 
 	// Auto-sync non-main accounts unless suppressed.
 	isMain := name == app.Registry.Main
-	if !c.noSync && !isMain {
+	if !noSync && !isMain {
 		mainDir, err := app.Registry.ResolveConfigDir(app.Registry.Main)
 		if err == nil {
 			_ = syncFiles(mainDir, configDir, true)
@@ -64,7 +76,7 @@ func (c *switchCmd) Run(_ context.Context, app *App, args []string) error {
 	needsLogin := checkCredentials(configDir) != credentialOK
 
 	// Emit shell commands to stdout — these are eval'd by the shell wrapper.
-	switch c.shell {
+	switch shell {
 	case platform.ShellFish:
 		if isMain {
 			fmt.Fprintln(app.Stdout, "set -e CLAUDE_CONFIG_DIR")
@@ -92,7 +104,7 @@ func (c *switchCmd) Run(_ context.Context, app *App, args []string) error {
 	// Uses --claudeai to skip the interactive "Select login method" menu.
 	// CC will attempt silent token refresh first; only opens browser if needed.
 	if needsLogin {
-		switch c.shell {
+		switch shell {
 		case platform.ShellPowerShell:
 			fmt.Fprintln(app.Stdout, "Write-Host '[cx] Credentials need refresh — logging in...' -ForegroundColor Yellow")
 			fmt.Fprintln(app.Stdout, "& claude auth login --claudeai")
@@ -103,37 +115,4 @@ func (c *switchCmd) Run(_ context.Context, app *App, args []string) error {
 	}
 
 	return nil
-}
-
-// runSwitch is the legacy entry point dispatched by main.go.
-func runSwitch() {
-	args := os.Args[2:]
-	flags, positional := parseFlags(args, "shell", "no-sync")
-
-	shell := platform.DetectShell()
-	if val, ok := flags["shell"]; ok {
-		switch strings.ToLower(val) {
-		case "fish":
-			shell = platform.ShellFish
-		case "powershell":
-			shell = platform.ShellPowerShell
-		default:
-			shell = platform.ShellBash
-		}
-	}
-
-	_, noSync := flags["no-sync"]
-
-	cmd := &switchCmd{shell: shell, noSync: noSync}
-
-	app, err := buildApp()
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "cx switch: %v\n", err)
-		os.Exit(1)
-	}
-
-	if err := cmd.Run(context.Background(), app, positional); err != nil {
-		fmt.Fprintf(os.Stderr, "cx switch: %v\n", err)
-		os.Exit(1)
-	}
 }

@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"io"
-	"os"
 	"path/filepath"
 	"sort"
 	"time"
@@ -86,20 +85,6 @@ func (c *statusCmd) Run(_ context.Context, app *App, _ []string) error {
 	printTable(w, rows, app.UseColor)
 	printRecommendation(w, rows, allStale, app.UseColor)
 	return nil
-}
-
-func runStatus() {
-	app, err := buildApp()
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "cx status: %v\n", err)
-		os.Exit(1)
-	}
-
-	cmd := &statusCmd{}
-	if err := cmd.Run(context.Background(), app, nil); err != nil {
-		fmt.Fprintf(os.Stderr, "cx status: %v\n", err)
-		os.Exit(1)
-	}
 }
 
 func buildRow(name string, rc *cache.RateCache, readErr error) statusRow {

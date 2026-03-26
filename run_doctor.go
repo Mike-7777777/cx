@@ -107,10 +107,21 @@ func runDoctor() {
 			ok: credOk, label: "credentials", detail: credMsg, indent: 1,
 		})
 
-		// Check junction/symlink for shared dirs.
+		// Check junction/symlink for shared dirs; auto-fix missing ones.
 		for _, rel := range sharedLinkDirs {
 			linkPath := filepath.Join(accDir, rel)
-			linkOk, linkMsg := checkLink(linkPath, filepath.Join(mainDir, rel))
+			target := filepath.Join(mainDir, rel)
+			linkOk, linkMsg := checkLink(linkPath, target)
+			if !linkOk {
+				// Auto-fix: create the missing junction/symlink.
+				if _, statErr := os.Stat(target); statErr == nil {
+					_ = os.RemoveAll(linkPath)
+					if linkErr := platform.CreateLink(linkPath, target); linkErr == nil {
+						linkOk = true
+						linkMsg = "auto-fixed"
+					}
+				}
+			}
 			results = append(results, checkResult{
 				ok: linkOk, label: fmt.Sprintf("%s junction", rel), detail: linkMsg, indent: 1,
 			})

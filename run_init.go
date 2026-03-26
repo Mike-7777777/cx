@@ -20,6 +20,7 @@ var sharedLinkDirs = []string{
 	filepath.Join("plugins", "cache"),
 	"ide",
 	"skills",
+	"projects",
 }
 
 func runInit() {

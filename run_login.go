@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"os"
@@ -11,14 +12,17 @@ import (
 	cxerrors "github.com/Mike-7777777/cx/internal/errors"
 )
 
-func runLogin() {
-	args := os.Args[2:]
+// loginCmd implements Runner for the "login" subcommand.
+type loginCmd struct{}
 
+// Run authenticates a Claude Code account. If a name is provided, logs in to
+// that account's config directory; otherwise logs in to the current account.
+func (c *loginCmd) Run(_ context.Context, app *App, args []string) error {
 	var name string
 	for _, arg := range args {
 		if arg == "--help" || arg == "-h" {
-			printLoginHelp()
-			return
+			printLoginHelp(app)
+			return nil
 		}
 		if !strings.HasPrefix(arg, "-") && name == "" {
 			name = arg
@@ -29,28 +33,23 @@ func runLogin() {
 	var configDir string
 	if name != "" {
 		if !validAccountName.MatchString(name) {
-			fmt.Fprintf(os.Stderr, "[cx] invalid account name %q\n", name)
-			os.Exit(1)
+			return fmt.Errorf("invalid account name %q", name)
 		}
 
 		regPath, err := config.RegistryPath()
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "[cx] %v\n", err)
-			os.Exit(1)
+			return err
 		}
 		reg, err := config.LoadOrCreateRegistry(regPath)
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "[cx] %v\n", err)
-			os.Exit(1)
+			return err
 		}
 		dir, err := reg.ResolveConfigDir(name)
 		if err != nil {
 			if errors.Is(err, cxerrors.ErrAccountNotFound) {
-				fmt.Fprintf(os.Stderr, "[cx] account %q not found (run 'cx init %s' first)\n", name, name)
-			} else {
-				fmt.Fprintf(os.Stderr, "[cx] %v\n", err)
+				return fmt.Errorf("account %q not found (run 'cx init %s' first)", name, name)
 			}
-			os.Exit(1)
+			return err
 		}
 		configDir = dir
 	} else {
@@ -59,8 +58,7 @@ func runLogin() {
 		if configDir == "" {
 			d, err := config.DetectConfigDir()
 			if err != nil {
-				fmt.Fprintf(os.Stderr, "[cx] %v\n", err)
-				os.Exit(1)
+				return err
 			}
 			configDir = d
 		}
@@ -70,14 +68,14 @@ func runLogin() {
 	if label == "" {
 		label = "current"
 	}
-	fmt.Fprintf(os.Stderr, "[cx] Logging in to %s account (config: %s)...\n", label, configDir)
+	fmt.Fprintf(app.Stderr, "[cx] Logging in to %s account (config: %s)...\n", label, configDir)
 
 	if err := launchLogin(configDir); err != nil {
-		fmt.Fprintf(os.Stderr, "[cx] login failed: %v\n", err)
-		os.Exit(1)
+		return fmt.Errorf("login failed: %w", err)
 	}
 
-	fmt.Fprintf(os.Stderr, "[cx] Login successful.\n")
+	fmt.Fprintf(app.Stderr, "[cx] Login successful.\n")
+	return nil
 }
 
 // launchLogin runs "claude auth login --claudeai" with CLAUDE_CONFIG_DIR set.
@@ -92,8 +90,8 @@ func launchLogin(configDir string) error {
 	return cmd.Run()
 }
 
-func printLoginHelp() {
-	fmt.Print(`cx login — authenticate a Claude Code account
+func printLoginHelp(app *App) {
+	fmt.Fprint(app.Stderr, `cx login — authenticate a Claude Code account
 
 Usage:
   cx login [name]

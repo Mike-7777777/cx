@@ -1,32 +1,35 @@
 package main
 
 import (
+	"context"
 	"fmt"
-	"os"
 	"sort"
 	"strings"
 
 	"github.com/Mike-7777777/cx/internal/config"
 )
 
-func runCompletion() {
-	if len(os.Args) < 3 {
-		fmt.Fprintln(os.Stderr, "usage: cx completion <bash|fish|powershell>")
-		os.Exit(1)
+// completionCmd implements Runner for the "completion" subcommand.
+type completionCmd struct{}
+
+// Run outputs a shell completion script to stdout for the given shell type.
+func (c *completionCmd) Run(_ context.Context, app *App, args []string) error {
+	if len(args) == 0 {
+		return fmt.Errorf("usage: cx completion <bash|fish|powershell>")
 	}
 
-	shell := strings.ToLower(os.Args[2])
+	shell := strings.ToLower(args[0])
 	switch shell {
 	case "bash":
-		fmt.Print(bashCompletion())
+		fmt.Fprint(app.Stdout, bashCompletion())
 	case "fish":
-		fmt.Print(fishCompletion())
+		fmt.Fprint(app.Stdout, fishCompletion())
 	case "powershell":
-		fmt.Print(powershellCompletion())
+		fmt.Fprint(app.Stdout, powershellCompletion())
 	default:
-		fmt.Fprintf(os.Stderr, "unsupported shell: %s (supported: bash, fish, powershell)\n", shell)
-		os.Exit(1)
+		return fmt.Errorf("unsupported shell: %s (supported: bash, fish, powershell)", shell)
 	}
+	return nil
 }
 
 // accountNames loads registered account names from the registry.

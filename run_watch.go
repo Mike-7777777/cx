@@ -1,11 +1,10 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"os"
-	"os/signal"
 	"path/filepath"
-	"syscall"
 	"time"
 
 	"github.com/Mike-7777777/cx/internal/config"
@@ -24,57 +23,51 @@ type watchFileMeta struct {
 	size  int64
 }
 
-// runWatch implements the `cx watch` command.
-// It polls the main account's config files every 30 seconds and
+// watchCmd implements Runner for the "watch" subcommand.
+type watchCmd struct{}
+
+// Run polls the main account's config files at a fixed interval and
 // auto-syncs to all secondaries when a change is detected.
-func runWatch() {
+// It exits gracefully when ctx is cancelled.
+func (c *watchCmd) Run(ctx context.Context, app *App, args []string) error {
 	regPath, err := config.RegistryPath()
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "cx watch: %v\n", err)
-		os.Exit(1)
+		return err
 	}
 
 	reg, err := config.LoadOrCreateRegistry(regPath)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "cx watch: %v\n", err)
-		os.Exit(1)
+		return err
 	}
 
 	if reg.Main == "" {
-		fmt.Fprintln(os.Stderr, "cx watch: no main account configured; run: cx init <name>")
-		os.Exit(1)
+		return fmt.Errorf("no main account configured; run: cx init <name>")
 	}
 
 	mainDir, err := reg.ResolveConfigDir(reg.Main)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "cx watch: resolving main account %q: %v\n", reg.Main, err)
-		os.Exit(1)
+		return fmt.Errorf("resolving main account %q: %v", reg.Main, err)
 	}
 
 	secondaryCount := len(reg.Accounts) - 1
 	if secondaryCount <= 0 {
-		fmt.Fprintln(os.Stderr, "cx watch: no secondary accounts configured; run: cx init <name>")
-		os.Exit(1)
+		return fmt.Errorf("no secondary accounts configured; run: cx init <name>")
 	}
 
-	fmt.Fprintf(os.Stderr, "cx watch: monitoring %q → %d secondary account(s) (Ctrl+C to stop)\n",
+	fmt.Fprintf(app.Stderr, "cx watch: monitoring %q → %d secondary account(s) (Ctrl+C to stop)\n",
 		reg.Main, secondaryCount)
 
 	// Build initial state snapshot.
 	state := snapshotFiles(mainDir)
-
-	// Handle Ctrl+C / SIGTERM for clean shutdown.
-	quit := make(chan os.Signal, 1)
-	signal.Notify(quit, os.Interrupt, syscall.SIGTERM)
 
 	ticker := time.NewTicker(watchPollInterval)
 	defer ticker.Stop()
 
 	for {
 		select {
-		case <-quit:
-			fmt.Fprintln(os.Stderr, "\ncx watch: stopped")
-			return
+		case <-ctx.Done():
+			fmt.Fprintln(app.Stderr, "\ncx watch: stopped")
+			return nil
 
 		case <-ticker.C:
 			changed := detectChanges(mainDir, state)
@@ -85,7 +78,7 @@ func runWatch() {
 			// Re-load registry in case accounts changed since startup.
 			reg, err = config.LoadOrCreateRegistry(regPath)
 			if err != nil {
-				fmt.Fprintf(os.Stderr, "cx watch: reloading registry: %v\n", err)
+				fmt.Fprintf(app.Stderr, "cx watch: reloading registry: %v\n", err)
 				continue
 			}
 
@@ -99,7 +92,7 @@ func runWatch() {
 					continue
 				}
 				if err := syncFiles(mainDir, targetDir, true); err != nil {
-					fmt.Fprintf(os.Stderr, "cx watch: syncing %q: %v\n", name, err)
+					fmt.Fprintf(app.Stderr, "cx watch: syncing %q: %v\n", name, err)
 					continue
 				}
 				synced++
@@ -107,7 +100,7 @@ func runWatch() {
 
 			ts := time.Now().Format("2006-01-02 15:04")
 			for _, f := range changed {
-				fmt.Printf("[%s] synced %s to %dx\n", ts, f, synced)
+				fmt.Fprintf(app.Stderr, "[%s] synced %s to %dx\n", ts, f, synced)
 			}
 
 			// Update state snapshot after a successful sync pass.

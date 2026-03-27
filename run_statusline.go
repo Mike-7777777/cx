@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"io"
 	"log"
@@ -60,7 +61,7 @@ func doStatusline(out io.Writer, args []string) error {
 	cfgDir, err := config.DetectConfigDir()
 	if err != nil {
 		// No config dir is non-fatal; render without cache ops.
-		return renderAndPrint(out, input, nil, "", compact)
+		return renderAndPrint(out, input, nil, "", compact, "")
 	}
 
 	// Warn when rate_limits is absent and CC version is too old.
@@ -87,7 +88,7 @@ func doStatusline(out io.Writer, args []string) error {
 	// Resolve current account name from registry.
 	accountName := currentAccountName(cfgDir)
 
-	return renderAndPrint(out, input, other, accountName, compact)
+	return renderAndPrint(out, input, other, accountName, compact, cfgDir)
 }
 
 // hasFlag reports whether flag appears in the args slice.
@@ -138,7 +139,7 @@ func doStatuslineFallback(out io.Writer, args []string) error {
 	}
 
 	other := loadOtherAccount(cfgDir)
-	return renderAndPrint(out, input, other, accountName, compact)
+	return renderAndPrint(out, input, other, accountName, compact, cfgDir)
 }
 
 func buildRateCache(input *statusline.Input) *cache.RateCache {
@@ -295,10 +296,11 @@ func normalizePath(p string) string {
 	return p
 }
 
-func renderAndPrint(out io.Writer, input *statusline.Input, other *statusline.OtherAccount, accountName string, compact bool) error {
+func renderAndPrint(out io.Writer, input *statusline.Input, other *statusline.OtherAccount, accountName string, compact bool, cfgDir string) error {
 	opts := statusline.RenderOpts{
 		AccountName: accountName,
 		Compact:     compact,
+		EffortLevel: readEffortLevel(cfgDir),
 	}
 
 	// Load statusline config from registry.
@@ -356,6 +358,51 @@ func withLogFile(fn func(*log.Logger)) {
 	}
 	defer func() { _ = f.Close() }()
 	fn(log.New(f, "", log.LstdFlags))
+}
+
+// readEffortLevel reads the effortLevel from CC's settings.json.
+// Checks project-level settings first, then global settings.
+// Returns empty string if not found.
+func readEffortLevel(cfgDir string) string {
+	if cfgDir == "" {
+		return ""
+	}
+
+	// Check project-level settings first (overrides global).
+	cwd, _ := os.Getwd()
+	if cwd != "" {
+		projSettings := filepath.Join(cwd, ".claude", "settings.json")
+		if level := readEffortFromFile(projSettings); level != "" {
+			return level
+		}
+	}
+
+	// Check account-level settings.
+	if level := readEffortFromFile(filepath.Join(cfgDir, "settings.json")); level != "" {
+		return level
+	}
+
+	// Check global settings.
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return ""
+	}
+	return readEffortFromFile(filepath.Join(home, ".claude", "settings.json"))
+}
+
+// readEffortFromFile extracts effortLevel from a settings.json file.
+func readEffortFromFile(path string) string {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return ""
+	}
+	var settings struct {
+		EffortLevel string `json:"effortLevel"`
+	}
+	if json.Unmarshal(data, &settings) != nil {
+		return ""
+	}
+	return settings.EffortLevel
 }
 
 func logError(err error) {

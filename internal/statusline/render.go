@@ -39,6 +39,7 @@ type RenderOpts struct {
 	AccountName string             // current account label (empty = omit)
 	Compact     bool               // compact single-line mode
 	Sections    *SectionVisibility // nil = show all sections
+	EffortLevel string             // CC effortLevel from settings.json (e.g., "low", "medium", "high", "max")
 }
 
 // Render produces one or two status-line strings.
@@ -89,13 +90,16 @@ func renderCompact(input *Input, opt RenderOpts, useColor bool) string {
 		parts = append(parts, fmt.Sprintf("[%s]", nameStr))
 	}
 
-	// Shortened model name (first word only) + output style badge.
+	// Shortened model name (first word only) + output style + effort level.
 	shortModel := input.Model.DisplayName
 	if idx := strings.Index(shortModel, " "); idx > 0 {
 		shortModel = shortModel[:idx]
 	}
 	if input.OutputStyle != nil && input.OutputStyle.Name != "" && input.OutputStyle.Name != "default" {
-		shortModel += " " + strings.ToUpper(input.OutputStyle.Name[:1]) + input.OutputStyle.Name[1:]
+		shortModel += " " + titleCase(input.OutputStyle.Name)
+	}
+	if opt.EffortLevel != "" {
+		shortModel += " " + effortBadge(opt.EffortLevel)
 	}
 	modelStr := format.Colorize(shortModel, format.Cyan+format.Bold, useColor)
 	showContext := sec == nil || format.IsEnabled(sec.ShowContext)
@@ -142,8 +146,10 @@ func renderMain(input *Input, other *OtherAccount, opt RenderOpts, useColor bool
 	displayName := input.Model.DisplayName
 	// Append output style when it's not the default mode (e.g., "fast", "thinking").
 	if input.OutputStyle != nil && input.OutputStyle.Name != "" && input.OutputStyle.Name != "default" {
-		styleName := input.OutputStyle.Name
-		displayName += " " + strings.ToUpper(styleName[:1]) + styleName[1:]
+		displayName += " " + titleCase(input.OutputStyle.Name)
+	}
+	if opt.EffortLevel != "" {
+		displayName += " " + effortBadge(opt.EffortLevel)
 	}
 	modelName := format.Colorize(displayName, format.Cyan+format.Bold, useColor)
 
@@ -279,4 +285,28 @@ func colorProgressBar(pct float64, width int, useColor bool) string {
 	filled := format.Colorize(strings.Repeat("█", filledCount), fillColor, useColor)
 	empty := format.Colorize(strings.Repeat("░", emptyCount), format.Dim, useColor)
 	return filled + empty
+}
+
+// titleCase capitalizes the first letter of s.
+func titleCase(s string) string {
+	if s == "" {
+		return s
+	}
+	return strings.ToUpper(s[:1]) + s[1:]
+}
+
+// effortBadge returns a compact display label for the CC effortLevel setting.
+func effortBadge(level string) string {
+	switch strings.ToLower(level) {
+	case "max":
+		return "Max"
+	case "high":
+		return "Hi"
+	case "medium", "med":
+		return "Med"
+	case "low":
+		return "Lo"
+	default:
+		return titleCase(level)
+	}
 }

@@ -79,3 +79,12 @@ func ParseInput(r io.Reader) (*Input, error) {
 	}
 	return &input, nil
 }
+
+// ParseInputBytes decodes the JSON statusline payload from raw bytes.
+func ParseInputBytes(data []byte) (*Input, error) {
+	var input Input
+	if err := json.Unmarshal(data, &input); err != nil {
+		return nil, fmt.Errorf("decoding statusline input: %w", err)
+	}
+	return &input, nil
+}

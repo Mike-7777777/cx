@@ -62,14 +62,14 @@ _cx_completions() {
     COMPREPLY=()
     cur="${COMP_WORDS[COMP_CWORD]}"
     prev="${COMP_WORDS[COMP_CWORD-1]}"
-    commands="auto completion config dashboard doctor init insights login predict resume run sessions setup status statusline switch sync usage watch web version help"
+    commands="completion config daemon dashboard doctor insights login predict resume run sessions setup status statusline switch sync usage web version help"
 
     case "${prev}" in
         cx)
             COMPREPLY=( $(compgen -W "${commands}" -- "${cur}") )
             return 0
             ;;
-        switch|init)
+        switch)
             COMPREPLY=( $(compgen -W "%s" -- "${cur}") )
             return 0
             ;;
@@ -119,12 +119,10 @@ complete -c cx -n '__fish_use_subcommand' -a 'usage' -d 'Analyze token usage and
 complete -c cx -n '__fish_use_subcommand' -a 'doctor' -d 'Run health checks'
 complete -c cx -n '__fish_use_subcommand' -a 'sync' -d 'Sync config to secondaries'
 complete -c cx -n '__fish_use_subcommand' -a 'login' -d 'Re-authenticate an account'
-complete -c cx -n '__fish_use_subcommand' -a 'init' -d 'Create a new account directory'
-complete -c cx -n '__fish_use_subcommand' -a 'watch' -d 'Auto-sync daemon'
+complete -c cx -n '__fish_use_subcommand' -a 'daemon' -d 'Auto-switch + config-sync daemon'
 complete -c cx -n '__fish_use_subcommand' -a 'completion' -d 'Output shell completion script'
 complete -c cx -n '__fish_use_subcommand' -a 'insights' -d 'Usage pattern analysis'
 complete -c cx -n '__fish_use_subcommand' -a 'predict' -d 'Forecast rate limit exhaustion'
-complete -c cx -n '__fish_use_subcommand' -a 'auto' -d 'Auto-switching daemon'
 complete -c cx -n '__fish_use_subcommand' -a 'statusline' -d 'CC status bar integration'
 complete -c cx -n '__fish_use_subcommand' -a 'version' -d 'Print version information'
 complete -c cx -n '__fish_use_subcommand' -a 'help' -d 'Show help message'
@@ -133,7 +131,7 @@ complete -c cx -n '__fish_use_subcommand' -a 'help' -d 'Show help message'
 `)
 	for _, name := range accounts {
 		sb.WriteString(fmt.Sprintf("complete -c cx -n '__fish_seen_subcommand_from switch' -a '%s'\n", name))
-		sb.WriteString(fmt.Sprintf("complete -c cx -n '__fish_seen_subcommand_from init' -a '%s'\n", name))
+		sb.WriteString(fmt.Sprintf("complete -c cx -n '__fish_seen_subcommand_from config' -a '%s'\n", name))
 	}
 
 	sb.WriteString(`
@@ -163,7 +161,7 @@ func powershellCompletion() string {
 Register-ArgumentCompleter -CommandName cx -ScriptBlock {
     param($wordToComplete, $commandAst, $cursorPosition)
 
-    $commands = @('auto', 'setup', 'switch', 'run', 'config', 'sessions', 'resume', 'status', 'dashboard', 'web', 'usage', 'insights', 'predict', 'doctor', 'sync', 'login', 'init', 'watch', 'completion', 'statusline', 'version', 'help')
+    $commands = @('setup', 'switch', 'run', 'config', 'sessions', 'resume', 'status', 'daemon', 'dashboard', 'web', 'usage', 'insights', 'predict', 'doctor', 'sync', 'login', 'completion', 'statusline', 'version', 'help')
     $accounts = @(%s)
     $usageModes = @('daily', 'weekly', 'monthly', 'session', 'blocks', 'messages')
     $shells = @('bash', 'fish', 'powershell')
@@ -180,11 +178,6 @@ Register-ArgumentCompleter -CommandName cx -ScriptBlock {
         $subcommand = $elements[1].ToString()
         switch ($subcommand) {
             'switch' {
-                $accounts | Where-Object { $_ -like "$wordToComplete*" } | ForEach-Object {
-                    [System.Management.Automation.CompletionResult]::new($_, $_, 'ParameterValue', $_)
-                }
-            }
-            'init' {
                 $accounts | Where-Object { $_ -like "$wordToComplete*" } | ForEach-Object {
                     [System.Management.Automation.CompletionResult]::new($_, $_, 'ParameterValue', $_)
                 }

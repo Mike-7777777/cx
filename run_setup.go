@@ -10,6 +10,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"strconv"
 	"strings"
 
 	"github.com/Mike-7777777/cx/internal/config"
@@ -75,15 +76,17 @@ func (c *setupCmd) Run(_ context.Context, app *App, _ []string) error {
 	countStr := readLine(reader)
 	count := 0
 	if countStr != "" {
-		for _, c := range countStr {
-			if c < '0' || c > '9' {
-				return fmt.Errorf("invalid number %q", countStr)
-			}
-			count = count*10 + int(c-'0')
+		var parseErr error
+		count, parseErr = strconv.Atoi(countStr)
+		if parseErr != nil {
+			return fmt.Errorf("invalid number %q", countStr)
 		}
 	}
 
-	home, _ := os.UserHomeDir()
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return fmt.Errorf("cannot determine home directory: %v", err)
+	}
 
 	for i := 0; i < count; i++ {
 		fmt.Fprintf(w, "\n  Account %d name: ", i+1)
@@ -372,7 +375,10 @@ func findWrapperEnd(content string, idx int, shell platform.Shell) int {
 // equivalent of bash's `command` builtin to bypass function name resolution.
 // Bash/Zsh/Fish use `command cx` which requires cx to be in PATH.
 func shellWrapperConfig(shell platform.Shell) (string, string) {
-	home, _ := os.UserHomeDir()
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return "", ""
+	}
 
 	// Resolve absolute path for PowerShell wrapper.
 	cxPath, _ := os.Executable()

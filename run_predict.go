@@ -108,9 +108,12 @@ func (c *predictCmd) Run(_ context.Context, app *App, args []string) error {
 
 		// Compute velocity from JSONL entries in the last 5 hours.
 		var entries []usage.Entry
-		_ = usage.ScanDir(dir, func(e usage.Entry) {
+		cachePath := usageCachePath()
+		uc, _ := usage.LoadUsageCache(cachePath)
+		_ = usage.ScanDirCached(dir, uc, func(e usage.Entry) {
 			entries = append(entries, e)
 		})
+		_ = uc.Save()
 		vel := usage.CalculateVelocity(entries, 5*time.Hour)
 
 		rows = append(rows, predictRow{

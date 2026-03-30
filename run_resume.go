@@ -90,10 +90,13 @@ Usage:
 	configDir := selected.ConfigDir
 	accountName := selected.Account
 
-	if onAccount == "" || onAccount == "true" {
+	if onAccount == "true" {
+		return fmt.Errorf("--on requires an account name (e.g. --on personal)")
+	}
+	if onAccount == "" {
 		// Interactive: if multiple accounts exist, ask which one to use.
 		reg := loadRegistryOrNil()
-		if reg != nil && len(reg.Accounts) > 1 && onAccount != "true" {
+		if reg != nil && len(reg.Accounts) > 1 {
 			configDir, accountName = pickAccount(reg, selected.Account, app.Stderr)
 		}
 	} else {

@@ -55,8 +55,8 @@ func (c *insightsCmd) Run(_ context.Context, app *App, args []string) error {
 		return nil
 	}
 
-	isJSON := flags["json"] == "true"
-	scanAll := flags["all"] == "true"
+	_, isJSON := flags["json"]
+	_, scanAll := flags["all"]
 	sinceStr := flags["since"]
 	dirOverride := flags["dir"]
 

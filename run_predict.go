@@ -65,7 +65,7 @@ func (c *predictCmd) Run(_ context.Context, app *App, args []string) error {
 		return nil
 	}
 
-	isJSON := flags["json"] == "true"
+	_, isJSON := flags["json"]
 	reg := app.Registry
 
 	if len(reg.Accounts) == 0 {

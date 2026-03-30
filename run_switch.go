@@ -5,17 +5,32 @@ import (
 	"errors"
 	"fmt"
 	"path/filepath"
-	"regexp"
 	"strings"
 
 	cxerrors "github.com/Mike-7777777/cx/internal/errors"
 	"github.com/Mike-7777777/cx/internal/platform"
 )
 
-// safePathPattern rejects shell metacharacters in paths that will be eval'd.
+// isSafePath checks that path contains only characters safe for shell eval.
 // Allows letters, digits, slashes, backslashes, dots, hyphens, underscores,
 // colons (Windows drives), spaces, and tildes.
-var safePathPattern = regexp.MustCompile(`^[a-zA-Z0-9/\\.:\-_ ~]+$`)
+func isSafePath(path string) bool {
+	if path == "" {
+		return false
+	}
+	for _, c := range path {
+		switch {
+		case c >= 'a' && c <= 'z',
+			c >= 'A' && c <= 'Z',
+			c >= '0' && c <= '9',
+			c == '/' || c == '\\' || c == '.' || c == ':' || c == '-' || c == '_' || c == ' ' || c == '~':
+			continue
+		default:
+			return false
+		}
+	}
+	return true
+}
 
 // switchCmd implements Runner for the "switch" subcommand.
 type switchCmd struct{}
@@ -44,7 +59,7 @@ func (c *switchCmd) Run(_ context.Context, app *App, args []string) error {
 	}
 
 	name := positional[0]
-	if !validAccountName.MatchString(name) {
+	if !isValidAccountName(name) {
 		return fmt.Errorf("invalid account name %q (only letters, digits, hyphens, underscores)", name)
 	}
 
@@ -59,7 +74,7 @@ func (c *switchCmd) Run(_ context.Context, app *App, args []string) error {
 	// Sanitize configDir before interpolating into eval'd shell commands.
 	// This prevents command injection via a tampered registry file.
 	configDir = filepath.Clean(configDir)
-	if !filepath.IsAbs(configDir) || !safePathPattern.MatchString(configDir) {
+	if !filepath.IsAbs(configDir) || !isSafePath(configDir) {
 		return cxerrors.ErrUnsafeConfigPath
 	}
 

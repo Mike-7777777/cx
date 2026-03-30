@@ -71,6 +71,29 @@ func TestSortedAccountNames_MainAlreadyFirst(t *testing.T) {
 	}
 }
 
+func TestIsValidAccountName(t *testing.T) {
+	tests := []struct {
+		name string
+		want bool
+	}{
+		{"main", true},
+		{"my-account", true},
+		{"acc_123", true},
+		{"ABC", true},
+		{"", false},
+		{"../etc", false},
+		{"a b", false},
+		{"a;b", false},
+		{"a$b", false},
+		{"名前", false},
+	}
+	for _, tt := range tests {
+		if got := isValidAccountName(tt.name); got != tt.want {
+			t.Errorf("isValidAccountName(%q) = %v, want %v", tt.name, got, tt.want)
+		}
+	}
+}
+
 func TestResolveDir_Error(t *testing.T) {
 	// Create a registry with no accounts; resolving should return "?".
 	reg := &config.Registry{

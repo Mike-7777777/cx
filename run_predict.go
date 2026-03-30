@@ -4,11 +4,9 @@ import (
 	"context"
 	"fmt"
 	"io"
-	"path/filepath"
 	"sort"
 	"time"
 
-	"github.com/Mike-7777777/cx/internal/cache"
 	"github.com/Mike-7777777/cx/internal/format"
 	"github.com/Mike-7777777/cx/internal/usage"
 )
@@ -94,20 +92,7 @@ func (c *predictCmd) Run(_ context.Context, app *App, args []string) error {
 			continue
 		}
 
-		var fivePct float64
-		var fiveReset time.Duration
-
-		rc, err := cache.ReadRateCache(filepath.Join(dir, "rate-cache.json"))
-		if err == nil && rc != nil && rc.RateLimits != nil && rc.RateLimits.FiveHour != nil {
-			if rc.RateLimits.FiveHour.IsReset() {
-				fivePct = 0
-				fiveReset = 0
-			} else {
-				fivePct = rc.RateLimits.FiveHour.UsedPercentage
-				fiveReset = rc.RateLimits.FiveHour.TimeToReset()
-			}
-		}
-
+		fivePct, fiveReset, _, _ := fiveHourStats(dir)
 		est := usage.EstimateExhaustion(fivePct, fiveReset, now)
 
 		var entries []usage.Entry

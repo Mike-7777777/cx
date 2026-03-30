@@ -11,7 +11,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/Mike-7777777/cx/internal/cache"
 	"github.com/Mike-7777777/cx/internal/config"
 	"github.com/Mike-7777777/cx/internal/format"
 	"github.com/Mike-7777777/cx/internal/platform"
@@ -203,26 +202,11 @@ func scoreAccounts(reg *config.Registry) []accountScore {
 			continue
 		}
 
-		rc, err := cache.ReadRateCache(filepath.Join(dir, "rate-cache.json"))
-		if err != nil || rc == nil || rc.RateLimits == nil || rc.RateLimits.FiveHour == nil {
+		pct, ttr, rc, ok := fiveHourStats(dir)
+		if !ok {
 			continue
 		}
-
-		pct := rc.RateLimits.FiveHour.UsedPercentage
-		ttr := rc.RateLimits.FiveHour.TimeToReset()
-
-		// If cache is stale but the window has reset, treat as 0%.
-		if rc.RateLimits.FiveHour.IsReset() {
-			pct = 0
-			ttr = 0
-		}
-
-		// Calculate 7d headroom for tiebreaking.
-		var headroom float64 = 1.0 // default: neutral
-		if rc.RateLimits.SevenDay != nil && !rc.RateLimits.SevenDay.IsReset() {
-			daysLeft := time.Until(time.Unix(rc.RateLimits.SevenDay.ResetsAt, 0)).Hours() / 24
-			headroom = sevenDayHeadroom(rc.RateLimits.SevenDay.UsedPercentage, daysLeft)
-		}
+		headroom := sevenDayHeadroomFromCache(rc)
 
 		scores = append(scores, accountScore{
 			name:           name,

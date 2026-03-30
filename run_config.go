@@ -3,13 +3,29 @@ package main
 import (
 	"context"
 	"fmt"
+	"os"
 	"path/filepath"
+	"regexp"
 	"sort"
 	"strings"
 
 	"github.com/Mike-7777777/cx/internal/config"
 	"github.com/Mike-7777777/cx/internal/format"
+	"github.com/Mike-7777777/cx/internal/platform"
 )
+
+// validAccountName restricts account names to safe alphanumeric characters,
+// hyphens, and underscores to prevent path traversal attacks.
+var validAccountName = regexp.MustCompile(`^[a-zA-Z0-9_-]+$`)
+
+// sharedLinkDirs are subdirectories that are junctioned/symlinked from the
+// main config dir into every secondary account dir.
+var sharedLinkDirs = []string{
+	filepath.Join("plugins", "cache"),
+	"ide",
+	"skills",
+	"projects",
+}
 
 // configCmd implements Runner for the "config" subcommand.
 type configCmd struct{}
@@ -36,6 +52,8 @@ func (c *configCmd) Run(_ context.Context, app *App, args []string) error {
 			return fmt.Errorf("usage: cx config set <account> <key> <value>\n  keys: email, alias")
 		}
 		return configSet(app, args[1], args[2], strings.Join(args[3:], " "))
+	case "add":
+		return configAdd(app, args[1:])
 	case "--help", "-h", "help":
 		configHelp(app)
 		return nil
@@ -207,11 +225,103 @@ func configHelp(app *App) {
 
 Usage:
   cx config                        Show full configuration
+  cx config add <name> [--force]   Add a new account (formerly cx init)
   cx config main <name>            Change main account
   cx config rename <old> <new>     Rename an account
   cx config set <name> email <v>   Set account email
   cx config set <name> alias <v>   Set account alias
 `)
+}
+
+// configAdd creates a new account directory, sets up shared links, syncs
+// config files, registers the account, and launches login.
+// This is the logic formerly in `cx init`.
+func configAdd(app *App, args []string) error {
+	flags, positional := parseFlags(args, "force")
+
+	if len(positional) == 0 {
+		return fmt.Errorf("usage: cx config add <name> [--force]")
+	}
+
+	name := positional[0]
+	if !validAccountName.MatchString(name) {
+		return fmt.Errorf("invalid account name %q (only letters, digits, hyphens, underscores)", name)
+	}
+	_, force := flags["force"]
+
+	mainDir, err := config.DetectConfigDir()
+	if err != nil {
+		return fmt.Errorf("%v", err)
+	}
+
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return fmt.Errorf("%v", err)
+	}
+
+	targetDir := filepath.Join(home, ".claude-"+name)
+
+	if _, err := os.Stat(targetDir); err == nil && !force {
+		return fmt.Errorf("%q already exists; use --force to overwrite", targetDir)
+	}
+
+	if err := os.MkdirAll(targetDir, 0o700); err != nil {
+		return fmt.Errorf("creating target dir: %v", err)
+	}
+
+	for _, rel := range sharedLinkDirs {
+		src := filepath.Join(mainDir, rel)
+		if _, err := os.Stat(src); os.IsNotExist(err) {
+			continue
+		}
+
+		dst := filepath.Join(targetDir, rel)
+		if err := os.MkdirAll(filepath.Dir(dst), 0o700); err != nil {
+			return fmt.Errorf("creating parent for link %q: %v", dst, err)
+		}
+		_ = os.RemoveAll(dst)
+		if err := platform.CreateLink(dst, src); err != nil {
+			return fmt.Errorf("linking %q → %q: %v", dst, src, err)
+		}
+		fmt.Fprintf(app.Stderr, "  linked %s\n", rel)
+	}
+
+	if err := syncFiles(mainDir, targetDir, true); err != nil {
+		return fmt.Errorf("syncing files: %v", err)
+	}
+
+	regPath, err := config.RegistryPath()
+	if err != nil {
+		return err
+	}
+
+	reg, err := config.LoadOrCreateRegistry(regPath)
+	if err != nil {
+		return err
+	}
+
+	if reg.Main == "" {
+		reg.Main = "main"
+		reg.AddAccount("main", "")
+	}
+
+	reg.AddAccount(name, targetDir)
+
+	if err := reg.Save(); err != nil {
+		return fmt.Errorf("saving registry: %v", err)
+	}
+
+	fmt.Fprintf(app.Stderr, "initialized account %q at %s\n", name, targetDir)
+
+	fmt.Fprintf(app.Stderr, "[cx] Launching login for %q...\n", name)
+	if err := launchLogin(targetDir); err != nil {
+		fmt.Fprintf(app.Stderr, "[cx] login failed: %v\n", err)
+		fmt.Fprintf(app.Stderr, "  retry later with: cx login %s\n", name)
+	} else {
+		fmt.Fprintf(app.Stderr, "[cx] Login successful for %q.\n", name)
+	}
+
+	return nil
 }
 
 // reloadRegistry loads a fresh registry from disk for commands that modify and save it.

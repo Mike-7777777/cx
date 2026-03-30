@@ -18,7 +18,7 @@ type resumeCmd struct{}
 
 // Run resumes a CC session with smart matching.
 func (c *resumeCmd) Run(_ context.Context, app *App, args []string) error {
-	flags, positional := parseFlags(args, "last", "on")
+	flags, positional := parseFlags(args, "last", "on", "yolo")
 
 	// Check for help flag.
 	for _, arg := range args {
@@ -30,6 +30,7 @@ Usage:
   cx resume <term>       Fuzzy match by slug, project, or account name
   cx resume --last       Resume the most recent session (any account)
   cx resume --on <acct>  Run session on a specific account (cross-account resume)
+  cx resume --yolo       Resume with --dangerously-skip-permissions
 `)
 			return nil
 		}
@@ -37,6 +38,7 @@ Usage:
 
 	_, isLast := flags["last"]
 	onAccount := flags["on"]
+	_, isYolo := flags["yolo"]
 
 	searchTerm := ""
 	if len(positional) > 0 {
@@ -134,7 +136,11 @@ Usage:
 	fmt.Fprintf(app.Stderr, "[cx] Resuming %q on account %s\n", displaySlug(selected), accountName)
 
 	env := replaceOrAppendEnv(os.Environ(), "CLAUDE_CONFIG_DIR", configDir)
-	if err := platform.ExecProgram("claude", []string{"--resume", selected.ID}, env); err != nil {
+	claudeArgs := []string{"--resume", selected.ID}
+	if isYolo {
+		claudeArgs = append(claudeArgs, "--dangerously-skip-permissions")
+	}
+	if err := platform.ExecProgram("claude", claudeArgs, env); err != nil {
 		return fmt.Errorf("failed to exec claude: %v", err)
 	}
 	return nil

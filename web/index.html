@@ -458,6 +458,10 @@
   </div>
 </div>
 
+<div id="sessions-more" style="display:none;text-align:center;padding:12px">
+  <button id="load-more-btn" style="background:var(--surface);color:var(--text-secondary);border:1px solid var(--border);padding:8px 24px;border-radius:6px;cursor:pointer;font-size:13px">Show more</button>
+</div>
+
 </div>
 
 <script>
@@ -465,6 +469,8 @@
   'use strict';
 
   var COLORS = ['#3b82f6','#8b5cf6','#06b6d4','#22c55e','#eab308','#f97316','#ef4444','#ec4899'];
+  var sessionOffset = 0;
+  var sessionLimit = 10;
   var R = 27, C = 2 * Math.PI * R;
 
   function usageColor(p) { return p > 80 ? 'var(--red)' : p >= 50 ? 'var(--yellow)' : 'var(--green)'; }
@@ -603,15 +609,19 @@
     if (!data || data.equivalent_api_cost == null) { el.textContent = '--'; det.textContent = 'No data'; return; }
     el.textContent = fmt$(data.savings);
     el.className = 'stat-value mono ' + (data.savings >= 0 ? 'stat-positive' : 'stat-negative');
-    det.textContent = fmt$(data.subscription_cost) + '/mo vs ' + fmt$(data.equivalent_api_cost) + ' API';
+    var period = data.months > 1 ? ' over ' + data.months + ' months' : '';
+    det.textContent = fmt$(data.subscription_cost) + '/mo \u00d7 ' + (data.account_count || 1) + ' acct vs ' + fmt$(data.equivalent_api_cost) + ' API' + period;
   }
 
-  function renderSessions(data) {
+  function renderSessions(data, append) {
     var el = document.getElementById('sessions');
+    var moreEl = document.getElementById('sessions-more');
     if (!data || !data.sessions || !data.sessions.length) {
-      el.innerHTML = '<tr><td colspan="5" class="empty">No sessions</td></tr>'; return;
+      if (!append) el.innerHTML = '<tr><td colspan="5" class="empty">No sessions</td></tr>';
+      if (moreEl) moreEl.style.display = 'none';
+      return;
     }
-    el.innerHTML = '';
+    if (!append) el.innerHTML = '';
     data.sessions.forEach(function(s) {
       var tr = document.createElement('tr');
       tr.innerHTML = '<td class="mono-cell" style="color:var(--blue)">' + esc(s.session_id) + '</td>' +
@@ -621,6 +631,8 @@
         '<td class="mono-cell">' + fmt$(s.cost_usd) + '</td>';
       el.appendChild(tr);
     });
+    sessionOffset += data.sessions.length;
+    if (moreEl) moreEl.style.display = data.has_more ? 'block' : 'none';
   }
 
   var dot = document.getElementById('dot');
@@ -633,12 +645,13 @@
       fetch('/api/status',{signal:AbortSignal.timeout(10000)}).then(function(r){return r.json()}).catch(function(){return null}),
       fetch('/api/daily',{signal:AbortSignal.timeout(10000)}).then(function(r){return r.json()}).catch(function(){return null}),
       fetch('/api/roi',{signal:AbortSignal.timeout(10000)}).then(function(r){return r.json()}).catch(function(){return null}),
-      fetch('/api/sessions',{signal:AbortSignal.timeout(10000)}).then(function(r){return r.json()}).catch(function(){return null})
+      fetch('/api/sessions?limit=10',{signal:AbortSignal.timeout(10000)}).then(function(r){return r.json()}).catch(function(){return null})
     ]).then(function(res) {
       if (res[0]) renderAccounts(res[0]);
       if (res[1]) renderDaily(res[1]);
       if (res[2]) renderROI(res[2]);
-      if (res[3]) renderSessions(res[3]);
+      sessionOffset = 0;
+      if (res[3]) renderSessions(res[3], false);
       stxt.textContent = 'Updated ' + new Date().toLocaleTimeString();
       document.getElementById('error-banner').style.display = 'none';
     }).catch(function() {
@@ -651,6 +664,13 @@
 
   fetchAll();
   setInterval(fetchAll, 30000);
+
+  document.getElementById('load-more-btn').addEventListener('click', function() {
+    fetch('/api/sessions?limit=' + sessionLimit + '&offset=' + sessionOffset, {signal: AbortSignal.timeout(10000)})
+      .then(function(r) { return r.json(); })
+      .then(function(data) { renderSessions(data, true); })
+      .catch(function() {});
+  });
 
   // Global tooltip: any element with data-tip shows the tooltip on hover.
   var tip = document.getElementById('tooltip');

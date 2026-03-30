@@ -53,7 +53,7 @@ var commands = map[string]command{
 	"setup":      {&setupCmd{}, "One-time interactive setup (accounts + shell wrapper)", catGettingStarted},
 	"switch":     {&switchCmd{}, "Switch account (via wrapper: cx switch 5x)", catDailyUse},
 	"run":        {&runCmd{}, "Auto-select best account and launch claude", catDailyUse},
-	"config":     {&configCmd{}, "Manage accounts, main, metadata", catDailyUse},
+	"config":     {&configCmd{}, "Manage accounts: show, add, main, rename, set", catDailyUse},
 	"sessions":   {&sessionsCmd{}, "List recent CC sessions across all accounts", catDailyUse},
 	"resume":     {&resumeCmd{}, "Resume a CC session with smart matching", catDailyUse},
 	"status":     {&statusCmd{}, "All accounts: auth status + rate limits", catDailyUse},

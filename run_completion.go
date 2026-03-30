@@ -3,7 +3,6 @@ package main
 import (
 	"context"
 	"fmt"
-	"sort"
 	"strings"
 
 	"github.com/Mike-7777777/cx/internal/config"
@@ -18,40 +17,23 @@ func (c *completionCmd) Run(_ context.Context, app *App, args []string) error {
 		return fmt.Errorf("usage: cx completion <bash|fish|powershell>")
 	}
 
+	reg := app.Registry
 	shell := strings.ToLower(args[0])
 	switch shell {
 	case "bash":
-		fmt.Fprint(app.Stdout, bashCompletion())
+		fmt.Fprint(app.Stdout, bashCompletion(reg))
 	case "fish":
-		fmt.Fprint(app.Stdout, fishCompletion())
+		fmt.Fprint(app.Stdout, fishCompletion(reg))
 	case "powershell":
-		fmt.Fprint(app.Stdout, powershellCompletion())
+		fmt.Fprint(app.Stdout, powershellCompletion(reg))
 	default:
 		return fmt.Errorf("unsupported shell: %s (supported: bash, fish, powershell)", shell)
 	}
 	return nil
 }
 
-// accountNames loads registered account names from the registry.
-func accountNames() []string {
-	regPath, err := config.RegistryPath()
-	if err != nil {
-		return nil
-	}
-	reg, err := config.LoadOrCreateRegistry(regPath)
-	if err != nil {
-		return nil
-	}
-	names := make([]string, 0, len(reg.Accounts))
-	for name := range reg.Accounts {
-		names = append(names, name)
-	}
-	sort.Strings(names)
-	return names
-}
-
-func bashCompletion() string {
-	accounts := accountNames()
+func bashCompletion(reg *config.Registry) string {
+	accounts := sortedAccountNames(reg)
 	accountList := strings.Join(accounts, " ")
 
 	return fmt.Sprintf(`# bash completion for cx
@@ -95,8 +77,8 @@ complete -F _cx_completions cx
 `, accountList, accountList)
 }
 
-func fishCompletion() string {
-	accounts := accountNames()
+func fishCompletion(reg *config.Registry) string {
+	accounts := sortedAccountNames(reg)
 
 	var sb strings.Builder
 	sb.WriteString(`# fish completion for cx
@@ -148,8 +130,8 @@ complete -c cx -n '__fish_seen_subcommand_from run' -l 'balance' -d 'Round-robin
 	return sb.String()
 }
 
-func powershellCompletion() string {
-	accounts := accountNames()
+func powershellCompletion(reg *config.Registry) string {
+	accounts := sortedAccountNames(reg)
 	accountList := "'" + strings.Join(accounts, "', '") + "'"
 	if len(accounts) == 0 {
 		accountList = ""

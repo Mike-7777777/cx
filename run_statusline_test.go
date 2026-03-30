@@ -1,7 +1,6 @@
 package main
 
 import (
-	"encoding/json"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -276,14 +275,8 @@ func TestCurrentAccountName_Match(t *testing.T) {
 			"secondary": {ConfigDir: filepath.Join(fakeHome, "other")},
 		},
 	}
-	regData, _ := json.MarshalIndent(reg, "", "  ")
-	if err := os.WriteFile(filepath.Join(fakeHome, ".cx.json"), regData, 0o600); err != nil {
-		t.Fatal(err)
-	}
-	t.Setenv("HOME", fakeHome)
-	t.Setenv("USERPROFILE", fakeHome)
 
-	got := currentAccountName(configDir)
+	got := currentAccountName(reg, configDir)
 	if got != "primary" {
 		t.Errorf("got %q, want %q", got, "primary")
 	}
@@ -298,16 +291,17 @@ func TestCurrentAccountName_NoMatch(t *testing.T) {
 			"only": {ConfigDir: filepath.Join(fakeHome, "some-dir")},
 		},
 	}
-	regData, _ := json.MarshalIndent(reg, "", "  ")
-	if err := os.WriteFile(filepath.Join(fakeHome, ".cx.json"), regData, 0o600); err != nil {
-		t.Fatal(err)
-	}
-	t.Setenv("HOME", fakeHome)
-	t.Setenv("USERPROFILE", fakeHome)
 
-	got := currentAccountName(filepath.Join(fakeHome, "unrelated-dir"))
+	got := currentAccountName(reg, filepath.Join(fakeHome, "unrelated-dir"))
 	if got != "" {
 		t.Errorf("got %q, want empty for non-matching dir", got)
+	}
+}
+
+func TestCurrentAccountName_NilRegistry(t *testing.T) {
+	got := currentAccountName(nil, "/some/dir")
+	if got != "" {
+		t.Errorf("got %q, want empty for nil registry", got)
 	}
 }
 
@@ -338,14 +332,8 @@ func TestLoadOtherAccount_ReturnsHighestUsage(t *testing.T) {
 			"high":    {ConfigDir: otherDir2},
 		},
 	}
-	regData, _ := json.MarshalIndent(reg, "", "  ")
-	if err := os.WriteFile(filepath.Join(fakeHome, ".cx.json"), regData, 0o600); err != nil {
-		t.Fatal(err)
-	}
-	t.Setenv("HOME", fakeHome)
-	t.Setenv("USERPROFILE", fakeHome)
 
-	other := loadOtherAccount(currentDir)
+	other := loadOtherAccount(reg, currentDir)
 	if other == nil {
 		t.Fatal("expected non-nil other account")
 	}
@@ -371,16 +359,17 @@ func TestLoadOtherAccount_NoOtherAccounts(t *testing.T) {
 			"only": {ConfigDir: configDir},
 		},
 	}
-	regData, _ := json.MarshalIndent(reg, "", "  ")
-	if err := os.WriteFile(filepath.Join(fakeHome, ".cx.json"), regData, 0o600); err != nil {
-		t.Fatal(err)
-	}
-	t.Setenv("HOME", fakeHome)
-	t.Setenv("USERPROFILE", fakeHome)
 
-	other := loadOtherAccount(configDir)
+	other := loadOtherAccount(reg, configDir)
 	if other != nil {
 		t.Errorf("expected nil for single account, got %+v", other)
+	}
+}
+
+func TestLoadOtherAccount_NilRegistry(t *testing.T) {
+	other := loadOtherAccount(nil, "/some/dir")
+	if other != nil {
+		t.Errorf("expected nil for nil registry, got %+v", other)
 	}
 }
 

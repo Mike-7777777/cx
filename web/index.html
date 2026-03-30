@@ -14,7 +14,7 @@
     --border: #1f1f1f;
     --text: #fafafa;
     --text-secondary: #737373;
-    --text-tertiary: #525252;
+    --text-tertiary: #6b6b6b;
     --blue: #3b82f6;
     --green: #22c55e;
     --yellow: #eab308;
@@ -345,7 +345,7 @@
     background: var(--surface);
     border: 1px solid var(--border);
     border-radius: var(--radius);
-    overflow: hidden;
+    overflow-x: auto;
   }
 
   table {
@@ -474,9 +474,15 @@
   var R = 27, C = 2 * Math.PI * R;
 
   function usageColor(p) { return p > 80 ? 'var(--red)' : p >= 50 ? 'var(--yellow)' : 'var(--green)'; }
-  function fmt$(v) { return v == null || isNaN(v) ? '--' : '$' + v.toFixed(2); }
+  function fmt$(v) { return v == null || isNaN(v) ? '--' : '$' + v.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2}); }
   function fmtN(n) { return n == null ? '--' : n.toLocaleString(); }
   function esc(s) { var d = document.createElement('div'); d.textContent = s || ''; return d.innerHTML; }
+  function abortAfter(ms) {
+    if (typeof AbortSignal.timeout === 'function') return AbortSignal.timeout(ms);
+    var c = new AbortController();
+    setTimeout(function() { c.abort(); }, ms);
+    return c.signal;
+  }
   function shouldShowLabel(dateStr) {
     var d = new Date(dateStr + 'T00:00:00');
     return d.getDay() === 1 || d.getDate() === 1;
@@ -493,7 +499,13 @@
   }
 
   function ring(pct, label, sub) {
-    var p = Math.min(100, Math.max(0, pct || 0));
+    if (pct == null) {
+      return '<div class="ring-group"><div class="ring-label">' + label + '</div>' +
+        '<div class="ring-container">' +
+        '<svg viewBox="0 0 64 64"><circle cx="32" cy="32" r="' + R + '" class="ring-track"/></svg>' +
+        '<div class="ring-value" style="color:var(--text-tertiary)">N/A</div></div></div>';
+    }
+    var p = Math.min(100, Math.max(0, pct));
     var offset = C - (p / 100) * C;
     var color = usageColor(p);
     return '<div class="ring-group"><div class="ring-label">' + label + '</div>' +
@@ -642,10 +654,10 @@
     dot.className = 'status-dot';
     stxt.textContent = 'Updating...';
     Promise.all([
-      fetch('/api/status',{signal:AbortSignal.timeout(10000)}).then(function(r){return r.json()}).catch(function(){return null}),
-      fetch('/api/daily',{signal:AbortSignal.timeout(10000)}).then(function(r){return r.json()}).catch(function(){return null}),
-      fetch('/api/roi',{signal:AbortSignal.timeout(10000)}).then(function(r){return r.json()}).catch(function(){return null}),
-      fetch('/api/sessions?limit=10',{signal:AbortSignal.timeout(10000)}).then(function(r){return r.json()}).catch(function(){return null})
+      fetch('/api/status',{signal:abortAfter(10000)}).then(function(r){return r.json()}).catch(function(){return null}),
+      fetch('/api/daily',{signal:abortAfter(10000)}).then(function(r){return r.json()}).catch(function(){return null}),
+      fetch('/api/roi',{signal:abortAfter(10000)}).then(function(r){return r.json()}).catch(function(){return null}),
+      fetch('/api/sessions?limit=10',{signal:abortAfter(10000)}).then(function(r){return r.json()}).catch(function(){return null})
     ]).then(function(res) {
       if (res[0]) renderAccounts(res[0]);
       if (res[1]) renderDaily(res[1]);
@@ -662,14 +674,23 @@
     });
   }
 
-  fetchAll();
-  setInterval(fetchAll, 30000);
+  // Wait for server data to be ready before first fetch.
+  (function waitForReady() {
+    fetch('/api/ready').then(function(r) { return r.json(); }).then(function(d) {
+      if (d && d.ready) { fetchAll(); setInterval(fetchAll, 30000); }
+      else { setTimeout(waitForReady, 500); }
+    }).catch(function() { setTimeout(waitForReady, 1000); });
+  })();
 
   document.getElementById('load-more-btn').addEventListener('click', function() {
-    fetch('/api/sessions?limit=' + sessionLimit + '&offset=' + sessionOffset, {signal: AbortSignal.timeout(10000)})
+    fetch('/api/sessions?limit=' + sessionLimit + '&offset=' + sessionOffset, {signal: abortAfter(10000)})
       .then(function(r) { return r.json(); })
       .then(function(data) { renderSessions(data, true); })
-      .catch(function() {});
+      .catch(function() {
+        var btn = document.getElementById('load-more-btn');
+        btn.textContent = 'Failed — click to retry';
+        setTimeout(function() { btn.textContent = 'Show more'; }, 3000);
+      });
   });
 
   // Global tooltip: any element with data-tip shows the tooltip on hover.

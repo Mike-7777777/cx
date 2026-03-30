@@ -197,7 +197,7 @@ func (c *webCmd) Run(ctx context.Context, app *App, args []string) error {
 	mux.HandleFunc("/api/sessions", func(hw http.ResponseWriter, r *http.Request) {
 		wc.mu.RLock()
 		sessions := wc.sessions
-		entries := wc.sessEntries
+		projMap := wc.sessProjects
 		wc.mu.RUnlock()
 
 		limit := 10
@@ -235,7 +235,7 @@ func (c *webCmd) Run(ctx context.Context, app *App, args []string) error {
 			}
 			resp.Sessions = append(resp.Sessions, apiSession{
 				SessionID:   sid,
-				Project:     sessionProject(entries, sr.SessionID),
+				Project:     lookupProject(projMap, sr.SessionID),
 				StartTime:   sr.StartTime.Format(time.RFC3339),
 				TotalTokens: sr.Summary.TotalTokens,
 				CostUSD:     sr.Summary.CostUSD,
@@ -448,27 +448,39 @@ func loadWebRegistry() (*config.Registry, []string, error) {
 	return reg, dirs, nil
 }
 
-// sessionProject extracts the most common ProjectPath for a given session ID.
-func sessionProject(entries []usage.Entry, sessionID string) string {
-	counts := make(map[string]int)
+// buildSessionProjectMap pre-computes the most common project for each session ID.
+// Called once per refresh cycle instead of per-session per-request.
+func buildSessionProjectMap(entries []usage.Entry) map[string]string {
+	// sessionID → projectName → count
+	counts := make(map[string]map[string]int)
 	for _, e := range entries {
-		if e.SessionID == sessionID && e.ProjectPath != "" {
-			// Decode the directory name for display.
-			counts[shortProjectName(e.ProjectPath)]++
+		if e.SessionID == "" || e.ProjectPath == "" {
+			continue
 		}
+		if counts[e.SessionID] == nil {
+			counts[e.SessionID] = make(map[string]int)
+		}
+		counts[e.SessionID][shortProjectName(e.ProjectPath)]++
 	}
 
-	if len(counts) == 0 {
-		return "--"
-	}
-
-	var best string
-	var bestCount int
-	for proj, cnt := range counts {
-		if cnt > bestCount {
-			best = proj
-			bestCount = cnt
+	result := make(map[string]string, len(counts))
+	for sid, projects := range counts {
+		var best string
+		var bestCount int
+		for proj, cnt := range projects {
+			if cnt > bestCount {
+				best = proj
+				bestCount = cnt
+			}
 		}
+		result[sid] = best
 	}
-	return best
+	return result
+}
+
+func lookupProject(m map[string]string, sessionID string) string {
+	if p, ok := m[sessionID]; ok && p != "" {
+		return p
+	}
+	return "--"
 }

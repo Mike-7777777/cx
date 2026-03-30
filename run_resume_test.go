@@ -105,6 +105,22 @@ func TestDisplaySlug(t *testing.T) {
 	}
 }
 
+func TestResume_YoloFlagInHelp(t *testing.T) {
+	var buf bytes.Buffer
+	app := &App{
+		Registry: &config.Registry{Main: "main", Accounts: map[string]config.Account{}},
+		Stdout:   &buf, Stderr: &buf, UseColor: false,
+	}
+	cmd := &resumeCmd{}
+	err := cmd.Run(context.Background(), app, []string{"--help"})
+	if err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+	if !strings.Contains(buf.String(), "--yolo") {
+		t.Errorf("help text missing --yolo: %q", buf.String())
+	}
+}
+
 func TestResume_HelpFlag(t *testing.T) {
 	var buf bytes.Buffer
 	app := &App{

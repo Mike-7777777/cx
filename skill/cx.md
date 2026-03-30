@@ -22,7 +22,7 @@ cx manages multiple Claude Code Max Plan accounts from a single machine. It moni
 | Re-authenticate | `cx login <name>` | Fix expired OAuth tokens |
 | Usage pattern analysis | `cx insights [--all]` | Hourly heatmap, model distribution, efficiency metrics |
 | Predict rate limit exhaustion | `cx predict` | Velocity, time-to-exhaust, actionable warnings |
-| Auto-switch daemon | `cx auto [--threshold N] [--once]` | Background monitor, writes recommendation file |
+| Auto-switch + sync daemon | `cx daemon [--no-sync] [--no-switch]` | Combined auto-switch + config-sync |
 
 ### Workflow
 

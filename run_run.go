@@ -136,7 +136,7 @@ func (c *runCmd) Run(_ context.Context, app *App, args []string) error {
 	}
 
 	if len(reg.Accounts) == 0 {
-		return fmt.Errorf("no accounts configured. Run: cx init <name>")
+		return fmt.Errorf("no accounts configured. Run: cx config add <name>")
 	}
 
 	// Score all accounts by smart routing (usage + time-to-reset).

@@ -69,7 +69,7 @@ func (c *predictCmd) Run(_ context.Context, app *App, args []string) error {
 	reg := app.Registry
 
 	if len(reg.Accounts) == 0 {
-		fmt.Fprintln(out, "No accounts configured. Run: cx init <name>")
+		fmt.Fprintln(out, "No accounts configured. Run: cx config add <name>")
 		return nil
 	}
 

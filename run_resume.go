@@ -74,8 +74,8 @@ Usage:
 		if len(matches) == 1 {
 			selected = &matches[0]
 		} else {
-			// Multiple matches — show picker.
-			selected = pickSession(sessions, app.UseColor, app.Stderr)
+			// Multiple matches — show picker with filtered results.
+			selected = pickSession(matches, app.UseColor, app.Stderr)
 		}
 	} else {
 		// No args — interactive picker.

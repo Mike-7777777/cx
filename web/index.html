@@ -4,7 +4,6 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>cx</title>
-<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
 <style>
   *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
@@ -25,7 +24,7 @@
   }
 
   body {
-    font-family: 'Plus Jakarta Sans', -apple-system, sans-serif;
+    font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
     background: var(--bg);
     color: var(--text);
     min-height: 100vh;
@@ -33,7 +32,7 @@
     -webkit-font-smoothing: antialiased;
   }
 
-  .mono { font-family: 'IBM Plex Mono', monospace; }
+  .mono { font-family: 'SF Mono', ui-monospace, Consolas, 'Liberation Mono', monospace; }
 
   .container {
     max-width: 1120px;
@@ -72,6 +71,21 @@
     0%, 100% { opacity: 1; }
     50% { opacity: 0.4; }
   }
+
+  .skeleton {
+    background: linear-gradient(90deg, var(--surface) 25%, #1a1a1a 50%, var(--surface) 75%);
+    background-size: 200% 100%;
+    animation: shimmer 1.5s infinite;
+    border-radius: 6px;
+    height: 1em;
+  }
+  @keyframes shimmer {
+    0% { background-position: 200% 0; }
+    100% { background-position: -200% 0; }
+  }
+  .skeleton-bar { height: 60%; min-width: 14px; }
+  .skeleton-row { height: 40px; margin-bottom: 8px; }
+  .skeleton-ring { width: 64px; height: 64px; border-radius: 50%; }
 
   .status-text {
     font-size: 13px;
@@ -153,7 +167,7 @@
     display: flex;
     align-items: center;
     justify-content: center;
-    font-family: 'IBM Plex Mono', monospace;
+    font-family: 'SF Mono', ui-monospace, Consolas, 'Liberation Mono', monospace;
     font-size: 14px;
     font-weight: 500;
   }
@@ -162,7 +176,7 @@
     font-size: 11px;
     color: var(--text-tertiary);
     margin-top: 4px;
-    font-family: 'IBM Plex Mono', monospace;
+    font-family: 'SF Mono', ui-monospace, Consolas, 'Liberation Mono', monospace;
   }
 
   /* Stat cards */
@@ -189,7 +203,7 @@
   }
 
   .stat-value {
-    font-family: 'IBM Plex Mono', monospace;
+    font-family: 'SF Mono', ui-monospace, Consolas, 'Liberation Mono', monospace;
     font-size: 28px;
     font-weight: 500;
     letter-spacing: -0.02em;
@@ -268,7 +282,7 @@
     white-space: nowrap;
     z-index: 1000;
     pointer-events: none;
-    font-family: 'IBM Plex Mono', monospace;
+    font-family: 'SF Mono', ui-monospace, Consolas, 'Liberation Mono', monospace;
     color: var(--text);
     box-shadow: 0 4px 12px rgba(0,0,0,0.4);
   }
@@ -277,7 +291,7 @@
     font-size: 9px;
     color: var(--text-tertiary);
     margin-top: 6px;
-    font-family: 'IBM Plex Mono', monospace;
+    font-family: 'SF Mono', ui-monospace, Consolas, 'Liberation Mono', monospace;
   }
 
   /* Model breakdown */
@@ -322,7 +336,7 @@
   }
 
   .legend-value {
-    font-family: 'IBM Plex Mono', monospace;
+    font-family: 'SF Mono', ui-monospace, Consolas, 'Liberation Mono', monospace;
     color: var(--text-secondary);
   }
 
@@ -360,7 +374,7 @@
   tr:hover td { background: var(--surface-hover); }
 
   td.mono-cell {
-    font-family: 'IBM Plex Mono', monospace;
+    font-family: 'SF Mono', ui-monospace, Consolas, 'Liberation Mono', monospace;
     font-size: 12px;
   }
 
@@ -370,6 +384,11 @@
     .stats { grid-template-columns: 1fr; }
     .accounts { grid-template-columns: 1fr; }
     .container { padding: 24px 16px; }
+    .chart-container { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+    .chart { min-width: 500px; }
+    .ring-container, .ring-container svg { width: 48px; height: 48px; }
+    .ring-value { font-size: 12px; }
+    .account { padding: 16px; gap: 16px; }
   }
 </style>
 </head>
@@ -385,7 +404,15 @@
   </div>
 </header>
 
-<div class="accounts" id="accounts"><div class="empty">Loading accounts...</div></div>
+<div id="error-banner" style="display:none;background:#991b1b;color:#fafafa;padding:12px 24px;border-radius:var(--radius);margin-bottom:24px;align-items:center;justify-content:space-between">
+  <span id="error-msg">Connection error</span>
+  <button onclick="fetchAll()" style="background:#dc2626;color:white;border:none;padding:6px 16px;border-radius:6px;cursor:pointer;font-size:13px">Retry</button>
+</div>
+
+<div class="accounts" id="accounts">
+  <div class="account"><div class="skeleton skeleton-ring"></div><div style="flex:1"><div class="skeleton" style="width:60%;margin-bottom:8px"></div><div class="skeleton" style="width:40%"></div></div></div>
+  <div class="account"><div class="skeleton skeleton-ring"></div><div style="flex:1"><div class="skeleton" style="width:60%;margin-bottom:8px"></div><div class="skeleton" style="width:40%"></div></div></div>
+</div>
 
 <div class="stats">
   <div class="stat">
@@ -400,7 +427,7 @@
     <div class="stat-sub" id="week-msgs">-- messages</div>
   </div>
   <div class="stat">
-    <div class="stat-label">ROI Savings</div>
+    <div class="stat-label">ROI Savings (Lifetime)</div>
     <div class="stat-value mono" id="roi-val">--</div>
     <div class="stat-sub" id="roi-detail">--</div>
   </div>
@@ -409,7 +436,7 @@
 <div class="section">
   <div class="section-title">Daily Usage</div>
   <div class="chart-container">
-    <div class="chart" id="chart"><div class="empty">Loading...</div></div>
+    <div class="chart" id="chart"><div class="bar-col" style="flex:1"><div class="skeleton skeleton-bar"></div></div><div class="bar-col" style="flex:1"><div class="skeleton skeleton-bar" style="height:40%"></div></div><div class="bar-col" style="flex:1"><div class="skeleton skeleton-bar" style="height:80%"></div></div><div class="bar-col" style="flex:1"><div class="skeleton skeleton-bar" style="height:30%"></div></div><div class="bar-col" style="flex:1"><div class="skeleton skeleton-bar" style="height:55%"></div></div></div>
   </div>
 </div>
 
@@ -417,7 +444,7 @@
   <div class="section-title">Model Breakdown</div>
   <div class="model-row">
     <div class="stacked-bar" id="model-bar"></div>
-    <div class="model-legend" id="model-legend"><span class="empty">Loading...</span></div>
+    <div class="model-legend" id="model-legend"><div class="skeleton" style="width:100%;height:8px;margin-bottom:16px"></div></div>
   </div>
 </div>
 
@@ -426,7 +453,7 @@
   <div class="table-container">
     <table>
       <thead><tr><th>Session</th><th>Project</th><th>Started</th><th>Tokens</th><th>Cost</th></tr></thead>
-      <tbody id="sessions"><tr><td colspan="5" class="empty">Loading...</td></tr></tbody>
+      <tbody id="sessions"><tr><td colspan="5"><div class="skeleton skeleton-row"></div><div class="skeleton skeleton-row"></div><div class="skeleton skeleton-row"></div></td></tr></tbody>
     </table>
   </div>
 </div>
@@ -444,6 +471,10 @@
   function fmt$(v) { return v == null || isNaN(v) ? '--' : '$' + v.toFixed(2); }
   function fmtN(n) { return n == null ? '--' : n.toLocaleString(); }
   function esc(s) { var d = document.createElement('div'); d.textContent = s || ''; return d.innerHTML; }
+  function shouldShowLabel(dateStr) {
+    var d = new Date(dateStr + 'T00:00:00');
+    return d.getDay() === 1 || d.getDate() === 1;
+  }
 
   function timeAgo(ts) {
     if (!ts) return '--';
@@ -507,7 +538,7 @@
       col.appendChild(bar);
       var label = document.createElement('div');
       label.className = 'bar-date';
-      label.textContent = (r.Date||'').substring(5);
+      label.textContent = shouldShowLabel(r.Date) ? (r.Date||'').substring(5) : '';
       col.appendChild(label);
       el.appendChild(col);
     });
@@ -609,9 +640,12 @@
       if (res[2]) renderROI(res[2]);
       if (res[3]) renderSessions(res[3]);
       stxt.textContent = 'Updated ' + new Date().toLocaleTimeString();
+      document.getElementById('error-banner').style.display = 'none';
     }).catch(function() {
       dot.className = 'status-dot error';
       stxt.textContent = 'Error';
+      document.getElementById('error-msg').textContent = 'Failed to fetch data. Server may be down.';
+      document.getElementById('error-banner').style.display = 'flex';
     });
   }
 

@@ -9,12 +9,15 @@ set -e
 
 echo "[pre-push] Running quality checks..."
 
-# 1. Format
-UNFORMATTED=$(gofmt -l . 2>/dev/null)
-if [ -n "$UNFORMATTED" ]; then
-    echo "FAIL: gofmt required on:"
-    echo "$UNFORMATTED"
-    exit 1
+# 1. Format (check committed files to avoid CRLF false positives on Windows)
+GOFILES=$(git ls-files '*.go')
+if [ -n "$GOFILES" ]; then
+    UNFORMATTED=$(echo "$GOFILES" | xargs gofmt -l 2>/dev/null)
+    if [ -n "$UNFORMATTED" ]; then
+        echo "FAIL: gofmt required on:"
+        echo "$UNFORMATTED"
+        exit 1
+    fi
 fi
 echo "  gofmt .......... ok"
 

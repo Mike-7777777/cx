@@ -228,17 +228,8 @@ func TestFindPeakHours_NGreaterThanAvailable(t *testing.T) {
 // TestFormatHourlyTable_ContainsHours verifies that the formatted output includes
 // the expected hour labels and a formatted cost string.
 func TestFormatHourlyTable_ContainsHours(t *testing.T) {
-	entries := []Entry{
-		makeEntry("claude-opus-4-6", 9, 1000, 2000, 0, 0),
-		makeEntry("claude-sonnet-4-6", 14, 500, 1000, 0, 0),
-	}
-	// Inject a cost that results in "$2.50" being present by using a known model
-	// and token count. We verify the hour labels and dollar sign instead.
-	reports := AggregateHourly(entries)
-
-	// Add a custom cost-visible entry: use pricing known to produce a visible cost.
-	// We patch the second report to have a known cost by building reports directly.
-	reports = []HourlyReport{
+	// Build reports with known costs to verify formatting.
+	reports := []HourlyReport{
 		{Hour: 9, Summary: UsageSummary{EntryCount: 1, TotalTokens: 10000, CostUSD: 2.50}},
 		{Hour: 14, Summary: UsageSummary{EntryCount: 1, TotalTokens: 5000, CostUSD: 1.00}},
 	}

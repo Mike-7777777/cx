@@ -6,7 +6,7 @@ Guide for AI contributors working on the cx codebase.
 
 cx is a Claude Code multi-account manager. It ships as a single Go binary with zero runtime dependencies. Users register multiple Claude Code accounts, switch between them, monitor rate limits, and launch sessions from the best-available account.
 
-Repository: `github.com/Mike-7777777/cx` | Go 1.24+ | Single external dep: `natefinch/atomic`
+Repository: `github.com/Mike-7777777/cx` | Go 1.24+ (CI uses latest stable) | Single external dep: `natefinch/atomic`
 
 ## Architecture
 

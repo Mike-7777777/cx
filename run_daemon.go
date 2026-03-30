@@ -12,6 +12,7 @@ import (
 
 	"github.com/Mike-7777777/cx/internal/cache"
 	"github.com/Mike-7777777/cx/internal/config"
+	"github.com/Mike-7777777/cx/internal/format"
 	"github.com/Mike-7777777/cx/internal/usage"
 )
 
@@ -144,7 +145,7 @@ func checkAndRecommend(app *App, threshold float64) (Recommendation, bool) {
 		var reason string
 		switch {
 		case est.Exhausted:
-			reason = "exhausted"
+			reason = format.LabelExhausted
 		case pct >= threshold:
 			reason = fmt.Sprintf("%.0f%% >= %.0f%% threshold", pct, threshold)
 		case est.TimeToExhaust > 0 && est.TimeToExhaust <= predictWindow:

@@ -131,14 +131,9 @@ func (c *usageCmd) Run(_ context.Context, app *App, args []string) error {
 		}
 	}
 
-	// Parse --since into a time boundary.
-	var sinceTime time.Time
-	if sinceStr != "" {
-		t, err := time.Parse("2006-01-02", sinceStr)
-		if err != nil {
-			return fmt.Errorf("invalid --since date %q: %v", sinceStr, err)
-		}
-		sinceTime = t
+	sinceTime, err := parseSinceDate(sinceStr)
+	if err != nil {
+		return err
 	}
 
 	isJSON := outputFormat == "json"
@@ -185,14 +180,8 @@ func (c *usageCmd) Run(_ context.Context, app *App, args []string) error {
 	allEntries := entries
 
 	// Apply --since filter (skipped for compare mode which handles its own time ranges).
-	if !sinceTime.IsZero() && !compare {
-		filtered := entries[:0]
-		for _, e := range entries {
-			if !e.Timestamp.Before(sinceTime) {
-				filtered = append(filtered, e)
-			}
-		}
-		entries = filtered
+	if !compare {
+		entries = filterEntriesSince(entries, sinceTime)
 	}
 
 	if len(entries) == 0 && !compare {

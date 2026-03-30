@@ -7,36 +7,32 @@ Thanks for your interest in contributing!
 ```bash
 git clone https://github.com/Mike-7777777/cx.git
 cd cx
-make build    # build binary
-make test     # run tests
-make lint     # run golangci-lint
+make install-hooks    # activate pre-commit + pre-push hooks
+make build            # build binary
+make test             # run tests
+make lint             # run golangci-lint
 ```
 
 Requires Go 1.24+ and [golangci-lint](https://golangci-lint.run/welcome/install/).
 
-## Workflow: Before Every Commit
+## Quality Gates
+
+Git hooks catch problems before they reach CI:
 
 ```bash
-# 1. Format
-gofmt -w .
-
-# 2. Build
-go build -o cx.exe .          # Windows
-go build -o cx .              # Unix
-
-# 3. Test
-go test ./... -count=1
-
-# 4. Lint (must match CI)
-golangci-lint run
-
-# 5. Only commit if all 4 pass
+make install-hooks    # one-time setup — activates both hooks below
 ```
 
-Or use the Makefile shortcuts:
+| Hook | When | What | Speed |
+|------|------|------|-------|
+| pre-commit | Every commit | `gofmt` check | ~1s |
+| pre-push | Every push | fmt + tidy + vet + test + build | ~15s |
+
+You can also run the checks manually:
 
 ```bash
-make lint test build    # all three in one
+make check    # same as pre-push (no golangci-lint needed)
+make ci       # full CI parity (requires golangci-lint)
 ```
 
 ## Commit Messages
@@ -63,7 +59,7 @@ GoReleaser uses these prefixes to auto-generate the changelog on release.
 3. Add tests in `run_<name>_test.go`
 4. Add to README.md command table
 5. Add to CHANGELOG.md under `[Unreleased]`
-6. Run full check: `gofmt -w . && make lint test build`
+6. Run full check: `make ci`
 
 Example skeleton:
 
@@ -107,12 +103,17 @@ All user-facing strings ("5h", "7d", "ctx", "reset", etc.) live in `internal/for
 
 ## CI Requirements
 
-CI runs on push to `main` (3 jobs in parallel):
-- **lint**: `golangci-lint run` on Ubuntu
-- **test**: `go test -v -count=1 -race` on Ubuntu / macOS / Windows
-- **build**: `go build` + `go vet` on all 3 platforms
+CI runs on push to `main` and on PRs (5 jobs):
 
-All 3 must pass. If lint fails, check `.golangci.yml` for the rule and either fix the code or add an exclusion with a comment explaining why.
+| Job | Platform | What |
+|-----|----------|------|
+| **check** | Ubuntu | `gofmt -l` + `go mod tidy` drift |
+| **lint** | Ubuntu | `golangci-lint run` |
+| **vuln** | Ubuntu | `govulncheck ./...` |
+| **test** | Ubuntu / macOS / Windows | `go test -v -count=1 -race` + `go vet` |
+| **build** | Ubuntu / macOS / Windows | `go build` + binary size report |
+
+All must pass. Build runs only after check + lint + test succeed.
 
 ## Binary Update on Windows
 

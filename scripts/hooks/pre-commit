@@ -1,0 +1,14 @@
+#!/bin/sh
+# cx pre-commit hook: fast format check (~1s)
+# Install: make install-hooks
+
+set -e
+
+UNFORMATTED=$(gofmt -l . 2>/dev/null)
+if [ -n "$UNFORMATTED" ]; then
+    echo "pre-commit: gofmt required on:"
+    echo "$UNFORMATTED"
+    echo ""
+    echo "Run: gofmt -w ."
+    exit 1
+fi

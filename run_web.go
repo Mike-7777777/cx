@@ -10,6 +10,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"sort"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -62,6 +63,14 @@ func (wc *webCache) refresh(configDirs []string) {
 
 	daily := usage.AggregateDailies(recent)
 
+	// Count distinct months for ROI context.
+	monthSet := make(map[string]bool)
+	for _, d := range daily {
+		if len(d.Date) >= 7 {
+			monthSet[d.Date[:7]] = true
+		}
+	}
+
 	// Sessions: last 24h.
 	sessionSince := time.Now().UTC().Add(-24 * time.Hour)
 	var sessionEntries []usage.Entry
@@ -74,10 +83,6 @@ func (wc *webCache) refresh(configDirs []string) {
 	sort.Slice(sessions, func(i, j int) bool {
 		return sessions[i].StartTime.After(sessions[j].StartTime)
 	})
-	if len(sessions) > 20 {
-		sessions = sessions[:20]
-	}
-
 	// ROI across all history.
 	subCost := totalSubscriptionCost()
 	savings := totalCost - subCost
@@ -95,6 +100,8 @@ func (wc *webCache) refresh(configDirs []string) {
 		EquivalentAPICost: totalCost,
 		Savings:           savings,
 		SavingsPct:        pct,
+		Months:            len(monthSet),
+		AccountCount:      len(configDirs),
 	}
 	wc.lastScan = time.Now()
 	wc.mu.Unlock()
@@ -188,8 +195,35 @@ func (c *webCmd) Run(ctx context.Context, app *App, args []string) error {
 		entries := wc.sessEntries
 		wc.mu.RUnlock()
 
-		resp := apiSessionsResponse{Sessions: make([]apiSession, 0, len(sessions))}
-		for _, sr := range sessions {
+		limit := 10
+		offset := 0
+		if s := r.URL.Query().Get("limit"); s != "" {
+			if n, err := strconv.Atoi(s); err == nil && n > 0 {
+				limit = n
+			}
+		}
+		if s := r.URL.Query().Get("offset"); s != "" {
+			if n, err := strconv.Atoi(s); err == nil && n >= 0 {
+				offset = n
+			}
+		}
+
+		total := len(sessions)
+		if offset > total {
+			offset = total
+		}
+		end := offset + limit
+		if end > total {
+			end = total
+		}
+		paginated := sessions[offset:end]
+
+		resp := apiSessionsResponse{
+			Sessions: make([]apiSession, 0, len(paginated)),
+			Total:    total,
+			HasMore:  end < total,
+		}
+		for _, sr := range paginated {
 			sid := sr.SessionID
 			if len(sid) > 12 {
 				sid = sid[:12]
@@ -292,6 +326,8 @@ type apiROIResponse struct {
 	EquivalentAPICost float64 `json:"equivalent_api_cost"`
 	Savings           float64 `json:"savings"`
 	SavingsPct        float64 `json:"savings_pct"`
+	Months            int     `json:"months"`
+	AccountCount      int     `json:"account_count"`
 }
 
 type apiSession struct {
@@ -304,6 +340,8 @@ type apiSession struct {
 
 type apiSessionsResponse struct {
 	Sessions []apiSession `json:"sessions"`
+	Total    int          `json:"total"`
+	HasMore  bool         `json:"has_more"`
 }
 
 // --- API Handlers ---

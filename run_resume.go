@@ -46,7 +46,7 @@ Usage:
 	}
 
 	// Collect sessions.
-	sessions := collectSessions("", 50)
+	sessions := collectSessions(app.Registry, "", 50)
 	if len(sessions) == 0 {
 		return fmt.Errorf("no sessions found")
 	}
@@ -75,11 +75,11 @@ Usage:
 			selected = &matches[0]
 		} else {
 			// Multiple matches — show picker with filtered results.
-			selected = pickSession(matches, app.Stderr)
+			selected = pickSession(matches, app.Registry, app.Stderr)
 		}
 	} else {
 		// No args — interactive picker.
-		selected = pickSession(sessions, app.Stderr)
+		selected = pickSession(sessions, app.Registry, app.Stderr)
 	}
 
 	if selected == nil {
@@ -95,14 +95,12 @@ Usage:
 	}
 	if onAccount == "" {
 		// Interactive: if multiple accounts exist, ask which one to use.
-		reg := loadRegistryOrNil()
-		if reg != nil && len(reg.Accounts) > 1 {
-			configDir, accountName = pickAccount(reg, selected.Account, app.Stderr)
+		if app.Registry != nil && len(app.Registry.Accounts) > 1 {
+			configDir, accountName = pickAccount(app.Registry, selected.Account, app.Stderr)
 		}
 	} else {
-		reg := loadRegistryOrNil()
-		if reg != nil {
-			dir, err := reg.ResolveConfigDir(onAccount)
+		if app.Registry != nil {
+			dir, err := app.Registry.ResolveConfigDir(onAccount)
 			if err != nil {
 				return fmt.Errorf("unknown account %q", onAccount)
 			}
@@ -152,7 +150,7 @@ Usage:
 // pickAccount asks the user which account to run the session on.
 // Returns the config dir and account name.
 func pickAccount(reg *config.Registry, defaultAccount string, w io.Writer) (string, string) {
-	names := sortedNames(reg)
+	names := sortedAccountNames(reg)
 	if len(names) <= 1 {
 		dir, _ := reg.ResolveConfigDir(defaultAccount)
 		return dir, defaultAccount
@@ -189,8 +187,7 @@ func pickAccount(reg *config.Registry, defaultAccount string, w io.Writer) (stri
 }
 
 // pickSession shows a numbered list and reads user choice from stdin.
-func pickSession(sessions []sessionEntry, w io.Writer) *sessionEntry {
-	reg := loadRegistryOrNil()
+func pickSession(sessions []sessionEntry, reg *config.Registry, w io.Writer) *sessionEntry {
 
 	max := len(sessions)
 	if max > 15 {

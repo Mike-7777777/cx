@@ -67,7 +67,7 @@ Options:
 		limit = 0
 	}
 
-	sessions := collectSessions(accountFilter, limit)
+	sessions := collectSessions(app.Registry, accountFilter, limit)
 	if len(sessions) == 0 {
 		fmt.Fprintln(app.Stdout, "No sessions found.")
 		return nil
@@ -84,15 +84,14 @@ Options:
 }
 
 // collectSessions gathers session metadata from all accounts.
-func collectSessions(accountFilter string, limit int) []sessionEntry {
-	reg := loadRegistryOrNil()
+func collectSessions(reg *config.Registry, accountFilter string, limit int) []sessionEntry {
 	if reg == nil {
 		return nil
 	}
 
 	// Find active session PIDs.
 	activeSessions := make(map[string]bool)
-	for _, name := range sortedNames(reg) {
+	for _, name := range sortedAccountNames(reg) {
 		dir, err := reg.ResolveConfigDir(name)
 		if err != nil {
 			continue
@@ -115,7 +114,7 @@ func collectSessions(accountFilter string, limit int) []sessionEntry {
 
 	var all []sessionEntry
 
-	for _, name := range sortedNames(reg) {
+	for _, name := range sortedAccountNames(reg) {
 		if accountFilter != "" && name != accountFilter {
 			continue
 		}
@@ -423,25 +422,4 @@ func formatAge(d time.Duration) string {
 	default:
 		return fmt.Sprintf("%dd ago", int(d.Hours()/24))
 	}
-}
-
-func sortedNames(reg *config.Registry) []string {
-	names := make([]string, 0, len(reg.Accounts))
-	for name := range reg.Accounts {
-		names = append(names, name)
-	}
-	sort.Strings(names)
-	return names
-}
-
-func loadRegistryOrNil() *config.Registry {
-	regPath, err := config.RegistryPath()
-	if err != nil {
-		return nil
-	}
-	reg, err := config.LoadOrCreateRegistry(regPath)
-	if err != nil {
-		return nil
-	}
-	return reg
 }

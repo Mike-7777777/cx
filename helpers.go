@@ -3,9 +3,11 @@ package main
 import (
 	"fmt"
 	"path/filepath"
+	"sort"
 	"time"
 
 	"github.com/Mike-7777777/cx/internal/cache"
+	"github.com/Mike-7777777/cx/internal/config"
 	"github.com/Mike-7777777/cx/internal/usage"
 )
 
@@ -47,6 +49,25 @@ func filterEntriesSince(entries []usage.Entry, since time.Time) []usage.Entry {
 		}
 	}
 	return result
+}
+
+// sortedAccountNames returns account names sorted alphabetically with the main
+// account first. Used across multiple commands for deterministic iteration.
+func sortedAccountNames(reg *config.Registry) []string {
+	names := make([]string, 0, len(reg.Accounts))
+	for name := range reg.Accounts {
+		names = append(names, name)
+	}
+	sort.Slice(names, func(i, j int) bool {
+		if names[i] == reg.Main {
+			return true
+		}
+		if names[j] == reg.Main {
+			return false
+		}
+		return names[i] < names[j]
+	})
+	return names
 }
 
 // sevenDayHeadroomFromCache extracts the 7-day headroom multiplier from a rate cache.

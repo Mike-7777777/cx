@@ -9,7 +9,6 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
-	"sort"
 	"strings"
 	"time"
 
@@ -175,12 +174,7 @@ func loadOtherAccount(currentCfgDir string) *statusline.OtherAccount {
 		return nil
 	}
 
-	// Sort account names for deterministic iteration order.
-	names := make([]string, 0, len(reg.Accounts))
-	for name := range reg.Accounts {
-		names = append(names, name)
-	}
-	sort.Strings(names)
+	names := sortedAccountNames(reg)
 
 	// Collect all other accounts with valid rate caches, then pick the one
 	// with the highest 5h usage (most urgent to show as an alternative).

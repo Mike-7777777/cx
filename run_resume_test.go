@@ -16,7 +16,7 @@ import (
 // setupSessionRegistry creates a fake home dir with a registry pointing to a
 // config dir that contains one project session JSONL file.
 // Returns the fake home dir and the config dir.
-func setupSessionRegistry(t *testing.T) (fakeHome, configDir string) {
+func setupSessionRegistry(t *testing.T) (fakeHome, configDir string, reg *config.Registry) {
 	t.Helper()
 
 	fakeHome = t.TempDir()
@@ -40,7 +40,7 @@ func setupSessionRegistry(t *testing.T) (fakeHome, configDir string) {
 	}
 
 	// Write registry JSON to <fakeHome>/.cx.json
-	reg := &config.Registry{
+	reg = &config.Registry{
 		Version: 1,
 		Main:    "test",
 		Accounts: map[string]config.Account{
@@ -59,7 +59,7 @@ func setupSessionRegistry(t *testing.T) (fakeHome, configDir string) {
 	t.Setenv("HOME", fakeHome)
 	t.Setenv("USERPROFILE", fakeHome)
 
-	return fakeHome, configDir
+	return fakeHome, configDir, reg
 }
 
 func TestDisplaySlug(t *testing.T) {
@@ -179,11 +179,10 @@ func TestResume_NoSessions(t *testing.T) {
 // most recent session. We test this by calling collectSessions directly after
 // setting up the registry, which avoids invoking the real claude binary.
 func TestResume_LastFlag(t *testing.T) {
-	_, configDir := setupSessionRegistry(t)
+	_, configDir, reg := setupSessionRegistry(t)
 
-	// collectSessions reads from the real registry (via loadRegistryOrNil),
-	// which now points to our fake home thanks to t.Setenv above.
-	sessions := collectSessions("", 50)
+	// collectSessions uses the provided registry to scan session files.
+	sessions := collectSessions(reg, "", 50)
 	if len(sessions) == 0 {
 		t.Fatal("collectSessions returned no sessions; expected at least one from temp dir")
 	}

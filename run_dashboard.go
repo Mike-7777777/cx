@@ -11,12 +11,12 @@ import (
 	"sort"
 	"strconv"
 	"strings"
-	"syscall"
 	"time"
 
 	"github.com/Mike-7777777/cx/internal/cache"
 	"github.com/Mike-7777777/cx/internal/config"
 	"github.com/Mike-7777777/cx/internal/format"
+	"github.com/Mike-7777777/cx/internal/platform"
 	"github.com/Mike-7777777/cx/internal/usage"
 )
 
@@ -67,6 +67,9 @@ func (c *dashboardCmd) Run(ctx context.Context, app *App, args []string) error {
 
 	useColor := app.UseColor
 
+	// Always restore cursor visibility on exit.
+	defer fmt.Fprint(out, "\033[?25h"+format.Reset)
+
 	// Initial render.
 	renderDashboard(out, useColor, interval)
 
@@ -76,8 +79,6 @@ func (c *dashboardCmd) Run(ctx context.Context, app *App, args []string) error {
 	for {
 		select {
 		case <-ctx.Done():
-			// Restore terminal: show cursor, reset colors.
-			fmt.Fprint(out, "\033[?25h"+format.Reset)
 			return nil
 		case <-ticker.C:
 			renderDashboard(out, useColor, interval)
@@ -250,13 +251,16 @@ func renderTodayUsageSection(useColor bool) string {
 	// Scan today's entries.
 	today := time.Now().UTC().Format("2006-01-02")
 	var entries []usage.Entry
+	cachePath := usageCachePath()
+	uc, _ := usage.LoadUsageCache(cachePath)
 	for _, dir := range configDirs {
-		_ = usage.ScanDir(dir, func(e usage.Entry) {
+		_ = usage.ScanDirCached(dir, uc, func(e usage.Entry) {
 			if e.Timestamp.UTC().Format("2006-01-02") == today {
 				entries = append(entries, e)
 			}
 		})
 	}
+	_ = uc.Save()
 
 	if len(entries) == 0 {
 		b.WriteString(padLine("  No usage data for today."))
@@ -329,14 +333,17 @@ func renderWeeklyChartSection(useColor bool) string {
 	weekStartStr := weekStart.Format("2006-01-02")
 
 	var entries []usage.Entry
+	cachePath := usageCachePath()
+	uc, _ := usage.LoadUsageCache(cachePath)
 	for _, dir := range configDirs {
-		_ = usage.ScanDir(dir, func(e usage.Entry) {
+		_ = usage.ScanDirCached(dir, uc, func(e usage.Entry) {
 			dateKey := e.Timestamp.UTC().Format("2006-01-02")
 			if dateKey >= weekStartStr && dateKey <= todayStr {
 				entries = append(entries, e)
 			}
 		})
 	}
+	_ = uc.Save()
 
 	if len(entries) == 0 {
 		b.WriteString(padLine("  No usage data this week."))
@@ -480,19 +487,9 @@ func getActiveSessions() []sessionInfo {
 }
 
 // isProcessRunning checks if a process with the given PID exists.
-// On Unix, signal 0 succeeds for any process owned by the current user,
-// so this may return true for unrelated processes that reused the PID.
-// This is acceptable for dashboard display purposes (stale sessions are
-// cleaned up on the next refresh).
+// Delegates to platform-specific implementation.
 func isProcessRunning(pid int) bool {
-	proc, err := os.FindProcess(pid)
-	if err != nil {
-		return false
-	}
-	// On Unix, FindProcess always succeeds. Send signal 0 to check.
-	// On Windows, FindProcess fails if the process doesn't exist.
-	err = proc.Signal(syscall.Signal(0))
-	return err == nil
+	return platform.IsProcessRunning(pid)
 }
 
 // ---------- ROI SECTION ----------
@@ -513,13 +510,16 @@ func renderROISection(useColor bool) string {
 	now := time.Now().UTC()
 	monthPrefix := now.Format("2006-01")
 	var monthCost float64
+	cachePath := usageCachePath()
+	uc, _ := usage.LoadUsageCache(cachePath)
 	for _, dir := range configDirs {
-		_ = usage.ScanDir(dir, func(e usage.Entry) {
+		_ = usage.ScanDirCached(dir, uc, func(e usage.Entry) {
 			if strings.HasPrefix(e.Timestamp.UTC().Format("2006-01-02"), monthPrefix) {
 				monthCost += usage.CalculateCost(e.Model, e.Usage)
 			}
 		})
 	}
+	_ = uc.Save()
 
 	if monthCost == 0 {
 		return ""
@@ -567,7 +567,7 @@ func emptyLine() string {
 // padLine wraps content in box borders. Since content may contain ANSI escape
 // codes, we don't try to pad to exact width (would require stripping escapes).
 func padLine(content string) string {
-	return "║" + content + "\n"
+	return "║" + content + " ║\n"
 }
 
 func sectionHeader(title string, useColor bool) string {

@@ -47,7 +47,7 @@ func (c *loginCmd) Run(_ context.Context, app *App, args []string) error {
 		dir, err := reg.ResolveConfigDir(name)
 		if err != nil {
 			if errors.Is(err, cxerrors.ErrAccountNotFound) {
-				return fmt.Errorf("account %q not found (run 'cx init %s' first)", name, name)
+				return fmt.Errorf("account %q not found (run 'cx config add %s' first)", name, name)
 			}
 			return err
 		}

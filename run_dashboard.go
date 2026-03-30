@@ -147,7 +147,7 @@ func renderAccountsSection(useColor bool) string {
 	}
 
 	if len(reg.Accounts) == 0 {
-		b.WriteString(padLine("  No accounts configured. Run: cx init"))
+		b.WriteString(padLine("  No accounts configured. Run: cx config add <name>"))
 		return b.String()
 	}
 

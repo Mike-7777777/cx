@@ -464,7 +464,7 @@ func allRegistryDirs() ([]string, error) {
 		return nil, err
 	}
 	if len(reg.Accounts) == 0 {
-		return nil, fmt.Errorf("no accounts in registry; run: cx init <name>")
+		return nil, fmt.Errorf("no accounts in registry; run: cx config add <name>")
 	}
 
 	dirs := make([]string, 0, len(reg.Accounts))

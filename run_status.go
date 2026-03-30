@@ -43,7 +43,7 @@ func (c *statusCmd) Run(_ context.Context, app *App, _ []string) error {
 	w := app.Stdout
 
 	if len(reg.Accounts) == 0 {
-		fmt.Fprintln(w, "No accounts configured. Run: cx init <name>")
+		fmt.Fprintln(w, "No accounts configured. Run: cx config add <name>")
 		return nil
 	}
 

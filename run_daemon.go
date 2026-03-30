@@ -10,7 +10,6 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/Mike-7777777/cx/internal/cache"
 	"github.com/Mike-7777777/cx/internal/config"
 	"github.com/Mike-7777777/cx/internal/format"
 	"github.com/Mike-7777777/cx/internal/usage"
@@ -118,27 +117,8 @@ func checkAndRecommend(app *App, threshold float64) (Recommendation, bool) {
 			continue
 		}
 
-		var pct float64
-		var ttr time.Duration
-
-		rc, err := cache.ReadRateCache(filepath.Join(dir, "rate-cache.json"))
-		if err == nil && rc != nil && rc.RateLimits != nil && rc.RateLimits.FiveHour != nil {
-			if rc.RateLimits.FiveHour.IsReset() {
-				pct = 0
-				ttr = 0
-			} else {
-				pct = rc.RateLimits.FiveHour.UsedPercentage
-				ttr = rc.RateLimits.FiveHour.TimeToReset()
-			}
-		}
-
-		// Calculate 7d headroom for smartScore tiebreaking.
-		var headroom float64 = 1.0
-		if rc != nil && rc.RateLimits != nil && rc.RateLimits.SevenDay != nil && !rc.RateLimits.SevenDay.IsReset() {
-			daysLeft := time.Until(time.Unix(rc.RateLimits.SevenDay.ResetsAt, 0)).Hours() / 24
-			headroom = sevenDayHeadroom(rc.RateLimits.SevenDay.UsedPercentage, daysLeft)
-		}
-
+		pct, ttr, rc, _ := fiveHourStats(dir)
+		headroom := sevenDayHeadroomFromCache(rc)
 		est := usage.EstimateExhaustion(pct, ttr, now)
 		score := smartScore(pct, ttr, headroom)
 

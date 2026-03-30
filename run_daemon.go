@@ -270,9 +270,9 @@ func (c *daemonCmd) Run(ctx context.Context, app *App, args []string) error {
 		threshold = v
 	}
 
-	once := flags["once"] == "true"
-	noSync := flags["no-sync"] == "true"
-	noSwitch := flags["no-switch"] == "true"
+	_, once := flags["once"]
+	_, noSync := flags["no-sync"]
+	_, noSwitch := flags["no-switch"]
 
 	if noSync && noSwitch {
 		return fmt.Errorf("cannot use both --no-sync and --no-switch")

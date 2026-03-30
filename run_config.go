@@ -254,6 +254,12 @@ func configAdd(app *App, args []string) error {
 		return fmt.Errorf("%v", err)
 	}
 
+	// Verify main config directory exists (it won't on a fresh machine
+	// where Claude Code has never been run).
+	if _, err := os.Stat(mainDir); os.IsNotExist(err) {
+		return fmt.Errorf("main config directory %q does not exist; run Claude Code at least once first", mainDir)
+	}
+
 	home, err := os.UserHomeDir()
 	if err != nil {
 		return fmt.Errorf("%v", err)

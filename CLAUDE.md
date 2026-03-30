@@ -64,15 +64,29 @@ testdata/            # Fixtures for tests
 ## Build / Test / Lint
 
 ```bash
-go build -o cx.exe .           # Windows
-go build -o cx .               # Unix
-go test ./... -count=1         # tests (add -race on Unix)
-golangci-lint run              # lint (must match CI)
-gofmt -w .                     # format
+make check       # fast local gate: fmt + tidy + vet + test + build (~15s)
+make ci          # full CI parity: adds golangci-lint
+make coverage    # test coverage report
 ```
 
-Or use the Makefile: `make build test lint`
+Individual targets: `make fmt`, `make tidy`, `make vet`, `make test`, `make lint`, `make build`.
+
+## Git Hooks
+
+```bash
+make install-hooks    # one-time: activates pre-commit (gofmt) + pre-push (full check)
+```
+
+Hooks live in `scripts/hooks/` (tracked in git). `make install-hooks` sets `core.hooksPath`.
 
 ## CI
 
-CI runs on push to `main` — 3 parallel jobs: lint (Ubuntu), test (Ubuntu/macOS/Windows with -race), build (all 3 platforms). All must pass.
+CI runs on push to `main` and PRs — 5 jobs with concurrency control:
+
+| Job | What |
+|-----|------|
+| check | gofmt + go mod tidy drift |
+| lint | golangci-lint |
+| vuln | govulncheck |
+| test | 3-platform test + vet (-race) |
+| build | 3-platform build + binary size (runs after check+lint+test) |

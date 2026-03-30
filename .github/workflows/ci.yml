@@ -6,31 +6,120 @@ on:
   pull_request:
     branches: [main]
 
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  GO_VERSION: "1.24"
+
 jobs:
-  lint:
+  # ── Fast checks (< 30s) ──────────────────────────────────────────
+  check:
+    name: Format & Tidy
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
-      - uses: actions/setup-go@v6
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
         with:
-          go-version: "1.24"
+          go-version: ${{ env.GO_VERSION }}
+
+      - name: Check gofmt
+        run: |
+          UNFORMATTED=$(gofmt -l .)
+          if [ -n "$UNFORMATTED" ]; then
+            echo "::error::Files not formatted with gofmt:"
+            echo "$UNFORMATTED"
+            exit 1
+          fi
+
+      - name: Check go mod tidy
+        run: |
+          go mod tidy
+          if ! git diff --exit-code go.mod go.sum; then
+            echo "::error::go.mod/go.sum not tidy. Run 'go mod tidy' and commit."
+            exit 1
+          fi
+
+  # ── Lint ──────────────────────────────────────────────────────────
+  lint:
+    name: Lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          cache: false  # golangci-lint-action manages its own cache
       - uses: golangci/golangci-lint-action@v9
         with:
           version: latest
+          args: --timeout=5m
 
+  # ── Vulnerability scan ────────────────────────────────────────────
+  vuln:
+    name: Vulnerability Check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+      - name: Install govulncheck
+        run: go install golang.org/x/vuln/cmd/govulncheck@latest
+      - name: Run govulncheck
+        run: govulncheck ./...
+
+  # ── Test (3 platforms) ────────────────────────────────────────────
   test:
+    name: Test (${{ matrix.os }})
     strategy:
+      fail-fast: false
       matrix:
         os: [ubuntu-latest, macos-latest, windows-latest]
     runs-on: ${{ matrix.os }}
     steps:
-      - uses: actions/checkout@v6
-      - uses: actions/setup-go@v6
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
         with:
-          go-version: "1.24"
+          go-version: ${{ env.GO_VERSION }}
       - run: go test ./... -v -count=1 -race
-      - run: go build -trimpath -ldflags="-s -w" -o cx .
-        if: runner.os != 'Windows'
-      - run: go build -trimpath -ldflags="-s -w" -o cx.exe .
-        if: runner.os == 'Windows'
       - run: go vet ./...
+
+  # ── Build (3 platforms) ───────────────────────────────────────────
+  build:
+    name: Build (${{ matrix.os }})
+    needs: [check, lint, test]
+    strategy:
+      matrix:
+        include:
+          - os: ubuntu-latest
+            binary: cx
+          - os: macos-latest
+            binary: cx
+          - os: windows-latest
+            binary: cx.exe
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+
+      - name: Build
+        run: go build -trimpath -ldflags="-s -w" -o ${{ matrix.binary }} .
+
+      - name: Binary size
+        shell: bash
+        run: |
+          if [ "$RUNNER_OS" = "Windows" ]; then
+            SIZE=$(stat -c%s ${{ matrix.binary }} 2>/dev/null || python -c "import os; print(os.path.getsize('${{ matrix.binary }}'))")
+          else
+            SIZE=$(stat -f%z ${{ matrix.binary }} 2>/dev/null || stat -c%s ${{ matrix.binary }})
+          fi
+          SIZE_MB=$(python3 -c "print(f'{$SIZE/1048576:.2f}')")
+          echo "## Build (${{ matrix.os }})" >> $GITHUB_STEP_SUMMARY
+          echo "Binary size: **${SIZE_MB} MB** (${SIZE} bytes)" >> $GITHUB_STEP_SUMMARY

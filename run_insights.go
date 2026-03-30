@@ -3,7 +3,6 @@ package main
 import (
 	"context"
 	"fmt"
-	"time"
 
 	"github.com/Mike-7777777/cx/internal/config"
 	"github.com/Mike-7777777/cx/internal/usage"
@@ -60,14 +59,9 @@ func (c *insightsCmd) Run(_ context.Context, app *App, args []string) error {
 	sinceStr := flags["since"]
 	dirOverride := flags["dir"]
 
-	// Parse --since into a time boundary.
-	var sinceTime time.Time
-	if sinceStr != "" {
-		t, err := time.Parse("2006-01-02", sinceStr)
-		if err != nil {
-			return fmt.Errorf("invalid --since date %q: %v", sinceStr, err)
-		}
-		sinceTime = t
+	sinceTime, err := parseSinceDate(sinceStr)
+	if err != nil {
+		return err
 	}
 
 	// Resolve which config directories to scan.
@@ -98,16 +92,7 @@ func (c *insightsCmd) Run(_ context.Context, app *App, args []string) error {
 		}
 	}
 
-	// Apply --since filter.
-	if !sinceTime.IsZero() {
-		filtered := entries[:0]
-		for _, e := range entries {
-			if !e.Timestamp.Before(sinceTime) {
-				filtered = append(filtered, e)
-			}
-		}
-		entries = filtered
-	}
+	entries = filterEntriesSince(entries, sinceTime)
 
 	if len(entries) == 0 {
 		fmt.Fprintln(w, "no usage entries found")

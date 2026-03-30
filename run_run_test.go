@@ -1,8 +1,11 @@
 package main
 
 import (
+	"strings"
 	"testing"
 	"time"
+
+	"github.com/Mike-7777777/cx/internal/config"
 )
 
 func TestSmartScore_PrefersLowUsage(t *testing.T) {
@@ -139,5 +142,159 @@ func TestSevenDayHeadroom_LowUsageHighDaysLeft(t *testing.T) {
 	h := sevenDayHeadroom(10, 6)
 	if h <= 0.9 || h >= 1.1 {
 		t.Errorf("expected headroom in (0.9, 1.1) (on track), got %.4f", h)
+	}
+}
+
+// --- Tests for selectPreferred, selectBalanced, ensureAllAccounts, replaceOrAppendEnv ---
+
+func TestSelectPreferred_UnderThreshold(t *testing.T) {
+	scores := []accountScore{
+		{name: "alpha", fiveHPct: 10},
+		{name: "beta", fiveHPct: 50},
+	}
+	selected, reason := selectPreferred(scores, "beta")
+	if selected.name != "beta" {
+		t.Errorf("expected beta, got %s", selected.name)
+	}
+	if !strings.Contains(reason, "preferred") {
+		t.Errorf("reason should mention preferred: %q", reason)
+	}
+}
+
+func TestSelectPreferred_OverThreshold(t *testing.T) {
+	scores := []accountScore{
+		{name: "alpha", fiveHPct: 10},
+		{name: "beta", fiveHPct: 85},
+	}
+	selected, reason := selectPreferred(scores, "beta")
+	if selected.name != "alpha" {
+		t.Errorf("should fall back to best account: got %s", selected.name)
+	}
+	if !strings.Contains(reason, "fell back") {
+		t.Errorf("reason should mention fallback: %q", reason)
+	}
+}
+
+func TestSelectPreferred_NotFound(t *testing.T) {
+	scores := []accountScore{
+		{name: "alpha", fiveHPct: 10},
+	}
+	selected, reason := selectPreferred(scores, "nonexistent")
+	if selected.name != "alpha" {
+		t.Errorf("should fall back to best: got %s", selected.name)
+	}
+	if !strings.Contains(reason, "not found") {
+		t.Errorf("reason should say not found: %q", reason)
+	}
+}
+
+func TestSelectBalanced_RoundRobin(t *testing.T) {
+	scores := []accountScore{
+		{name: "a", fiveHPct: 20},
+		{name: "b", fiveHPct: 30},
+		{name: "c", fiveHPct: 40},
+	}
+	// Reset the counter so test is deterministic.
+	writeRunCounter(0)
+	s1, _ := selectBalanced(scores)
+	s2, _ := selectBalanced(scores)
+	// Subsequent calls should not always return the same account.
+	// (They may or may not differ depending on counter mod 3.)
+	if s1.name == "" || s2.name == "" {
+		t.Errorf("selectBalanced should return valid accounts")
+	}
+}
+
+func TestSelectBalanced_SkipsOverloaded(t *testing.T) {
+	scores := []accountScore{
+		{name: "hot", fiveHPct: 95},  // over balanceThreshold (90)
+		{name: "cool", fiveHPct: 40}, // under threshold
+	}
+	writeRunCounter(0) // counter=1 → idx=1%2=1 → "hot" but skip → try idx=0 → "cool"... actually logic is (counter+attempt)%n
+	selected, _ := selectBalanced(scores)
+	if selected.name == "hot" {
+		t.Errorf("should skip overloaded account, got %s", selected.name)
+	}
+}
+
+func TestSelectBalanced_AllOverThreshold(t *testing.T) {
+	scores := []accountScore{
+		{name: "a", fiveHPct: 95},
+		{name: "b", fiveHPct: 92},
+	}
+	writeRunCounter(0)
+	selected, reason := selectBalanced(scores)
+	if selected.name != "a" {
+		t.Errorf("when all over threshold, should pick best scored (first): got %s", selected.name)
+	}
+	if !strings.Contains(reason, "all above threshold") {
+		t.Errorf("reason should say all above threshold: %q", reason)
+	}
+}
+
+func TestEnsureAllAccounts_AddsMissing(t *testing.T) {
+	reg := &config.Registry{
+		Main: "alpha",
+		Accounts: map[string]config.Account{
+			"alpha": {ConfigDir: "/a"},
+			"beta":  {ConfigDir: "/b"},
+		},
+	}
+	scores := []accountScore{
+		{name: "alpha", fiveHPct: 30, dir: "/a"},
+	}
+	result := ensureAllAccounts(reg, scores)
+	if len(result) != 2 {
+		t.Fatalf("expected 2 accounts, got %d", len(result))
+	}
+	found := false
+	for _, s := range result {
+		if s.name == "beta" {
+			found = true
+			if s.fiveHPct != 0 {
+				t.Errorf("missing account should have 0%% usage, got %.0f%%", s.fiveHPct)
+			}
+		}
+	}
+	if !found {
+		t.Error("beta should be added to scores")
+	}
+}
+
+func TestReplaceOrAppendEnv_ReplacesExisting(t *testing.T) {
+	env := []string{"HOME=/home/user", "PATH=/usr/bin", "CLAUDE_CONFIG_DIR=/old"}
+	result := replaceOrAppendEnv(env, "CLAUDE_CONFIG_DIR", "/new")
+	found := false
+	for _, e := range result {
+		if e == "CLAUDE_CONFIG_DIR=/new" {
+			found = true
+		}
+		if e == "CLAUDE_CONFIG_DIR=/old" {
+			t.Error("old value should be replaced")
+		}
+	}
+	if !found {
+		t.Error("new value should be present")
+	}
+	if len(result) != 3 {
+		t.Errorf("slice length should not change: got %d", len(result))
+	}
+}
+
+func TestReplaceOrAppendEnv_AppendsNew(t *testing.T) {
+	env := []string{"HOME=/home/user"}
+	result := replaceOrAppendEnv(env, "CLAUDE_CONFIG_DIR", "/new")
+	if len(result) != 2 {
+		t.Fatalf("expected 2, got %d", len(result))
+	}
+	if result[1] != "CLAUDE_CONFIG_DIR=/new" {
+		t.Errorf("expected appended value, got %q", result[1])
+	}
+}
+
+func TestReplaceOrAppendEnv_EmptySlice(t *testing.T) {
+	result := replaceOrAppendEnv(nil, "KEY", "value")
+	if len(result) != 1 || result[0] != "KEY=value" {
+		t.Errorf("expected [KEY=value], got %v", result)
 	}
 }

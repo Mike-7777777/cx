@@ -60,8 +60,12 @@ func doStatusline(out io.Writer, args []string) error {
 	cfgDir, err := config.DetectConfigDir()
 	if err != nil {
 		// No config dir is non-fatal; render without cache ops.
-		return renderAndPrint(out, input, nil, "", compact, "")
+		return renderAndPrint(out, input, nil, nil, "", compact, "")
 	}
+
+	// Load registry once — shared across loadOtherAccount, currentAccountName,
+	// and renderAndPrint. Avoids 3 separate disk reads per statusline call.
+	reg := loadRegistryOnce()
 
 	// Warn when rate_limits is absent and CC version is too old.
 	if input.RateLimits == nil && input.Version != "" && input.Version < minVersionWarn {
@@ -81,13 +85,10 @@ func doStatusline(out io.Writer, args []string) error {
 		}
 	}
 
-	// Read other accounts' rate-cache.json.
-	other := loadOtherAccount(cfgDir)
+	other := loadOtherAccount(reg, cfgDir)
+	accountName := currentAccountName(reg, cfgDir)
 
-	// Resolve current account name from registry.
-	accountName := currentAccountName(cfgDir)
-
-	return renderAndPrint(out, input, other, accountName, compact, cfgDir)
+	return renderAndPrint(out, input, other, reg, accountName, compact, cfgDir)
 }
 
 // hasFlag reports whether flag appears in the args slice.
@@ -100,6 +101,20 @@ func hasFlag(args []string, flag string) bool {
 	return false
 }
 
+// loadRegistryOnce loads the registry from disk. Returns nil on any error.
+// Used to share a single registry load across multiple statusline functions.
+func loadRegistryOnce() *config.Registry {
+	regPath, err := config.RegistryPath()
+	if err != nil {
+		return nil
+	}
+	reg, err := config.LoadOrCreateRegistry(regPath)
+	if err != nil {
+		return nil
+	}
+	return reg
+}
+
 // doStatuslineFallback renders a minimal statusline from cached rate data
 // when CC fails to pipe JSON to stdin.
 func doStatuslineFallback(out io.Writer, args []string) error {
@@ -110,7 +125,8 @@ func doStatuslineFallback(out io.Writer, args []string) error {
 		return fmt.Errorf("no config dir for fallback: %w", err)
 	}
 
-	accountName := currentAccountName(cfgDir)
+	reg := loadRegistryOnce()
+	accountName := currentAccountName(reg, cfgDir)
 
 	// Try to build a minimal Input from the rate cache.
 	cachePath := filepath.Join(cfgDir, "rate-cache.json")
@@ -137,8 +153,8 @@ func doStatuslineFallback(out io.Writer, args []string) error {
 		input.RateLimits = rl
 	}
 
-	other := loadOtherAccount(cfgDir)
-	return renderAndPrint(out, input, other, accountName, compact, cfgDir)
+	other := loadOtherAccount(reg, cfgDir)
+	return renderAndPrint(out, input, other, reg, accountName, compact, cfgDir)
 }
 
 func buildRateCache(input *statusline.Input) *cache.RateCache {
@@ -163,14 +179,8 @@ func buildRateCache(input *statusline.Input) *cache.RateCache {
 	return rc
 }
 
-func loadOtherAccount(currentCfgDir string) *statusline.OtherAccount {
-	regPath, err := config.RegistryPath()
-	if err != nil {
-		return nil
-	}
-
-	reg, err := config.LoadOrCreateRegistry(regPath)
-	if err != nil {
+func loadOtherAccount(reg *config.Registry, currentCfgDir string) *statusline.OtherAccount {
+	if reg == nil {
 		return nil
 	}
 
@@ -248,14 +258,10 @@ func loadOtherAccount(currentCfgDir string) *statusline.OtherAccount {
 }
 
 // currentAccountName resolves the display name of the active account by
-// matching cfgDir against the registry. Returns empty string on any error.
-func currentAccountName(cfgDir string) string {
-	regPath, err := config.RegistryPath()
-	if err != nil {
-		return ""
-	}
-	reg, err := config.LoadOrCreateRegistry(regPath)
-	if err != nil {
+// matching cfgDir against the registry. Returns empty string if reg is nil
+// or no account matches.
+func currentAccountName(reg *config.Registry, cfgDir string) string {
+	if reg == nil {
 		return ""
 	}
 
@@ -290,26 +296,24 @@ func normalizePath(p string) string {
 	return p
 }
 
-func renderAndPrint(out io.Writer, input *statusline.Input, other *statusline.OtherAccount, accountName string, compact bool, cfgDir string) error {
+func renderAndPrint(out io.Writer, input *statusline.Input, other *statusline.OtherAccount, reg *config.Registry, accountName string, compact bool, cfgDir string) error {
 	opts := statusline.RenderOpts{
 		AccountName: accountName,
 		Compact:     compact,
 		EffortLevel: readEffortLevel(cfgDir),
 	}
 
-	// Load statusline config from registry.
-	if regPath, err := config.RegistryPath(); err == nil {
-		if reg, err := config.LoadOrCreateRegistry(regPath); err == nil && reg.Statusline != nil {
-			sc := reg.Statusline
-			opts.Sections = &statusline.SectionVisibility{
-				ShowAccount:      sc.ShowAccount,
-				ShowCost:         sc.ShowCost,
-				ShowContext:      sc.ShowContext,
-				ShowRate5h:       sc.ShowRate5h,
-				ShowRate7d:       sc.ShowRate7d,
-				ShowOtherAccount: sc.ShowOtherAccount,
-				ShowSwitchHint:   sc.ShowSwitchHint,
-			}
+	// Apply statusline section visibility from registry (if available).
+	if reg != nil && reg.Statusline != nil {
+		sc := reg.Statusline
+		opts.Sections = &statusline.SectionVisibility{
+			ShowAccount:      sc.ShowAccount,
+			ShowCost:         sc.ShowCost,
+			ShowContext:      sc.ShowContext,
+			ShowRate5h:       sc.ShowRate5h,
+			ShowRate7d:       sc.ShowRate7d,
+			ShowOtherAccount: sc.ShowOtherAccount,
+			ShowSwitchHint:   sc.ShowSwitchHint,
 		}
 	}
 

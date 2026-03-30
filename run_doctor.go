@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"sort"
 	"strings"
 	"time"
 
@@ -66,12 +65,7 @@ func (c *doctorCmd) Run(_ context.Context, app *App, args []string) error {
 		ok: true, label: "Registry", detail: regPath,
 	})
 
-	// Sort account names for deterministic order.
-	names := make([]string, 0, len(reg.Accounts))
-	for name := range reg.Accounts {
-		names = append(names, name)
-	}
-	sort.Strings(names)
+	names := sortedAccountNames(reg)
 
 	// Check each account.
 	for _, name := range names {

@@ -6,6 +6,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -44,7 +45,7 @@ func (c *syncCmd) Run(_ context.Context, app *App, args []string) error {
 			continue
 		}
 		fmt.Fprintf(app.Stderr, "syncing %q → %q\n", name, targetDir)
-		if err := syncFiles(mainDir, targetDir, force); err != nil {
+		if err := syncFiles(mainDir, targetDir, force, app.Stderr); err != nil {
 			return err
 		}
 	}
@@ -57,7 +58,11 @@ func (c *syncCmd) Run(_ context.Context, app *App, args []string) error {
 // When force is false and the destination file is newer than the source,
 // the user is prompted to confirm the overwrite. When force is true, the
 // overwrite proceeds without prompting (used by auto-sync in switch/init).
-func syncFiles(srcDir, dstDir string, force bool) error {
+func syncFiles(srcDir, dstDir string, force bool, w ...io.Writer) error {
+	logw := io.Writer(os.Stderr)
+	if len(w) > 0 && w[0] != nil {
+		logw = w[0]
+	}
 	reader := bufio.NewReader(os.Stdin)
 
 	// Track files that are newer in dst for bidirectional sync.
@@ -84,23 +89,23 @@ func syncFiles(srcDir, dstDir string, force bool) error {
 
 				srcBase := filepath.Base(srcDir)
 				dstBase := filepath.Base(dstDir)
-				fmt.Fprintf(os.Stderr, "[cx] %s in %s is newer than %s.\n", rel, dstBase, srcBase)
-				fmt.Fprintf(os.Stderr, "  %s: %s (%.1fKB)\n",
+				fmt.Fprintf(logw, "[cx] %s in %s is newer than %s.\n", rel, dstBase, srcBase)
+				fmt.Fprintf(logw, "  %s: %s (%.1fKB)\n",
 					dstBase,
 					dstInfo.ModTime().Format("2006-01-02 15:04:05"),
 					float64(dstInfo.Size())/1024,
 				)
-				fmt.Fprintf(os.Stderr, "  %s: %s (%.1fKB)\n",
+				fmt.Fprintf(logw, "  %s: %s (%.1fKB)\n",
 					srcBase,
 					srcInfo.ModTime().Format("2006-01-02 15:04:05"),
 					float64(srcInfo.Size())/1024,
 				)
-				fmt.Fprintf(os.Stderr, "  Overwrite %s with %s? [y/N] ", dstBase, srcBase)
+				fmt.Fprintf(logw, "  Overwrite %s with %s? [y/N] ", dstBase, srcBase)
 
 				line, _ := reader.ReadString('\n')
 				line = strings.TrimSpace(line)
 				if line != "y" && line != "Y" {
-					fmt.Fprintf(os.Stderr, "  skipped %s\n", rel)
+					fmt.Fprintf(logw, "  skipped %s\n", rel)
 					continue
 				}
 			}
@@ -117,30 +122,30 @@ func syncFiles(srcDir, dstDir string, force bool) error {
 		if err := os.WriteFile(dst, data, 0o600); err != nil {
 			return fmt.Errorf("writing %q: %w", dst, err)
 		}
-		fmt.Fprintf(os.Stderr, "  synced %s\n", rel)
+		fmt.Fprintf(logw, "  synced %s\n", rel)
 	}
 
 	// Sync project memory files from main to secondary.
-	if err := syncMemory(srcDir, dstDir); err != nil {
+	if err := syncMemory(srcDir, dstDir, logw); err != nil {
 		return fmt.Errorf("syncing memory: %w", err)
 	}
 
 	// Sync teams directory from main to secondary.
-	if err := syncTeams(srcDir, dstDir); err != nil {
+	if err := syncTeams(srcDir, dstDir, logw); err != nil {
 		return fmt.Errorf("syncing teams: %w", err)
 	}
 
 	// Sync MCP OAuth tokens from main to secondary.
-	if err := syncMcpOAuth(srcDir, dstDir); err != nil {
+	if err := syncMcpOAuth(srcDir, dstDir, logw); err != nil {
 		return fmt.Errorf("syncing MCP OAuth: %w", err)
 	}
 
 	// Bidirectional sync: offer to copy newer files back to main.
 	if !force && len(newerInDst) > 0 {
 		dstBase := filepath.Base(dstDir)
-		fmt.Fprintf(os.Stderr, "\n[cx] %s has newer config files: %s\n",
+		fmt.Fprintf(logw, "\n[cx] %s has newer config files: %s\n",
 			dstBase, strings.Join(newerInDst, ", "))
-		fmt.Fprintf(os.Stderr, "  Sync back to main? [y/N] ")
+		fmt.Fprintf(logw, "  Sync back to main? [y/N] ")
 
 		line, _ := reader.ReadString('\n')
 		line = strings.TrimSpace(line)
@@ -159,7 +164,7 @@ func syncFiles(srcDir, dstDir string, force bool) error {
 				if err := os.WriteFile(dst, data, 0o600); err != nil {
 					return fmt.Errorf("writing %q: %w", dst, err)
 				}
-				fmt.Fprintf(os.Stderr, "  reverse-synced %s\n", rel)
+				fmt.Fprintf(logw, "  reverse-synced %s\n", rel)
 			}
 		}
 	}
@@ -170,7 +175,7 @@ func syncFiles(srcDir, dstDir string, force bool) error {
 // syncMemory copies project memory files (projects/*/memory/MEMORY.md)
 // from srcDir to dstDir. Only syncs memory dirs that exist in the main account.
 // Silently skips if projects/ doesn't exist in srcDir.
-func syncMemory(srcDir, dstDir string) error {
+func syncMemory(srcDir, dstDir string, logw io.Writer) error {
 	projectsDir := filepath.Join(srcDir, "projects")
 	entries, err := os.ReadDir(projectsDir)
 	if os.IsNotExist(err) {
@@ -205,14 +210,14 @@ func syncMemory(srcDir, dstDir string) error {
 		}
 
 		rel := filepath.Join("projects", entry.Name(), "memory", "MEMORY.md")
-		fmt.Fprintf(os.Stderr, "  synced %s\n", rel)
+		fmt.Fprintf(logw, "  synced %s\n", rel)
 	}
 	return nil
 }
 
 // syncTeams copies the entire teams/ directory tree from srcDir to dstDir.
 // Silently skips if teams/ doesn't exist in srcDir.
-func syncTeams(srcDir, dstDir string) error {
+func syncTeams(srcDir, dstDir string, logw io.Writer) error {
 	teamsDir := filepath.Join(srcDir, "teams")
 	if _, err := os.Stat(teamsDir); os.IsNotExist(err) {
 		return nil
@@ -224,7 +229,7 @@ func syncTeams(srcDir, dstDir string) error {
 	if err := platform.CopyDir(teamsDir, dstTeams); err != nil {
 		return fmt.Errorf("copying teams dir: %w", err)
 	}
-	fmt.Fprintf(os.Stderr, "  synced teams/\n")
+	fmt.Fprintf(logw, "  synced teams/\n")
 	return nil
 }
 
@@ -232,7 +237,7 @@ func syncTeams(srcDir, dstDir string) error {
 // .credentials.json. The claudeAiOauth key is account-specific and never synced.
 // Only syncs if src has mcpOAuth and dst doesn't.
 // Writes atomically to prevent corruption.
-func syncMcpOAuth(srcDir, dstDir string) error {
+func syncMcpOAuth(srcDir, dstDir string, logw io.Writer) error {
 	const credFile = ".credentials.json"
 
 	srcPath := filepath.Join(srcDir, credFile)
@@ -282,7 +287,7 @@ func syncMcpOAuth(srcDir, dstDir string) error {
 		return err
 	}
 
-	fmt.Fprintf(os.Stderr, "  synced mcpOAuth tokens\n")
+	fmt.Fprintf(logw, "  synced mcpOAuth tokens\n")
 	return nil
 }
 

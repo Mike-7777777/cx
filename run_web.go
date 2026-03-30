@@ -33,10 +33,10 @@ type webCache struct {
 	mu       sync.RWMutex
 	daily    []usage.DailyReport
 	sessions []usage.SessionReport
-	// sessEntries keeps the 24h entries used to resolve project names.
-	sessEntries []usage.Entry
-	roi         apiROIResponse
-	lastScan    time.Time
+	// sessProjects maps session ID to its most common project name.
+	sessProjects map[string]string
+	roi          apiROIResponse
+	lastScan     time.Time
 }
 
 func (wc *webCache) refresh(configDirs []string) {
@@ -95,10 +95,13 @@ func (wc *webCache) refresh(configDirs []string) {
 		pct = savings / totalCost * 100
 	}
 
+	// Pre-build session→project map to avoid O(N*M) in API handler.
+	projMap := buildSessionProjectMap(sessionEntries)
+
 	wc.mu.Lock()
 	wc.daily = daily
 	wc.sessions = sessions
-	wc.sessEntries = sessionEntries
+	wc.sessProjects = projMap
 	wc.roi = apiROIResponse{
 		SubscriptionCost:  monthlySubCost,
 		EquivalentAPICost: totalCost,
@@ -142,6 +145,12 @@ func (c *webCmd) Run(ctx context.Context, app *App, args []string) error {
 		return err
 	}
 
+	// Pre-read embedded HTML once at startup.
+	indexHTML, err := webFS.ReadFile("web/index.html")
+	if err != nil {
+		return fmt.Errorf("reading embedded HTML: %v", err)
+	}
+
 	// Create empty cache; initial load + periodic refresh happen async.
 	// The HTTP server starts immediately so the browser doesn't wait.
 	wc := &webCache{}
@@ -165,19 +174,14 @@ func (c *webCmd) Run(ctx context.Context, app *App, args []string) error {
 
 	mux := http.NewServeMux()
 
-	// Serve embedded HTML.
+	// Serve embedded HTML (pre-read at startup).
 	mux.HandleFunc("/", func(hw http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != "/" {
 			http.NotFound(hw, r)
 			return
 		}
-		data, err := webFS.ReadFile("web/index.html")
-		if err != nil {
-			http.Error(hw, "internal error", http.StatusInternalServerError)
-			return
-		}
 		hw.Header().Set("Content-Type", "text/html; charset=utf-8")
-		hw.Write(data) // Best effort; client may have disconnected.
+		hw.Write(indexHTML) // Best effort; client may have disconnected.
 	})
 
 	// API endpoints.

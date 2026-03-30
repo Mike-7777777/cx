@@ -28,6 +28,36 @@ const (
 	dashboardBoxWidth        = 64
 )
 
+// dashboardData holds pre-scanned usage data shared across dashboard sections.
+type dashboardData struct {
+	entries    []usage.Entry
+	configDirs []string
+}
+
+// scanDashboardData loads the registry and scans all usage entries once.
+func scanDashboardData() *dashboardData {
+	configDirs, err := allRegistryDirs()
+	if err != nil {
+		dir, err2 := config.DetectConfigDir()
+		if err2 != nil {
+			return &dashboardData{}
+		}
+		configDirs = []string{dir}
+	}
+
+	var entries []usage.Entry
+	cachePath := usageCachePath()
+	uc, _ := usage.LoadUsageCache(cachePath)
+	for _, dir := range configDirs {
+		_ = usage.ScanDirCached(dir, uc, func(e usage.Entry) {
+			entries = append(entries, e)
+		})
+	}
+	_ = uc.Save()
+
+	return &dashboardData{entries: entries, configDirs: configDirs}
+}
+
 // sessionMetadata mirrors the JSON structure in ~/.claude/sessions/<pid>.json.
 type sessionMetadata struct {
 	PID       int    `json:"pid"`
@@ -88,6 +118,9 @@ func (c *dashboardCmd) Run(ctx context.Context, app *App, args []string) error {
 
 // renderDashboard clears the screen and draws the full dashboard frame.
 func renderDashboard(out io.Writer, useColor bool, interval time.Duration) {
+	// Scan usage data once for all sections.
+	data := scanDashboardData()
+
 	var b strings.Builder
 
 	// Clear screen and move cursor to top-left. Hide cursor during redraw.
@@ -111,16 +144,16 @@ func renderDashboard(out io.Writer, useColor bool, interval time.Duration) {
 	b.WriteString(renderAccountsSection(useColor))
 
 	// Section: TODAY'S USAGE
-	b.WriteString(renderTodayUsageSection(useColor))
+	b.WriteString(renderTodayUsageSection(useColor, data))
 
 	// Section: THIS WEEK
-	b.WriteString(renderWeeklyChartSection(useColor))
+	b.WriteString(renderWeeklyChartSection(useColor, data))
 
 	// Section: ACTIVE SESSIONS
 	b.WriteString(renderSessionsSection(useColor))
 
 	// Section: ROI
-	b.WriteString(renderROISection(useColor))
+	b.WriteString(renderROISection(useColor, data))
 
 	// Bottom border.
 	b.WriteString(boxBottom())
@@ -233,34 +266,18 @@ func renderAccountsSection(useColor bool) string {
 
 // ---------- TODAY'S USAGE SECTION ----------
 
-func renderTodayUsageSection(useColor bool) string {
+func renderTodayUsageSection(useColor bool, data *dashboardData) string {
 	var b strings.Builder
 
 	b.WriteString(sectionHeader("TODAY'S USAGE", useColor))
 
-	configDirs, err := allRegistryDirs()
-	if err != nil {
-		dir, err2 := config.DetectConfigDir()
-		if err2 != nil {
-			b.WriteString(padLine("  (no config dir found)"))
-			return b.String()
-		}
-		configDirs = []string{dir}
-	}
-
-	// Scan today's entries.
 	today := time.Now().UTC().Format("2006-01-02")
 	var entries []usage.Entry
-	cachePath := usageCachePath()
-	uc, _ := usage.LoadUsageCache(cachePath)
-	for _, dir := range configDirs {
-		_ = usage.ScanDirCached(dir, uc, func(e usage.Entry) {
-			if e.Timestamp.UTC().Format("2006-01-02") == today {
-				entries = append(entries, e)
-			}
-		})
+	for _, e := range data.entries {
+		if e.Timestamp.UTC().Format("2006-01-02") == today {
+			entries = append(entries, e)
+		}
 	}
-	_ = uc.Save()
 
 	if len(entries) == 0 {
 		b.WriteString(padLine("  No usage data for today."))
@@ -311,39 +328,23 @@ func renderTodayUsageSection(useColor bool) string {
 
 // ---------- WEEKLY CHART SECTION ----------
 
-func renderWeeklyChartSection(useColor bool) string {
+func renderWeeklyChartSection(useColor bool, data *dashboardData) string {
 	var b strings.Builder
 
 	b.WriteString(sectionHeader("THIS WEEK", useColor))
 
-	configDirs, err := allRegistryDirs()
-	if err != nil {
-		dir, err2 := config.DetectConfigDir()
-		if err2 != nil {
-			b.WriteString(padLine("  (no data)"))
-			return b.String()
-		}
-		configDirs = []string{dir}
-	}
-
-	// Determine the date range: last 7 days.
 	now := time.Now().UTC()
 	todayStr := now.Format("2006-01-02")
 	weekStart := now.AddDate(0, 0, -6)
 	weekStartStr := weekStart.Format("2006-01-02")
 
 	var entries []usage.Entry
-	cachePath := usageCachePath()
-	uc, _ := usage.LoadUsageCache(cachePath)
-	for _, dir := range configDirs {
-		_ = usage.ScanDirCached(dir, uc, func(e usage.Entry) {
-			dateKey := e.Timestamp.UTC().Format("2006-01-02")
-			if dateKey >= weekStartStr && dateKey <= todayStr {
-				entries = append(entries, e)
-			}
-		})
+	for _, e := range data.entries {
+		dateKey := e.Timestamp.UTC().Format("2006-01-02")
+		if dateKey >= weekStartStr && dateKey <= todayStr {
+			entries = append(entries, e)
+		}
 	}
-	_ = uc.Save()
 
 	if len(entries) == 0 {
 		b.WriteString(padLine("  No usage data this week."))
@@ -494,32 +495,17 @@ func isProcessRunning(pid int) bool {
 
 // ---------- ROI SECTION ----------
 
-func renderROISection(useColor bool) string {
+func renderROISection(useColor bool, data *dashboardData) string {
 	var b strings.Builder
-
-	// Calculate monthly total from current month's data.
-	configDirs, err := allRegistryDirs()
-	if err != nil {
-		dir, err2 := config.DetectConfigDir()
-		if err2 != nil {
-			return ""
-		}
-		configDirs = []string{dir}
-	}
 
 	now := time.Now().UTC()
 	monthPrefix := now.Format("2006-01")
 	var monthCost float64
-	cachePath := usageCachePath()
-	uc, _ := usage.LoadUsageCache(cachePath)
-	for _, dir := range configDirs {
-		_ = usage.ScanDirCached(dir, uc, func(e usage.Entry) {
-			if strings.HasPrefix(e.Timestamp.UTC().Format("2006-01-02"), monthPrefix) {
-				monthCost += usage.CalculateCost(e.Model, e.Usage)
-			}
-		})
+	for _, e := range data.entries {
+		if strings.HasPrefix(e.Timestamp.UTC().Format("2006-01-02"), monthPrefix) {
+			monthCost += usage.CalculateCost(e.Model, e.Usage)
+		}
 	}
-	_ = uc.Save()
 
 	if monthCost == 0 {
 		return ""

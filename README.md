@@ -115,9 +115,9 @@ cx resume             # resume a session (shows topic + account picker)
 
 ```bash
 # 1. Create a secondary account
-cx init 5x
+cx config add 5x
 
-# 2. The init command auto-launches login (browser opens once)
+# 2. The command auto-launches login (browser opens once)
 
 # 3. Add shell wrapper — see Shell Setup below
 
@@ -203,14 +203,18 @@ cx completion powershell | Out-String | Invoke-Expression
 | `resume [term\|--last]` | Resume a session by fuzzy match or picker |
 | `resume --on <acct>` | Resume a session on a specific account (cross-account) |
 | `config` | Show full config: email, tier, CC version, session count |
+| `config add <name>` | Add a new account (creates dir, links, syncs, launches login) |
 
 ### Monitoring
 
 | Command | Description |
 |---------|-------------|
+| `daemon` | Combined auto-switch + config-sync daemon |
 | `dashboard [--interval N]` | Live TUI dashboard (accounts, usage, sessions) |
 | `web [--port N]` | Browser dashboard on localhost (dark theme, charts) |
 | `usage <mode>` | Usage analysis: `daily`, `weekly`, `monthly`, `session`, `blocks`, `messages` |
+| `insights [--all]` | Usage pattern analysis (hourly heatmap, model distribution) |
+| `predict [--json]` | Forecast rate limit exhaustion |
 
 ### Maintenance
 
@@ -220,8 +224,6 @@ cx completion powershell | Out-String | Invoke-Expression
 | `doctor` | Health check all accounts (auto-fixes common issues) |
 | `sync [--force]` | Sync config from main to all secondaries |
 | `login [name]` | Re-authenticate an account |
-| `init <name>` | Create a new account directory |
-| `watch` | Auto-sync config changes (30s daemon) |
 
 <details>
 <summary><b>Usage flags</b></summary>

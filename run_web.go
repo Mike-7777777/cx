@@ -83,9 +83,14 @@ func (wc *webCache) refresh(configDirs []string) {
 	sort.Slice(sessions, func(i, j int) bool {
 		return sessions[i].StartTime.After(sessions[j].StartTime)
 	})
-	// ROI across all history.
-	subCost := totalSubscriptionCost()
-	savings := totalCost - subCost
+	// ROI across all history — multiply subscription by months for fair comparison.
+	monthlySubCost := totalSubscriptionCost()
+	months := len(monthSet)
+	if months < 1 {
+		months = 1
+	}
+	lifetimeSubCost := monthlySubCost * float64(months)
+	savings := totalCost - lifetimeSubCost
 	var pct float64
 	if totalCost > 0 {
 		pct = savings / totalCost * 100
@@ -96,11 +101,11 @@ func (wc *webCache) refresh(configDirs []string) {
 	wc.sessions = sessions
 	wc.sessEntries = sessionEntries
 	wc.roi = apiROIResponse{
-		SubscriptionCost:  subCost,
+		SubscriptionCost:  monthlySubCost,
 		EquivalentAPICost: totalCost,
 		Savings:           savings,
 		SavingsPct:        pct,
-		Months:            len(monthSet),
+		Months:            months,
 		AccountCount:      len(configDirs),
 	}
 	wc.lastScan = time.Now()
@@ -120,12 +125,9 @@ func (c *webCmd) Run(ctx context.Context, app *App, args []string) error {
 				return fmt.Errorf("--port requires a value")
 			}
 			i++
-			n := 0
-			for _, ch := range args[i] {
-				if ch < '0' || ch > '9' {
-					return fmt.Errorf("invalid port %q", args[i])
-				}
-				n = n*10 + int(ch-'0')
+			n, err := strconv.Atoi(args[i])
+			if err != nil || n <= 0 || n > 65535 {
+				return fmt.Errorf("invalid port %q", args[i])
 			}
 			port = n
 		case "--no-open":
@@ -244,6 +246,12 @@ func (c *webCmd) Run(ctx context.Context, app *App, args []string) error {
 		wc.mu.RUnlock()
 		writeJSON(hw, data)
 	})
+	mux.HandleFunc("/api/ready", func(hw http.ResponseWriter, _ *http.Request) {
+		wc.mu.RLock()
+		ready := !wc.lastScan.IsZero()
+		wc.mu.RUnlock()
+		writeJSON(hw, map[string]bool{"ready": ready})
+	})
 
 	addr := fmt.Sprintf("127.0.0.1:%d", port)
 	url := fmt.Sprintf("http://localhost:%d", port)
@@ -286,7 +294,7 @@ func openBrowser(url string) {
 	var cmd *exec.Cmd
 	switch runtime.GOOS {
 	case "windows":
-		cmd = exec.Command("cmd", "/c", "start", url)
+		cmd = exec.Command("cmd", "/c", "start", "", url)
 	case "darwin":
 		cmd = exec.Command("open", url)
 	default:

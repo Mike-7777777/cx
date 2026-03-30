@@ -75,11 +75,11 @@ Usage:
 			selected = &matches[0]
 		} else {
 			// Multiple matches — show picker with filtered results.
-			selected = pickSession(matches, app.UseColor, app.Stderr)
+			selected = pickSession(matches, app.Stderr)
 		}
 	} else {
 		// No args — interactive picker.
-		selected = pickSession(sessions, app.UseColor, app.Stderr)
+		selected = pickSession(sessions, app.Stderr)
 	}
 
 	if selected == nil {
@@ -189,7 +189,7 @@ func pickAccount(reg *config.Registry, defaultAccount string, w io.Writer) (stri
 }
 
 // pickSession shows a numbered list and reads user choice from stdin.
-func pickSession(sessions []sessionEntry, useColor bool, w io.Writer) *sessionEntry {
+func pickSession(sessions []sessionEntry, w io.Writer) *sessionEntry {
 	reg := loadRegistryOrNil()
 
 	max := len(sessions)
@@ -216,12 +216,7 @@ func pickSession(sessions []sessionEntry, useColor bool, w io.Writer) *sessionEn
 			marker, i+1, s.Account, activeTag, formatAge(s.Age), topic)
 	}
 
-	fmt.Fprintf(w, "\n")
-	if useColor {
-		fmt.Fprint(w, "  Pick [1-", max, "]: ")
-	} else {
-		fmt.Fprintf(w, "  Pick [1-%d]: ", max)
-	}
+	fmt.Fprintf(w, "\n  Pick [1-%d]: ", max)
 
 	reader := bufio.NewReader(os.Stdin)
 	line, _ := reader.ReadString('\n')

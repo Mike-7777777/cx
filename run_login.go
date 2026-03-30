@@ -32,7 +32,7 @@ func (c *loginCmd) Run(_ context.Context, app *App, args []string) error {
 	// Determine config dir for the target account.
 	var configDir string
 	if name != "" {
-		if !validAccountName.MatchString(name) {
+		if !isValidAccountName(name) {
 			return fmt.Errorf("invalid account name %q", name)
 		}
 

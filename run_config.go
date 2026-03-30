@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"regexp"
 	"strings"
 
 	"github.com/Mike-7777777/cx/internal/config"
@@ -13,9 +12,19 @@ import (
 	"github.com/Mike-7777777/cx/internal/platform"
 )
 
-// validAccountName restricts account names to safe alphanumeric characters,
-// hyphens, and underscores to prevent path traversal attacks.
-var validAccountName = regexp.MustCompile(`^[a-zA-Z0-9_-]+$`)
+// isValidAccountName checks that name contains only safe alphanumeric
+// characters, hyphens, and underscores. Prevents path traversal attacks.
+func isValidAccountName(name string) bool {
+	if name == "" {
+		return false
+	}
+	for _, c := range name {
+		if !((c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9') || c == '_' || c == '-') {
+			return false
+		}
+	}
+	return true
+}
 
 // sharedLinkDirs are subdirectories that are junctioned/symlinked from the
 // main config dir into every secondary account dir.
@@ -148,7 +157,7 @@ func configSetMain(app *App, name string) error {
 }
 
 func configRename(app *App, oldName, newName string) error {
-	if !validAccountName.MatchString(newName) {
+	if !isValidAccountName(newName) {
 		return fmt.Errorf("invalid name %q (only letters, digits, hyphens, underscores)", newName)
 	}
 
@@ -243,7 +252,7 @@ func configAdd(app *App, args []string) error {
 	}
 
 	name := positional[0]
-	if !validAccountName.MatchString(name) {
+	if !isValidAccountName(name) {
 		return fmt.Errorf("invalid account name %q (only letters, digits, hyphens, underscores)", name)
 	}
 	_, force := flags["force"]

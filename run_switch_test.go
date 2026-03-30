@@ -91,6 +91,31 @@ func TestSwitch_UnsafePathRejected(t *testing.T) {
 	}
 }
 
+func TestIsSafePath(t *testing.T) {
+	tests := []struct {
+		path string
+		want bool
+	}{
+		{"/home/user/.config", true},
+		{"C:\\Users\\test", true},
+		{"/tmp/a-b_c.d", true},
+		{"~/bin", true},
+		{"C:/Program Files/cx", true},
+		{"", false},
+		{"/tmp/$(rm -rf /)", false},
+		{"/tmp/`whoami`", false},
+		{"/tmp/a;b", false},
+		{"/tmp/a|b", false},
+		{"/tmp/a&b", false},
+		{"/tmp/a>b", false},
+	}
+	for _, tt := range tests {
+		if got := isSafePath(tt.path); got != tt.want {
+			t.Errorf("isSafePath(%q) = %v, want %v", tt.path, got, tt.want)
+		}
+	}
+}
+
 func TestSwitch_UnknownAccount(t *testing.T) {
 	mainDir := testConfigDir(".claude")
 

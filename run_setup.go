@@ -60,7 +60,7 @@ func (c *setupCmd) Run(_ context.Context, app *App, _ []string) error {
 	if mainName == "" {
 		mainName = defaultMain
 	}
-	if !validAccountName.MatchString(mainName) {
+	if !isValidAccountName(mainName) {
 		return fmt.Errorf("invalid name %q", mainName)
 	}
 
@@ -95,7 +95,7 @@ func (c *setupCmd) Run(_ context.Context, app *App, _ []string) error {
 			fmt.Fprintln(w, "  skipped (empty name)")
 			continue
 		}
-		if !validAccountName.MatchString(name) {
+		if !isValidAccountName(name) {
 			fmt.Fprintf(w, "  invalid name %q, skipping\n", name)
 			continue
 		}

@@ -162,6 +162,9 @@ func collectSessions(accountFilter string, limit int) []sessionEntry {
 		}
 	}
 
+	// Deduplicate sessions that appear in multiple accounts (cross-account symlinks).
+	all = deduplicateSessions(all)
+
 	// Sort by most recent first.
 	sort.Slice(all, func(i, j int) bool {
 		return all[i].Age < all[j].Age
@@ -172,6 +175,25 @@ func collectSessions(accountFilter string, limit int) []sessionEntry {
 	}
 
 	return all
+}
+
+// deduplicateSessions removes duplicate session IDs, keeping the entry
+// with the smallest Age (most recently modified) for each ID.
+func deduplicateSessions(sessions []sessionEntry) []sessionEntry {
+	best := make(map[string]int) // session ID -> index in result
+	var result []sessionEntry
+
+	for _, s := range sessions {
+		if idx, exists := best[s.ID]; exists {
+			if s.Age < result[idx].Age {
+				result[idx] = s
+			}
+		} else {
+			best[s.ID] = len(result)
+			result = append(result, s)
+		}
+	}
+	return result
 }
 
 // readSessionMeta extracts model, slug, and first/last user messages.

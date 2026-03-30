@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/Mike-7777777/cx/internal/config"
 )
@@ -185,5 +186,27 @@ func TestResume_LastFlag(t *testing.T) {
 	selected := &sessions[0]
 	if selected.ID == "" {
 		t.Error("selected session has empty ID")
+	}
+}
+
+func TestDeduplicateSessions(t *testing.T) {
+	sessions := []sessionEntry{
+		{ID: "session-1", Account: "HY", Age: 2 * time.Minute, ConfigDir: "/a"},
+		{ID: "session-1", Account: "QM", Age: 1 * time.Minute, ConfigDir: "/b"},
+		{ID: "session-2", Account: "HY", Age: 5 * time.Minute, ConfigDir: "/a"},
+	}
+	got := deduplicateSessions(sessions)
+	if len(got) != 2 {
+		t.Fatalf("expected 2 sessions, got %d", len(got))
+	}
+	for _, s := range got {
+		if s.ID == "session-1" {
+			if s.Account != "QM" {
+				t.Errorf("session-1: expected account QM (smaller Age), got %s", s.Account)
+			}
+			if s.Age != 1*time.Minute {
+				t.Errorf("session-1: expected Age 1m, got %v", s.Age)
+			}
+		}
 	}
 }

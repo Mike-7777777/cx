@@ -6,7 +6,6 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
-	"sort"
 	"strings"
 
 	"github.com/Mike-7777777/cx/internal/config"
@@ -346,23 +345,4 @@ func resolveDir(reg *config.Registry, name string) string {
 		return "?"
 	}
 	return filepath.Clean(dir)
-}
-
-// sortedAccountNames returns account names sorted, main first.
-func sortedAccountNames(reg *config.Registry) []string {
-	names := make([]string, 0, len(reg.Accounts))
-	for name := range reg.Accounts {
-		names = append(names, name)
-	}
-	sort.Slice(names, func(i, j int) bool {
-		// Main account always comes first.
-		if names[i] == reg.Main {
-			return true
-		}
-		if names[j] == reg.Main {
-			return false
-		}
-		return names[i] < names[j]
-	})
-	return names
 }

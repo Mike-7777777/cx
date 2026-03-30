@@ -84,6 +84,10 @@ func (c *predictCmd) Run(_ context.Context, app *App, args []string) error {
 
 	rows := make([]predictRow, 0, len(names))
 
+	// Load usage cache once outside the loop.
+	cachePath := usageCachePath()
+	uc, _ := usage.LoadUsageCache(cachePath)
+
 	for _, name := range names {
 		dir, err := reg.ResolveConfigDir(name)
 		if err != nil {
@@ -106,14 +110,10 @@ func (c *predictCmd) Run(_ context.Context, app *App, args []string) error {
 
 		est := usage.EstimateExhaustion(fivePct, fiveReset, now)
 
-		// Compute velocity from JSONL entries in the last 5 hours.
 		var entries []usage.Entry
-		cachePath := usageCachePath()
-		uc, _ := usage.LoadUsageCache(cachePath)
 		_ = usage.ScanDirCached(dir, uc, func(e usage.Entry) {
 			entries = append(entries, e)
 		})
-		_ = uc.Save()
 		vel := usage.CalculateVelocity(entries, 5*time.Hour)
 
 		rows = append(rows, predictRow{
@@ -124,6 +124,8 @@ func (c *predictCmd) Run(_ context.Context, app *App, args []string) error {
 			velocity:  vel,
 		})
 	}
+
+	_ = uc.Save()
 
 	if isJSON {
 		type jsonRow struct {

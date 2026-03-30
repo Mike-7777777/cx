@@ -11,7 +11,6 @@ import (
 	"runtime"
 	"sort"
 	"strconv"
-	"strings"
 	"sync"
 	"time"
 
@@ -24,7 +23,7 @@ import (
 // webCmd implements Runner for the "web" subcommand.
 type webCmd struct{}
 
-const webStaleThreshold = 10 * time.Minute
+const webRateCacheStaleAge = 10 * time.Minute
 
 //go:embed web/index.html
 var webFS embed.FS
@@ -380,7 +379,7 @@ func handleAPIStatus(w http.ResponseWriter, _ *http.Request, reg *config.Registr
 		}
 
 		age := rc.Age()
-		if age > webStaleThreshold {
+		if age > webRateCacheStaleAge {
 			mins := int(age.Minutes())
 			acc.Note = fmt.Sprintf("%s %dm", format.LabelStale, mins)
 		}
@@ -451,7 +450,7 @@ func sessionProject(entries []usage.Entry, sessionID string) string {
 	for _, e := range entries {
 		if e.SessionID == sessionID && e.ProjectPath != "" {
 			// Decode the directory name for display.
-			counts[decodeProjectName(e.ProjectPath)]++
+			counts[shortProjectName(e.ProjectPath)]++
 		}
 	}
 
@@ -468,15 +467,4 @@ func sessionProject(entries []usage.Entry, sessionID string) string {
 		}
 	}
 	return best
-}
-
-// decodeProjectName converts encoded directory names back to readable form.
-// E.g. "I--google_drive-homebase" -> "homebase"
-func decodeProjectName(encoded string) string {
-	// Take the last segment after the final "-" that isn't a drive letter prefix.
-	parts := strings.Split(encoded, "-")
-	if len(parts) > 1 {
-		return parts[len(parts)-1]
-	}
-	return encoded
 }

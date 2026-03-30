@@ -194,8 +194,6 @@ func checkAndRecommend(app *App, threshold float64) (Recommendation, bool) {
 	}, urgent
 }
 
-// --- Watch helpers (moved from run_watch.go) ---
-
 // watchState tracks the last-seen mtime and size of each synced file.
 type watchState map[string]watchFileMeta
 

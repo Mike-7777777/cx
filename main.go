@@ -57,7 +57,7 @@ var commands = map[string]command{
 	"sessions":   {&sessionsCmd{}, "List recent CC sessions across all accounts", catDailyUse},
 	"resume":     {&resumeCmd{}, "Resume a CC session with smart matching", catDailyUse},
 	"status":     {&statusCmd{}, "All accounts: auth status + rate limits", catDailyUse},
-	"auto":       {&autoCmd{}, "Auto-switching daemon (monitors rate limits)", catMonitoring},
+	"daemon":     {&daemonCmd{}, "Auto-switch + config-sync daemon", catMonitoring},
 	"dashboard":  {&dashboardCmd{}, "Live TUI dashboard", catMonitoring},
 	"insights":   {&insightsCmd{}, "Usage pattern analysis", catMonitoring},
 	"predict":    {&predictCmd{}, "Forecast rate limit exhaustion", catMonitoring},
@@ -66,8 +66,6 @@ var commands = map[string]command{
 	"doctor":     {&doctorCmd{}, "Health check all accounts", catMaintenance},
 	"sync":       {&syncCmd{}, "Sync config to secondary accounts", catMaintenance},
 	"login":      {&loginCmd{}, "Re-authenticate an account", catMaintenance},
-	"init":       {&initCmd{}, "Create a new account directory", catMaintenance},
-	"watch":      {&watchCmd{}, "Auto-sync daemon (30s interval)", catMaintenance},
 	"completion": {&completionCmd{}, "Tab completion (bash/fish/powershell)", catMaintenance},
 	"statusline": {&statuslineCmd{}, "CC status bar integration (internal)", catMaintenance},
 }
@@ -143,12 +141,11 @@ var commandUsageHint = map[string]string{
 	"run":        "[-- args]",
 	"web":        "[--port N]",
 	"insights":   "[--all]",
-	"auto":       "[--once]",
+	"daemon":     "[--no-sync] [--no-switch]",
 	"predict":    "[--json]",
 	"usage":      "<mode>",
 	"sync":       "[--force]",
 	"login":      "[name]",
-	"init":       "<name>",
 	"completion": "<shell>",
 }
 

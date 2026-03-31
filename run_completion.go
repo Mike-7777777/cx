@@ -44,7 +44,7 @@ _cx_completions() {
     COMPREPLY=()
     cur="${COMP_WORDS[COMP_CWORD]}"
     prev="${COMP_WORDS[COMP_CWORD-1]}"
-    commands="completion config daemon dashboard doctor insights login predict resume run sessions setup status statusline switch sync usage web version help"
+    commands="completion config daemon dashboard doctor insights login predict resume run sessions setup status statusline switch sync usage version help"
 
     case "${prev}" in
         cx)
@@ -96,7 +96,6 @@ complete -c cx -n '__fish_use_subcommand' -a 'sessions' -d 'List recent CC sessi
 complete -c cx -n '__fish_use_subcommand' -a 'resume' -d 'Resume a CC session'
 complete -c cx -n '__fish_use_subcommand' -a 'status' -d 'Show all accounts status'
 complete -c cx -n '__fish_use_subcommand' -a 'dashboard' -d 'Live TUI dashboard'
-complete -c cx -n '__fish_use_subcommand' -a 'web' -d 'Browser dashboard on localhost'
 complete -c cx -n '__fish_use_subcommand' -a 'usage' -d 'Analyze token usage and costs'
 complete -c cx -n '__fish_use_subcommand' -a 'doctor' -d 'Run health checks'
 complete -c cx -n '__fish_use_subcommand' -a 'sync' -d 'Sync config to secondaries'
@@ -143,7 +142,7 @@ func powershellCompletion(reg *config.Registry) string {
 Register-ArgumentCompleter -CommandName cx -ScriptBlock {
     param($wordToComplete, $commandAst, $cursorPosition)
 
-    $commands = @('setup', 'switch', 'run', 'config', 'sessions', 'resume', 'status', 'daemon', 'dashboard', 'web', 'usage', 'insights', 'predict', 'doctor', 'sync', 'login', 'completion', 'statusline', 'version', 'help')
+    $commands = @('setup', 'switch', 'run', 'config', 'sessions', 'resume', 'status', 'daemon', 'dashboard', 'usage', 'insights', 'predict', 'doctor', 'sync', 'login', 'completion', 'statusline', 'version', 'help')
     $accounts = @(%s)
     $usageModes = @('daily', 'weekly', 'monthly', 'session', 'blocks', 'messages')
     $shells = @('bash', 'fish', 'powershell')

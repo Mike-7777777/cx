@@ -60,5 +60,5 @@ Then analyze:
 
 - **`cx switch`**: Cannot work here — requires `eval` to modify shell environment. Tell user to run `cx switch <name>` in their terminal.
 - **`cx run`**: Not applicable — user is already inside Claude Code.
-- **`cx dashboard` / `cx web`**: Interactive/persistent processes, not suitable for skill invocation.
+- **`cx dashboard`**: Interactive TUI process, not suitable for skill invocation.
 - **`cx statusline`**: Already running in CC's status bar — no need to invoke manually.

@@ -41,7 +41,7 @@ cx fixes this. Both accounts stay logged in. Switch in one command. Or let the t
 - **Smart auto-routing** — `cx run` picks the account with the lowest 5h usage, factoring in reset proximity.
 - **Cross-account session resume** — `cx resume` shows all sessions with first/last message context. Resume any session on any account.
 - **Real-time statusline** — Rate limits, cost, context % in Claude Code's status bar. 16ms latency, ~5MB RAM.
-- **Web dashboard** — `cx web` serves a dark-themed browser dashboard at localhost with usage charts and model breakdown.
+- **Live TUI dashboard** — `cx dashboard` renders accounts, weekly chart, active sessions, and ROI in a box-drawn terminal UI with auto-refresh.
 - **Usage analytics** — Daily, weekly, monthly, per-session, per-model cost breakdowns. Export as JSON, CSV, or Markdown.
 - **Claude Code skill** — Use `/cx` inside Claude Code to check status, usage, and diagnostics without leaving the conversation.
 - **Config sync** — Shared settings, plugins, skills, and projects across accounts via junctions/symlinks.
@@ -210,8 +210,7 @@ cx completion powershell | Out-String | Invoke-Expression
 | Command | Description |
 |---------|-------------|
 | `daemon` | Combined auto-switch + config-sync daemon |
-| `dashboard [--interval N]` | Live TUI dashboard (accounts, usage, sessions) |
-| `web [--port N]` | Browser dashboard on localhost (dark theme, charts) |
+| `dashboard [--interval N]` | Live TUI dashboard (accounts, usage, sessions, ROI) |
 | `usage <mode>` | Usage analysis: `daily`, `weekly`, `monthly`, `session`, `blocks`, `messages` |
 | `insights [--all]` | Usage pattern analysis (hourly heatmap, model distribution) |
 | `predict [--json]` | Forecast rate limit exhaustion |

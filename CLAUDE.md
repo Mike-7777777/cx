@@ -33,7 +33,6 @@ internal/
   usage/             # JSONL parsing, aggregation, pricing, incremental cache
   platform/          # OS-specific code (symlinks, exec, ANSI)
   statusline/        # CC status bar parsing and rendering
-web/                 # Embedded HTML/JS for the web dashboard
 skill/               # Embedded Claude Code skill file
 testdata/            # Fixtures for tests
 ```

@@ -74,7 +74,7 @@ func EnableRawMode() (restore func(), err error) {
 	}
 
 	restore = func() {
-		syscall.Syscall(
+		_, _, _ = syscall.Syscall(
 			syscall.SYS_IOCTL,
 			uintptr(fd),
 			uintptr(tcsets),

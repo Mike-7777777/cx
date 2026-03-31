@@ -6,9 +6,151 @@ import (
 	"strings"
 	"time"
 
+	"github.com/Mike-7777777/cx/internal/config"
 	"github.com/Mike-7777777/cx/internal/format"
 	"github.com/Mike-7777777/cx/internal/usage"
 )
+
+// ---------- ACCOUNTS SUB-VIEW ----------
+
+// accountConfigDir resolves the config directory for an account name via the registry.
+func accountConfigDir(name string) (string, error) {
+	regPath, err := config.RegistryPath()
+	if err != nil {
+		return "", err
+	}
+	reg, err := config.LoadOrCreateRegistry(regPath)
+	if err != nil {
+		return "", err
+	}
+	return reg.ResolveConfigDir(name)
+}
+
+// renderAccountsSubView shows all accounts with a selectable cursor, 5h progress
+// bar, usage percentage, and reset timer for each.
+func renderAccountsSubView(state *dashState) string {
+	if len(state.accountList) == 0 {
+		return padLine("  No accounts configured.")
+	}
+
+	var b strings.Builder
+	for i, name := range state.accountList {
+		// Cursor prefix.
+		prefix := "  "
+		if i == state.subCursor {
+			prefix = format.Colorize("▸ ", format.Bold+format.Cyan, state.useColor)
+		}
+
+		label := fmt.Sprintf("%-16s", name)
+
+		dir, err := accountConfigDir(name)
+		if err != nil {
+			line := fmt.Sprintf("%s%s %s", prefix, label,
+				format.Colorize(format.LabelNoData, format.Dim, state.useColor))
+			b.WriteString(padLine(line))
+			continue
+		}
+
+		pct, ttr, _, ok := fiveHourStats(dir)
+		if !ok {
+			line := fmt.Sprintf("%s%s 5h: %s", prefix, label,
+				format.Colorize(format.LabelNoData, format.Dim, state.useColor))
+			b.WriteString(padLine(line))
+			continue
+		}
+
+		bar := format.ProgressBar(pct, 8)
+		color := format.UsageColor(pct)
+
+		resetStr := format.LabelReset
+		if ttr > 0 {
+			resetStr = fmt.Sprintf("resets %s", format.FormatDuration(ttr))
+		}
+
+		line := fmt.Sprintf("%s%s 5h: %s %s  (%s)",
+			prefix,
+			label,
+			format.Colorize(bar, color, state.useColor),
+			format.Colorize(fmt.Sprintf("%3.0f%%", pct), color, state.useColor),
+			format.Colorize(resetStr, format.Dim, state.useColor))
+		b.WriteString(padLine(line))
+	}
+
+	return b.String()
+}
+
+// ---------- SESSIONS SUB-VIEW ----------
+
+// renderSessionsSubView shows sessions from state.sessionList with a selectable
+// cursor, account name, active indicator, age, project, and topic.
+func renderSessionsSubView(state *dashState) string {
+	if len(state.sessionList) == 0 {
+		return padLine("  No sessions found.")
+	}
+
+	var b strings.Builder
+
+	// Header row.
+	header := fmt.Sprintf("  %-4s  %-8s  %-20s  %s", "Acct", "Age", "Project", "Topic")
+	b.WriteString(padLine(format.Colorize(header, format.Bold+format.White, state.useColor)))
+	sep := "  " + strings.Repeat("─", dashboardBoxWidth-4)
+	b.WriteString(padLine(format.Colorize(sep, format.Dim, state.useColor)))
+
+	limit := len(state.sessionList)
+	if limit > 30 {
+		limit = 30
+	}
+
+	for i := 0; i < limit; i++ {
+		s := state.sessionList[i]
+
+		// Cursor prefix.
+		prefix := "  "
+		if i == state.subCursor {
+			prefix = format.Colorize("▸ ", format.Bold+format.Cyan, state.useColor)
+		}
+
+		// Account name (4 chars).
+		acct := s.Account
+		if len(acct) > 4 {
+			acct = acct[:4]
+		}
+		acctStr := fmt.Sprintf("%-4s", acct)
+
+		// Active indicator.
+		active := " "
+		if s.Active {
+			active = format.Colorize("●", format.Green, state.useColor)
+		}
+
+		// Age.
+		ageStr := fmt.Sprintf("%-8s", formatAge(s.Age))
+
+		// Project name (20 chars).
+		proj := s.Project
+		projRunes := []rune(proj)
+		if len(projRunes) > 20 {
+			proj = string(projRunes[:20])
+		}
+		projStr := fmt.Sprintf("%-20s", proj)
+
+		// Topic: prefer slug, fall back to firstMsg, truncate to 22.
+		topic := s.Slug
+		if topic == "" {
+			topic = s.FirstMsg
+		}
+		topicRunes := []rune(topic)
+		if len(topicRunes) > 22 {
+			topic = string(topicRunes[:21]) + "…"
+		}
+
+		line := fmt.Sprintf("%s%s %s %s  %s  %s",
+			prefix, acctStr, active, ageStr, projStr, topic)
+		b.WriteString(padLine(line))
+	}
+
+	return b.String()
+}
 
 // ---------- USAGE SUB-VIEW ----------
 

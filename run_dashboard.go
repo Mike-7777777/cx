@@ -450,17 +450,6 @@ func renderSubView(state *dashState) string {
 	return b.String()
 }
 
-// ---------- SUB-VIEW STUBS ----------
-// These will be fully implemented in Task 4/5.
-
-func renderAccountsSubView(_ *dashState) string {
-	return padLine("  (detail view coming soon)")
-}
-
-func renderSessionsSubView(_ *dashState) string {
-	return padLine("  (detail view coming soon)")
-}
-
 // ---------- INSIGHTS SUMMARY SECTION ----------
 
 // renderInsightsSummary shows a compact one-line insights row on the main view:

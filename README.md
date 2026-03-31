@@ -210,7 +210,7 @@ cx completion powershell | Out-String | Invoke-Expression
 | Command | Description |
 |---------|-------------|
 | `daemon` | Combined auto-switch + config-sync daemon |
-| `dashboard [--interval N]` | Live TUI dashboard (accounts, usage, sessions, ROI) |
+| `dashboard [--interval N]` | Interactive TUI (↑↓ navigate, Enter detail, r resume, s switch, q quit) |
 | `usage <mode>` | Usage analysis: `daily`, `weekly`, `monthly`, `session`, `blocks`, `messages` |
 | `insights [--all]` | Usage pattern analysis (hourly heatmap, model distribution) |
 | `predict [--json]` | Forecast rate limit exhaustion |

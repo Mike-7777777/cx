@@ -457,23 +457,7 @@ func renderAccountsSubView(_ *dashState) string {
 	return padLine("  (detail view coming soon)")
 }
 
-func renderUsageSubView(_ *dashState) string {
-	return padLine("  (detail view coming soon)")
-}
-
-func renderWeekSubView(_ *dashState) string {
-	return padLine("  (detail view coming soon)")
-}
-
 func renderSessionsSubView(_ *dashState) string {
-	return padLine("  (detail view coming soon)")
-}
-
-func renderInsightsSubView(_ *dashState) string {
-	return padLine("  (detail view coming soon)")
-}
-
-func renderROISubView(_ *dashState) string {
 	return padLine("  (detail view coming soon)")
 }
 

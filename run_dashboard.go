@@ -375,7 +375,7 @@ func renderMainView(state *dashState) string {
 		{sectionUsage, func() string { return renderTodayUsageSection(state.useColor, state.data) }},
 		{sectionWeek, func() string { return renderWeeklyChartSection(state.useColor, state.data) }},
 		{sectionSessions, func() string { return renderSessionsSection(state.useColor) }},
-		{sectionInsights, func() string { return renderInsightsSummary(state.useColor) }},
+		{sectionInsights, func() string { return renderInsightsSummary(state.useColor, state.data) }},
 		{sectionROI, func() string { return renderROISection(state.useColor, state.data) }},
 	}
 
@@ -477,11 +477,42 @@ func renderROISubView(_ *dashState) string {
 	return padLine("  (detail view coming soon)")
 }
 
-// ---------- INSIGHTS SUMMARY STUB ----------
-// Task 3 will implement the full insights summary section.
+// ---------- INSIGHTS SUMMARY SECTION ----------
 
-func renderInsightsSummary(_ bool) string {
-	return ""
+// renderInsightsSummary shows a compact one-line insights row on the main view:
+// peak hours, cache hit ratio, and average tokens per message.
+func renderInsightsSummary(useColor bool, data *dashboardData) string {
+	if data == nil || len(data.entries) == 0 {
+		return ""
+	}
+
+	eff := usage.CalculateEfficiency(data.entries)
+	peaks := usage.FindPeakHours(data.entries, 3)
+
+	var b strings.Builder
+	b.WriteString(sectionHeader("INSIGHTS", useColor))
+
+	// Peak hours segment.
+	var peakParts []string
+	for _, p := range peaks {
+		peakParts = append(peakParts, fmt.Sprintf("%02d:00", p.Hour))
+	}
+	peakStr := strings.Join(peakParts, ", ")
+
+	// Cache hit ratio color: green if >50%, yellow otherwise.
+	cacheColor := format.Yellow
+	if eff.CacheHitRatio > 0.5 {
+		cacheColor = format.Green
+	}
+
+	line := fmt.Sprintf("  Peak: %s   Cache: %s   Avg: %s tok/msg",
+		format.Colorize(peakStr, format.Cyan, useColor),
+		format.Colorize(fmt.Sprintf("%.0f%%", eff.CacheHitRatio*100), cacheColor, useColor),
+		format.Colorize(format.FormatNumber(eff.AvgTokensPerMsg), format.White, useColor))
+	b.WriteString(padLine(line))
+	b.WriteString(emptyLine())
+
+	return b.String()
 }
 
 // renderDashboard clears the screen and draws the full dashboard frame.

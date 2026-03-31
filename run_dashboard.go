@@ -28,6 +28,51 @@ const (
 	dashboardBoxWidth        = 64
 )
 
+// ---------- INTERACTIVE STATE TYPES ----------
+
+type viewMode int
+
+const (
+	viewMain viewMode = iota
+	viewSub
+)
+
+type sectionID int
+
+const (
+	sectionAccounts sectionID = iota
+	sectionUsage
+	sectionWeek
+	sectionSessions
+	sectionInsights
+	sectionROI
+	sectionCount
+)
+
+var sectionNames = [sectionCount]string{
+	"ACCOUNTS", "TODAY'S USAGE", "THIS WEEK", "SESSIONS", "INSIGHTS", "ROI",
+}
+
+type dashState struct {
+	view        viewMode
+	section     sectionID
+	subCursor   int
+	data        *dashboardData
+	useColor    bool
+	interval    time.Duration
+	sessionList []sessionEntry
+	accountList []string
+}
+
+type dashAction int
+
+const (
+	dashActionNone   dashAction = iota
+	dashActionQuit              // q/Esc from main view
+	dashActionResume            // r in sessions sub-view
+	dashActionSwitch            // s in accounts sub-view
+)
+
 // dashboardData holds pre-scanned usage data shared across dashboard sections.
 type dashboardData struct {
 	entries    []usage.Entry
@@ -73,10 +118,11 @@ type sessionInfo struct {
 	StartedAt time.Time
 }
 
-// Run starts the live TUI dashboard with periodic refresh.
+// Run starts the live TUI dashboard. If stdin is a terminal, it enters
+// interactive raw mode with keyboard navigation. Otherwise, it falls back
+// to the passive auto-refresh loop.
 func (c *dashboardCmd) Run(ctx context.Context, app *App, args []string) error {
 	interval := defaultDashboardInterval
-	out := app.Stdout
 
 	// Parse --interval flag.
 	for i := 0; i < len(args); i++ {
@@ -95,12 +141,24 @@ func (c *dashboardCmd) Run(ctx context.Context, app *App, args []string) error {
 		}
 	}
 
+	// Try interactive mode. Falls back to passive if raw mode unavailable
+	// (e.g., piped output, CI, non-TTY stdin).
+	restore, err := platform.EnableRawMode()
+	if err != nil {
+		return runPassive(ctx, app, interval)
+	}
+	defer restore()
+
+	return runInteractive(ctx, app, interval, restore)
+}
+
+// runPassive is the original non-interactive dashboard loop.
+func runPassive(ctx context.Context, app *App, interval time.Duration) error {
+	out := app.Stdout
 	useColor := app.UseColor
 
-	// Always restore cursor visibility on exit.
 	defer fmt.Fprint(out, "\033[?25h"+format.Reset)
 
-	// Initial render.
 	renderDashboard(out, useColor, interval)
 
 	ticker := time.NewTicker(interval)
@@ -114,6 +172,316 @@ func (c *dashboardCmd) Run(ctx context.Context, app *App, args []string) error {
 			renderDashboard(out, useColor, interval)
 		}
 	}
+}
+
+// runInteractive drives the keyboard-navigable dashboard via a select loop
+// on ticker, key channel, and context cancellation.
+func runInteractive(ctx context.Context, app *App, interval time.Duration, restore func()) error {
+	out := app.Stdout
+
+	defer fmt.Fprint(out, "\033[?25h"+format.Reset)
+
+	state := &dashState{
+		view:     viewMain,
+		section:  sectionAccounts,
+		useColor: app.UseColor,
+		interval: interval,
+	}
+	refreshDashState(state, app.Registry)
+	renderInteractive(out, state)
+
+	// Key reader goroutine: reads blocking keys and sends them on a channel.
+	keyCh := make(chan platform.Key, 1)
+	go func() {
+		for {
+			k, err := platform.ReadKey()
+			if err != nil {
+				return
+			}
+			if k != platform.KeyNone {
+				keyCh <- k
+			}
+		}
+	}()
+
+	ticker := time.NewTicker(interval)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-ctx.Done():
+			return nil
+
+		case <-ticker.C:
+			refreshDashState(state, app.Registry)
+			renderInteractive(out, state)
+
+		case key := <-keyCh:
+			action := handleDashKey(state, key)
+			switch action {
+			case dashActionQuit:
+				return nil
+
+			case dashActionResume:
+				if state.section == sectionSessions &&
+					state.subCursor >= 0 &&
+					state.subCursor < len(state.sessionList) {
+					sess := state.sessionList[state.subCursor]
+					// Restore terminal before exec.
+					restore()
+					fmt.Fprint(out, "\033[?25h"+format.Reset)
+					env := os.Environ()
+					if sess.ConfigDir != "" {
+						env = replaceOrAppendEnv(env, "CLAUDE_CONFIG_DIR", sess.ConfigDir)
+					}
+					return platform.ExecProgram("claude", []string{"--resume", sess.ID}, env)
+				}
+
+			case dashActionSwitch:
+				if state.section == sectionAccounts &&
+					state.subCursor >= 0 &&
+					state.subCursor < len(state.accountList) {
+					name := state.accountList[state.subCursor]
+					restore()
+					fmt.Fprintf(out, "\033[?25h%sRun: cx switch %s\n", format.Reset, name)
+					return nil
+				}
+			}
+
+			renderInteractive(out, state)
+		}
+	}
+}
+
+// refreshDashState reloads all dashboard data into the state.
+func refreshDashState(state *dashState, reg *config.Registry) {
+	state.data = scanDashboardData()
+	state.sessionList = collectSessions(reg, "", 50)
+	if reg != nil {
+		state.accountList = sortedAccountNames(reg)
+	}
+}
+
+// ---------- KEY HANDLING ----------
+
+// handleDashKey processes a keypress and returns the resulting action.
+func handleDashKey(state *dashState, key platform.Key) dashAction {
+	if state.view == viewMain {
+		return handleMainKey(state, key)
+	}
+	return handleSubKey(state, key)
+}
+
+// handleMainKey handles keys in the main overview.
+func handleMainKey(state *dashState, key platform.Key) dashAction {
+	switch key {
+	case platform.KeyUp:
+		if state.section > 0 {
+			state.section--
+		}
+	case platform.KeyDown:
+		if state.section < sectionCount-1 {
+			state.section++
+		}
+	case platform.KeyEnter:
+		state.view = viewSub
+		state.subCursor = 0
+	case platform.KeyQ, platform.KeyEsc:
+		return dashActionQuit
+	}
+	return dashActionNone
+}
+
+// handleSubKey handles keys in a sub-view.
+func handleSubKey(state *dashState, key platform.Key) dashAction {
+	maxRows := subViewRowCount(state)
+	switch key {
+	case platform.KeyUp:
+		if state.subCursor > 0 {
+			state.subCursor--
+		}
+	case platform.KeyDown:
+		if state.subCursor < maxRows-1 {
+			state.subCursor++
+		}
+	case platform.KeyQ, platform.KeyEsc:
+		state.view = viewMain
+		state.subCursor = 0
+	case platform.KeyR:
+		if state.section == sectionSessions {
+			return dashActionResume
+		}
+	case platform.KeyS:
+		if state.section == sectionAccounts {
+			return dashActionSwitch
+		}
+	}
+	return dashActionNone
+}
+
+// subViewRowCount returns the number of selectable rows in the current sub-view.
+func subViewRowCount(state *dashState) int {
+	switch state.section {
+	case sectionAccounts:
+		return len(state.accountList)
+	case sectionSessions:
+		return len(state.sessionList)
+	default:
+		return 0
+	}
+}
+
+// ---------- INTERACTIVE RENDERING ----------
+
+// renderInteractive clears the screen and draws the appropriate view.
+func renderInteractive(out io.Writer, state *dashState) {
+	var b strings.Builder
+	b.WriteString("\033[2J\033[H\033[?25l")
+
+	if state.view == viewMain {
+		b.WriteString(renderMainView(state))
+	} else {
+		b.WriteString(renderSubView(state))
+	}
+
+	fmt.Fprint(out, b.String())
+}
+
+// renderMainView draws the full dashboard with a highlight marker on the
+// selected section.
+func renderMainView(state *dashState) string {
+	var b strings.Builder
+
+	// Title bar.
+	b.WriteString(boxTop())
+	title := "  cx dashboard"
+	refreshNote := fmt.Sprintf("[refreshing every %ds]", int(state.interval.Seconds()))
+	padding := dashboardBoxWidth - len(title) - len(refreshNote) - 4
+	if padding < 1 {
+		padding = 1
+	}
+	titleLine := format.Colorize(title, format.Bold+format.Cyan, state.useColor) +
+		strings.Repeat(" ", padding) +
+		format.Colorize(refreshNote, format.Dim, state.useColor)
+	b.WriteString(boxRow(titleLine))
+	b.WriteString(boxMid())
+
+	// Render each section, highlighting the selected one.
+	sections := []struct {
+		id     sectionID
+		render func() string
+	}{
+		{sectionAccounts, func() string { return renderAccountsSection(state.useColor) }},
+		{sectionUsage, func() string { return renderTodayUsageSection(state.useColor, state.data) }},
+		{sectionWeek, func() string { return renderWeeklyChartSection(state.useColor, state.data) }},
+		{sectionSessions, func() string { return renderSessionsSection(state.useColor) }},
+		{sectionInsights, func() string { return renderInsightsSummary(state.useColor) }},
+		{sectionROI, func() string { return renderROISection(state.useColor, state.data) }},
+	}
+
+	for _, s := range sections {
+		content := s.render()
+		if content == "" {
+			continue
+		}
+		if s.id == state.section {
+			content = highlightSection(content)
+		}
+		b.WriteString(content)
+	}
+
+	// Bottom border.
+	b.WriteString(boxBottom())
+
+	// Footer with key hints.
+	footer := format.Colorize("  ↑↓ navigate   Enter open   q quit", format.Dim, state.useColor)
+	b.WriteString(footer + "\n")
+
+	return b.String()
+}
+
+// highlightSection replaces the first section header's "║  " prefix with "║▸ "
+// to visually mark the selected section.
+func highlightSection(content string) string {
+	return strings.Replace(content, "║  ", "║▸ ", 1)
+}
+
+// renderSubView dispatches to the appropriate sub-view renderer.
+func renderSubView(state *dashState) string {
+	var b strings.Builder
+
+	// Header.
+	b.WriteString(boxTop())
+	title := fmt.Sprintf("  %s", sectionNames[state.section])
+	titleLine := format.Colorize(title, format.Bold+format.Cyan, state.useColor)
+	b.WriteString(boxRow(titleLine))
+	b.WriteString(boxMid())
+
+	// Dispatch to sub-view body.
+	switch state.section {
+	case sectionAccounts:
+		b.WriteString(renderAccountsSubView(state))
+	case sectionUsage:
+		b.WriteString(renderUsageSubView(state))
+	case sectionWeek:
+		b.WriteString(renderWeekSubView(state))
+	case sectionSessions:
+		b.WriteString(renderSessionsSubView(state))
+	case sectionInsights:
+		b.WriteString(renderInsightsSubView(state))
+	case sectionROI:
+		b.WriteString(renderROISubView(state))
+	}
+
+	b.WriteString(boxBottom())
+
+	// Footer with context-appropriate keybindings.
+	var hint string
+	switch state.section {
+	case sectionSessions:
+		hint = "  ↑↓ navigate   r resume   Esc back"
+	case sectionAccounts:
+		hint = "  ↑↓ navigate   s switch   Esc back"
+	default:
+		hint = "  ↑↓ navigate   Esc back"
+	}
+	b.WriteString(format.Colorize(hint, format.Dim, state.useColor) + "\n")
+
+	return b.String()
+}
+
+// ---------- SUB-VIEW STUBS ----------
+// These will be fully implemented in Task 4/5.
+
+func renderAccountsSubView(_ *dashState) string {
+	return padLine("  (detail view coming soon)")
+}
+
+func renderUsageSubView(_ *dashState) string {
+	return padLine("  (detail view coming soon)")
+}
+
+func renderWeekSubView(_ *dashState) string {
+	return padLine("  (detail view coming soon)")
+}
+
+func renderSessionsSubView(_ *dashState) string {
+	return padLine("  (detail view coming soon)")
+}
+
+func renderInsightsSubView(_ *dashState) string {
+	return padLine("  (detail view coming soon)")
+}
+
+func renderROISubView(_ *dashState) string {
+	return padLine("  (detail view coming soon)")
+}
+
+// ---------- INSIGHTS SUMMARY STUB ----------
+// Task 3 will implement the full insights summary section.
+
+func renderInsightsSummary(_ bool) string {
+	return ""
 }
 
 // renderDashboard clears the screen and draws the full dashboard frame.

@@ -9,15 +9,14 @@ set -e
 
 echo "[pre-push] Running quality checks..."
 
-# 1. Format (check committed files to avoid CRLF false positives on Windows)
-GOFILES=$(git ls-files '*.go')
-if [ -n "$GOFILES" ]; then
-    UNFORMATTED=$(echo "$GOFILES" | xargs gofmt -l 2>/dev/null)
-    if [ -n "$UNFORMATTED" ]; then
-        echo "FAIL: gofmt required on:"
-        echo "$UNFORMATTED"
-        exit 1
-    fi
+# 1. Format (run gofmt -w then check for uncommitted diffs — handles CRLF correctly)
+gofmt -w . 2>/dev/null
+if ! git diff --quiet -- '*.go' 2>/dev/null; then
+    echo "FAIL: gofmt produced changes:"
+    git diff --name-only -- '*.go'
+    git checkout -- '*.go' 2>/dev/null
+    echo "Run: gofmt -w . && git add -u"
+    exit 1
 fi
 echo "  gofmt .......... ok"
 

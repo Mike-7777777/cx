@@ -4,17 +4,13 @@
 
 set -e
 
-# Check only staged Go files (avoids CRLF false positives from working tree).
-STAGED=$(git diff --cached --name-only --diff-filter=ACM -- '*.go')
-if [ -z "$STAGED" ]; then
-    exit 0
-fi
-
-UNFORMATTED=$(echo "$STAGED" | xargs gofmt -l 2>/dev/null)
-if [ -n "$UNFORMATTED" ]; then
-    echo "pre-commit: gofmt required on:"
-    echo "$UNFORMATTED"
+# Run gofmt and check for actual content changes (ignores CRLF diffs).
+gofmt -w . 2>/dev/null
+if ! git diff --quiet -- '*.go' 2>/dev/null; then
+    echo "pre-commit: gofmt produced changes:"
+    git diff --name-only -- '*.go'
+    git checkout -- '*.go' 2>/dev/null
     echo ""
-    echo "Run: gofmt -w ."
+    echo "Run: gofmt -w . && git add -u"
     exit 1
 fi

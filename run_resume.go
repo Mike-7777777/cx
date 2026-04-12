@@ -18,6 +18,12 @@ type resumeCmd struct{}
 
 // Run resumes a CC session with smart matching.
 func (c *resumeCmd) Run(_ context.Context, app *App, args []string) error {
+	// Expand -y alias before parseFlags (consistent with cx run).
+	for i, a := range args {
+		if a == "-y" {
+			args[i] = "--yolo"
+		}
+	}
 	flags, positional := parseFlags(args, "last", "on", "yolo")
 
 	// Check for help flag.
@@ -30,7 +36,7 @@ Usage:
   cx resume <term>       Fuzzy match by slug, project, or account name
   cx resume --last       Resume the most recent session (any account)
   cx resume --on <acct>  Run session on a specific account (cross-account resume)
-  cx resume --yolo       Resume with --dangerously-skip-permissions
+  cx resume -y           Resume with --dangerously-skip-permissions (alias: --yolo)
 `)
 			return nil
 		}

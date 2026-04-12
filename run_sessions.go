@@ -351,7 +351,7 @@ func stripTags(s string) string {
 }
 
 // shortProjectName converts a project slug to a short display name.
-// "D--projects-myapp" → "homebase"
+// "D--projects-myapp" → "myapp"
 func shortProjectName(slug string) string {
 	parts := strings.Split(slug, "-")
 	if len(parts) > 0 {

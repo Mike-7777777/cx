@@ -298,3 +298,125 @@ func TestReplaceOrAppendEnv_EmptySlice(t *testing.T) {
 		t.Errorf("expected [KEY=value], got %v", result)
 	}
 }
+
+// --- Tests for parseRunArgs (flag parsing + pass-through) ---
+
+func TestParseRunArgs_YoloShorthand(t *testing.T) {
+	prefer, balance, claudeArgs, showHelp, err := parseRunArgs([]string{"-y"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if showHelp || balance || prefer != "" {
+		t.Errorf("unexpected cx flags: prefer=%q balance=%v help=%v", prefer, balance, showHelp)
+	}
+	if len(claudeArgs) != 1 || claudeArgs[0] != "--dangerously-skip-permissions" {
+		t.Errorf("claudeArgs=%v, want [--dangerously-skip-permissions]", claudeArgs)
+	}
+}
+
+func TestParseRunArgs_YoloLonghand(t *testing.T) {
+	_, _, claudeArgs, _, err := parseRunArgs([]string{"--yolo"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(claudeArgs) != 1 || claudeArgs[0] != "--dangerously-skip-permissions" {
+		t.Errorf("claudeArgs=%v, want [--dangerously-skip-permissions]", claudeArgs)
+	}
+}
+
+func TestParseRunArgs_UnknownFlagsPassThrough(t *testing.T) {
+	_, _, claudeArgs, _, err := parseRunArgs([]string{"--remote-control", "--verbose"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(claudeArgs) != 2 || claudeArgs[0] != "--remote-control" || claudeArgs[1] != "--verbose" {
+		t.Errorf("claudeArgs=%v, want [--remote-control --verbose]", claudeArgs)
+	}
+}
+
+func TestParseRunArgs_MixedCxAndClaudeFlags(t *testing.T) {
+	prefer, balance, claudeArgs, _, err := parseRunArgs([]string{"--prefer", "work", "-y", "--verbose"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if prefer != "work" {
+		t.Errorf("prefer=%q, want work", prefer)
+	}
+	if balance {
+		t.Error("balance should be false")
+	}
+	if len(claudeArgs) != 2 || claudeArgs[0] != "--dangerously-skip-permissions" || claudeArgs[1] != "--verbose" {
+		t.Errorf("claudeArgs=%v, want [--dangerously-skip-permissions --verbose]", claudeArgs)
+	}
+}
+
+func TestParseRunArgs_DoubleDashSeparator(t *testing.T) {
+	_, _, claudeArgs, _, err := parseRunArgs([]string{"--", "-p", "fix bug"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(claudeArgs) != 2 || claudeArgs[0] != "-p" || claudeArgs[1] != "fix bug" {
+		t.Errorf("claudeArgs=%v, want [-p fix bug]", claudeArgs)
+	}
+}
+
+func TestParseRunArgs_PreferWithoutValue(t *testing.T) {
+	_, _, _, _, err := parseRunArgs([]string{"--prefer"})
+	if err == nil {
+		t.Error("expected error for --prefer without value")
+	}
+}
+
+func TestParseRunArgs_PreferEqualsForm(t *testing.T) {
+	prefer, _, _, _, err := parseRunArgs([]string{"--prefer=work"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if prefer != "work" {
+		t.Errorf("prefer=%q, want work", prefer)
+	}
+}
+
+func TestParseRunArgs_BalanceWithYolo(t *testing.T) {
+	_, balance, claudeArgs, _, err := parseRunArgs([]string{"-y", "--balance"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !balance {
+		t.Error("balance should be true")
+	}
+	if len(claudeArgs) != 1 || claudeArgs[0] != "--dangerously-skip-permissions" {
+		t.Errorf("claudeArgs=%v, want [--dangerously-skip-permissions]", claudeArgs)
+	}
+}
+
+func TestParseRunArgs_HelpFlag(t *testing.T) {
+	_, _, _, showHelp, err := parseRunArgs([]string{"-h"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !showHelp {
+		t.Error("showHelp should be true")
+	}
+}
+
+func TestParseRunArgs_EmptyArgs(t *testing.T) {
+	prefer, balance, claudeArgs, showHelp, err := parseRunArgs(nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if prefer != "" || balance || showHelp || len(claudeArgs) != 0 {
+		t.Errorf("empty args should produce zero state: prefer=%q balance=%v help=%v claude=%v",
+			prefer, balance, showHelp, claudeArgs)
+	}
+}
+
+func TestParseRunArgs_ClaudePromptFlag(t *testing.T) {
+	_, _, claudeArgs, _, err := parseRunArgs([]string{"-p", "fix the bug"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(claudeArgs) != 2 || claudeArgs[0] != "-p" || claudeArgs[1] != "fix the bug" {
+		t.Errorf("claudeArgs=%v, want [-p fix the bug]", claudeArgs)
+	}
+}

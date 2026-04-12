@@ -25,6 +25,13 @@ const (
 	balanceThreshold = 90.0 // --balance: skip account if 5h usage > this
 )
 
+// runAliases maps cx-specific shorthand flags to their claude equivalents.
+// Only needed when the alias name differs from the claude flag name.
+var runAliases = map[string]string{
+	"-y":     "--dangerously-skip-permissions",
+	"--yolo": "--dangerously-skip-permissions",
+}
+
 // accountScore pairs an account name with its effective 5h usage, reset timing,
 // and 7d headroom for tiebreaking.
 type accountScore struct {
@@ -94,48 +101,55 @@ func sevenDayHeadroom(usedPct float64, daysLeft float64) float64 {
 	return dailyAvailable / dailyBudget
 }
 
+// parseRunArgs splits args into cx-specific flags and claude pass-through args.
+// cx consumes --prefer, --balance, -h/--help. All other args (including unknown
+// flags like --remote-control, --verbose) are forwarded to claude.
+// Aliases in runAliases are expanded (e.g., -y → --dangerously-skip-permissions).
+func parseRunArgs(args []string) (prefer string, balance bool, claudeArgs []string, showHelp bool, err error) {
+	for i := 0; i < len(args); i++ {
+		switch {
+		case args[i] == "--help" || args[i] == "-h":
+			showHelp = true
+			return
+		case args[i] == "--prefer":
+			if i+1 >= len(args) {
+				err = fmt.Errorf("--prefer requires an account name")
+				return
+			}
+			prefer = args[i+1]
+			i++
+		case strings.HasPrefix(args[i], "--prefer="):
+			prefer = strings.TrimPrefix(args[i], "--prefer=")
+		case args[i] == "--balance":
+			balance = true
+		case args[i] == "--":
+			claudeArgs = append(claudeArgs, args[i+1:]...)
+			return
+		default:
+			if mapped, ok := runAliases[args[i]]; ok {
+				claudeArgs = append(claudeArgs, mapped)
+				continue
+			}
+			claudeArgs = append(claudeArgs, args[i])
+		}
+	}
+	return
+}
+
 // Run auto-selects the best account by smart routing and launches claude.
 func (c *runCmd) Run(_ context.Context, app *App, args []string) error {
 	w := app.Stderr
 	reg := app.Registry
 
-	// Parse flags that belong to cx; the rest goes to claude.
-	var preferName string
-	var balance bool
-	var claudeArgs []string
-
-	// cx-specific aliases that map to differently-named claude flags.
-	aliases := map[string]string{
-		"-y":     "--dangerously-skip-permissions",
-		"--yolo": "--dangerously-skip-permissions",
+	prefer, balance, claudeArgs, showHelp, err := parseRunArgs(args)
+	if err != nil {
+		return err
 	}
-
-	for i := 0; i < len(args); i++ {
-		switch {
-		case args[i] == "--help" || args[i] == "-h":
-			fmt.Fprint(app.Stdout, runHelpText)
-			return nil
-		case args[i] == "--prefer" && i+1 < len(args):
-			preferName = args[i+1]
-			i++ // skip the value
-		case strings.HasPrefix(args[i], "--prefer="):
-			preferName = strings.TrimPrefix(args[i], "--prefer=")
-		case args[i] == "--balance":
-			balance = true
-		case args[i] == "--":
-			// Everything after "--" is forwarded literally to claude.
-			claudeArgs = append(claudeArgs, args[i+1:]...)
-			i = len(args) // break loop
-		default:
-			// Check cx aliases first (e.g., -y → --dangerously-skip-permissions).
-			if mapped, ok := aliases[args[i]]; ok {
-				claudeArgs = append(claudeArgs, mapped)
-				continue
-			}
-			// Unknown flags (--remote-control, --verbose, etc.) pass through to claude.
-			claudeArgs = append(claudeArgs, args[i])
-		}
+	if showHelp {
+		fmt.Fprint(app.Stdout, runHelpText)
+		return nil
 	}
+	preferName := prefer
 
 	if len(reg.Accounts) == 0 {
 		return fmt.Errorf("no accounts configured. Run: cx config add <name>")

@@ -163,8 +163,8 @@ func ParseFileFrom(path string, offset int64, fn func(Entry)) (int64, error) {
 // from a JSONL file path relative to the projects root.
 // Example paths:
 //
-//	"I--google_drive-homebase/abc123.jsonl"           → project="I--google_drive-homebase", subagent=false
-//	"I--google_drive-homebase/abc123/subagents/x.jsonl" → project="I--google_drive-homebase", subagent=true
+//	"D--projects-myapp/abc123.jsonl"           → project="D--projects-myapp", subagent=false
+//	"D--projects-myapp/abc123/subagents/x.jsonl" → project="D--projects-myapp", subagent=true
 func extractPathMeta(relPath string) (project string, isSubagent bool) {
 	// Normalize to forward slashes.
 	rel := filepath.ToSlash(relPath)

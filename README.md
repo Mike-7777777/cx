@@ -73,16 +73,23 @@ cx fixes this. Both accounts stay logged in. Switch in one command. Or let the t
 ```bash
 # Go (recommended)
 go install github.com/Mike-7777777/cx@latest
+```
 
-# macOS
+Or download a pre-built binary from [Releases](https://github.com/Mike-7777777/cx/releases).
+
+<details>
+<summary><b>Homebrew / Scoop (coming soon)</b></summary>
+
+```bash
+# macOS (not yet available)
 brew install Mike-7777777/tap/cx
 
-# Windows
+# Windows (not yet available)
 scoop bucket add cx https://github.com/Mike-7777777/scoop-bucket
 scoop install cx
 ```
 
-Or download a pre-built binary from [Releases](https://github.com/Mike-7777777/cx/releases).
+</details>
 
 ## Quick Start
 

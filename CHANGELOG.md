@@ -7,44 +7,87 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-03-31
+
 ### Added
-- **Runner architecture** — all 17 commands implement `Runner` interface with `Run(ctx, app, args) error`, enabling dependency injection and unit testing
-- **App DI container** — `App` struct holds `Registry`, `Stdout`, `Stderr`, `UseColor`; commands never access `os.Args` or `os.Stdout` directly
-- **context.Context** — threaded through all commands for graceful shutdown
-- **Cross-account session resume** — `cx resume --on <acct>` runs any session on any account; shared `projects/` directory via junction/symlink
-- **Session topic display** — `cx sessions` and `cx resume` show first/last user message as topic
-- **Claude Code skill** — embedded `skill/cx.md` installed by `cx setup`; use `/cx` inside CC
-- **PATH installation** — `cx setup` creates `~/bin/cx` wrapper for non-interactive shells (CC's bash)
-- **Output style display** — statusline shows CC mode (e.g., "Fast") when not default
-- **Global web tooltips** — fixed-position tooltips in web dashboard, no overflow clipping
-- **125+ tests** — switch safety (eval injection), smartScore routing, status output, parseFlags, findWrapperEnd
-- `cx sessions` / `cx resume` — list recent CC sessions across all accounts with topic preview
-- `cx config` — show/main/rename/set email|alias
-- Auto-read identity from `.claude.json` (email, displayName, tier, CC version, session count)
-- `cx status` shows subscription tier column, main marker, and 7d reset date
-- 7d daily budget indicator in statusline: `~14%/d` (green/yellow/red)
-- `cx doctor` auto-fixes stale statusline paths, project-level overrides, and missing junctions
-- Graceful statusline fallback when CC doesn't pipe stdin data
-- GoReleaser config, golangci-lint, CONTRIBUTING.md, SECURITY.md, Makefile
+- **Interactive TUI dashboard** — keyboard navigation (arrow keys, Enter, q), sub-views for accounts (with switch), sessions (with resume), usage hourly, 30-day heatmap, insights, and ROI
+- Raw terminal mode and key reading for Unix and Windows
+- INSIGHTS summary section in dashboard (peak hours, cache ratio)
+- State machine for dashboard navigation with comprehensive tests
+
+## [0.3.0] - 2026-03-31
+
+### Changed
+- Removed web dashboard; TUI dashboard is now the only dashboard mode
 
 ### Fixed
-- `<synthetic>` model entries (CC API errors) no longer pollute model breakdown
-- Rate cache write failures on Windows (replaced atomic temp+rename with direct write)
-- `findWrapperEnd` truncating PowerShell wrappers (now searches for column-0 closing brace)
-- Tooltip flicker when moving between child elements in web dashboard
-- Statusline broken on Windows: backslash paths break Git Bash stdin pipe
-- Account name mismatch when CLAUDE_CONFIG_DIR env var overrides default
-- Path comparison failures on Windows (case sensitivity + separator normalization)
-- `AddAccount` silently wiping email/alias metadata on update
-- PowerShell wrapper infinite recursion (now embeds absolute path)
+- Git hooks use `git diff` for gofmt check (CRLF-safe on Windows)
+
+## [0.2.1] - 2026-03-30
+
+### Fixed
+- Pre-commit/pre-push hooks check committed files, not working tree
+
+### Changed
+- Eliminated regexp dependency, reducing binary size by 236 KB
+
+## [0.2.0] - 2026-03-30
+
+### Added
+- **Runner architecture** — all commands implement `Runner` interface with `Run(ctx, app, args) error`, enabling dependency injection and unit testing
+- **App DI container** — `App` struct holds `Registry`, `Stdout`, `Stderr`, `UseColor`; commands never access `os.Args` or `os.Stdout` directly
+- **context.Context** — threaded through all commands for graceful shutdown
+- `cx predict` — rate limit exhaustion forecasting
+- `cx insights` — hourly, model, project, and efficiency analysis
+- `cx auto` — monitoring daemon with threshold-based switching
+- `cx daemon` — unified daemon combining auto + watch
+- `--yolo` flag for `cx resume`
+- Effort level badge in statusline from CC settings.json
+- 7d headroom-based routing and burn rate indicator in statusline
+- Session pagination with load-more in web dashboard
+- 100+ new tests across all packages
+
+### Fixed
+- Deduplicate sessions from cross-account symlinks
+- Harden boolean flag checks, validate `--on` arg, check main config dir
+- Cross-account resume via symlinked session files
+- Doctor skips main account for junction checks, detects stale copies
+- Web dashboard: ROI math, port parsing, ready endpoint, currency format, contrast
+- Tooltip mouseleave, findWrapperEnd edge case
+- Filter `<synthetic>` model entries from usage parsing
+- Route sync log output through `io.Writer` instead of `os.Stderr`
 
 ### Changed
 - **Breaking**: all `runXxx()` functions replaced by `xxxCmd.Run()` — commands are structs, not functions
-- **Breaking**: `command` struct no longer has `fn func()` field; `legacyCmd` wrapper removed
-- Shared dirs now include `skills/` and `projects/` (cross-account session resume)
+- Renamed `init` to `config add` subcommand
+- Replaced `auto` + `watch` with unified `daemon` command
 - `parseFlags()` replaces manual `os.Args` iteration in all commands
-- `fmt.Fprint*` excluded from errcheck in golangci-lint (CLI stdout output)
-- Renamed "primary" to "main" across entire codebase
-- Other-account statusline line is now opt-in (default off)
 - UI labels centralized in `format/labels.go`
-- Unused code removed; `interface{}` modernized to `any`
+- Renamed "primary" to "main" across entire codebase
+
+## [0.1.0] - 2026-03-26
+
+### Added
+- **Multi-account management** — `cx setup`, `cx switch`, `cx config add`
+- **Smart routing** — `cx run` picks account with lowest 5h usage; `--prefer`, `--balance` modes
+- **Rate limit monitoring** — `cx status` shows all accounts with auth, tier, 5h/7d usage
+- **Statusline integration** — real-time rate limits, cost, context % in Claude Code's status bar (~16ms)
+- **Usage analytics** — daily, weekly, monthly, per-session, per-model breakdowns with JSON/CSV/Markdown export
+- **Config sync** — shared settings, plugins, skills, projects across accounts via junctions/symlinks
+- **Cross-account session resume** — `cx sessions` lists all sessions; `cx resume` with topic preview and `--on` flag
+- **TUI dashboard** — box-drawn terminal UI with accounts, weekly chart, sessions, and ROI
+- **Web dashboard** — embedded HTML with dark theme, charts, and auto-refresh
+- **Claude Code skill** — use `/cx` inside CC to check status and diagnostics
+- **Shell completion** — Bash, Zsh, Fish, PowerShell
+- `cx doctor` — health check with auto-fix for common issues
+- `cx login` — re-authenticate accounts
+- GoReleaser config for cross-platform binaries (Linux, macOS, Windows × amd64, arm64)
+- CI pipeline: gofmt, golangci-lint, govulncheck, 3-platform tests with `-race`
+- 125+ tests across 8 packages
+
+[Unreleased]: https://github.com/Mike-7777777/cx/compare/v0.4.0...HEAD
+[0.4.0]: https://github.com/Mike-7777777/cx/compare/v0.3.0...v0.4.0
+[0.3.0]: https://github.com/Mike-7777777/cx/compare/v0.2.1...v0.3.0
+[0.2.1]: https://github.com/Mike-7777777/cx/compare/v0.2.0...v0.2.1
+[0.2.0]: https://github.com/Mike-7777777/cx/compare/v0.1.0...v0.2.0
+[0.1.0]: https://github.com/Mike-7777777/cx/releases/tag/v0.1.0

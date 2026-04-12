@@ -18,7 +18,7 @@ func TestShortProjectName(t *testing.T) {
 		input string
 		want  string
 	}{
-		{"I--google-drive-homebase", "homebase"},
+		{"D--projects-myapp", "myapp"},
 		{"C--Users-foo-project", "project"},
 		{"single", "single"},
 		{"a-b-c", "c"},

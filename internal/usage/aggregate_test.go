@@ -733,13 +733,13 @@ func TestExtractPathMeta(t *testing.T) {
 		wantSub     bool
 	}{
 		{
-			relPath:     "I--google_drive-homebase/abc123.jsonl",
-			wantProject: "I--google_drive-homebase",
+			relPath:     "D--projects-myapp/abc123.jsonl",
+			wantProject: "D--projects-myapp",
 			wantSub:     false,
 		},
 		{
-			relPath:     "I--google_drive-homebase/abc123/subagents/agent-xyz.jsonl",
-			wantProject: "I--google_drive-homebase",
+			relPath:     "D--projects-myapp/abc123/subagents/agent-xyz.jsonl",
+			wantProject: "D--projects-myapp",
 			wantSub:     true,
 		},
 		{

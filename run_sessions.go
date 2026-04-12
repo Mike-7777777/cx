@@ -23,7 +23,7 @@ type sessionEntry struct {
 	ID         string        `json:"id"`
 	Account    string        `json:"account"`
 	ConfigDir  string        `json:"-"`
-	ProjectDir string        `json:"-"` // raw project directory name (e.g., "I--google-drive-homebase")
+	ProjectDir string        `json:"-"` // raw project directory name (e.g., "D--projects-myapp")
 	Slug       string        `json:"slug,omitempty"`
 	Project    string        `json:"project"`
 	Model      string        `json:"model"`
@@ -351,7 +351,7 @@ func stripTags(s string) string {
 }
 
 // shortProjectName converts a project slug to a short display name.
-// "I--google-drive-homebase" → "homebase"
+// "D--projects-myapp" → "homebase"
 func shortProjectName(slug string) string {
 	parts := strings.Split(slug, "-")
 	if len(parts) > 0 {

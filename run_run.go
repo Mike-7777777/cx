@@ -111,9 +111,9 @@ func parseRunArgs(args []string) (prefer string, balance bool, claudeArgs []stri
 		case args[i] == "--help" || args[i] == "-h":
 			showHelp = true
 			return
-		case args[i] == "--prefer":
+		case args[i] == "--prefer" || args[i] == "-pf":
 			if i+1 >= len(args) {
-				err = fmt.Errorf("--prefer requires an account name")
+				err = fmt.Errorf("%s requires an account name", args[i])
 				return
 			}
 			prefer = args[i+1]
@@ -376,7 +376,7 @@ Usage:
 
 cx-specific options:
   -y, --yolo              Alias for --dangerously-skip-permissions
-  --prefer <name>         Prefer a specific account (falls back if 5h usage >= 80%)
+  -pf, --prefer <name>    Prefer a specific account (falls back if 5h usage >= 80%)
   --balance               Round-robin selection for maximum throughput
   -h, --help              Show this help
 

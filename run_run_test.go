@@ -411,6 +411,23 @@ func TestParseRunArgs_EmptyArgs(t *testing.T) {
 	}
 }
 
+func TestParseRunArgs_PreferShorthand(t *testing.T) {
+	prefer, _, _, _, err := parseRunArgs([]string{"-pf", "work"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if prefer != "work" {
+		t.Errorf("prefer=%q, want work", prefer)
+	}
+}
+
+func TestParseRunArgs_PreferShorthandWithoutValue(t *testing.T) {
+	_, _, _, _, err := parseRunArgs([]string{"-pf"})
+	if err == nil {
+		t.Error("expected error for -pf without value")
+	}
+}
+
 func TestParseRunArgs_ClaudePromptFlag(t *testing.T) {
 	_, _, claudeArgs, _, err := parseRunArgs([]string{"-p", "fix the bug"})
 	if err != nil {

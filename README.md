@@ -112,8 +112,9 @@ After setup:
 ```bash
 cx status             # rate limits + routing recommendation
 cx switch 5x          # switch to 5x account
-cx run                # auto-select best account + launch claude
-cx run --yolo         # auto-select + skip permissions
+cx run                    # auto-select best account + launch claude
+cx run -y                 # skip permissions
+cx run --remote-control   # any claude flag passes through
 cx resume             # resume a session (shows topic + account picker)
 ```
 
@@ -202,7 +203,8 @@ cx completion powershell | Out-String | Invoke-Expression
 | Command | Description |
 |---------|-------------|
 | `switch <name>` | Switch account in current shell |
-| `run [-- claude-args]` | Auto-select best account and launch `claude` |
+| `run [claude-flags...]` | Auto-select best account and launch `claude` |
+| `run -y` | Alias for `--dangerously-skip-permissions` |
 | `run --prefer <name>` | Prefer a specific account (fall back if >80% usage) |
 | `run --balance` | Round-robin across accounts for max throughput |
 | `status` | All accounts: auth, tier, rate limits, recommendation |

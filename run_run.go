@@ -102,8 +102,13 @@ func (c *runCmd) Run(_ context.Context, app *App, args []string) error {
 	// Parse flags that belong to cx; the rest goes to claude.
 	var preferName string
 	var balance bool
-	var yolo bool
 	var claudeArgs []string
+
+	// cx-specific aliases that map to differently-named claude flags.
+	aliases := map[string]string{
+		"-y":     "--dangerously-skip-permissions",
+		"--yolo": "--dangerously-skip-permissions",
+	}
 
 	for i := 0; i < len(args); i++ {
 		switch {
@@ -117,21 +122,19 @@ func (c *runCmd) Run(_ context.Context, app *App, args []string) error {
 			preferName = strings.TrimPrefix(args[i], "--prefer=")
 		case args[i] == "--balance":
 			balance = true
-		case args[i] == "--yolo":
-			yolo = true
 		case args[i] == "--":
 			// Everything after "--" is forwarded literally to claude.
 			claudeArgs = append(claudeArgs, args[i+1:]...)
 			i = len(args) // break loop
 		default:
-			// First non-flag argument: treat the rest as claude args.
-			claudeArgs = append(claudeArgs, args[i:]...)
-			i = len(args) // break loop
+			// Check cx aliases first (e.g., -y → --dangerously-skip-permissions).
+			if mapped, ok := aliases[args[i]]; ok {
+				claudeArgs = append(claudeArgs, mapped)
+				continue
+			}
+			// Unknown flags (--remote-control, --verbose, etc.) pass through to claude.
+			claudeArgs = append(claudeArgs, args[i])
 		}
-	}
-
-	if yolo {
-		claudeArgs = append(claudeArgs, "--dangerously-skip-permissions")
 	}
 
 	if len(reg.Accounts) == 0 {
@@ -355,18 +358,23 @@ func replaceOrAppendEnv(env []string, key, value string) []string {
 const runHelpText = `cx run — auto-select best account and launch claude
 
 Usage:
-  cx run [options] [-- claude-args...]
+  cx run [options] [claude-flags...]
 
-Options:
-  --yolo            Launch with --dangerously-skip-permissions
-  --prefer <name>   Prefer a specific account (falls back if 5h usage >= 80%)
-  --balance         Round-robin selection for maximum throughput
-  --help, -h        Show this help
+cx-specific options:
+  -y, --yolo              Alias for --dangerously-skip-permissions
+  --prefer <name>         Prefer a specific account (falls back if 5h usage >= 80%)
+  --balance               Round-robin selection for maximum throughput
+  -h, --help              Show this help
+
+All other flags are passed through to claude as-is:
+  --remote-control, --verbose, --model, -p, etc.
 
 Examples:
   cx run                    # pick lowest-usage account
-  cx run --yolo             # skip permissions (same as cx run -- --dangerously-skip-permissions)
+  cx run -y                 # skip permissions
+  cx run --remote-control   # enable remote control
+  cx run -y --remote-control  # both
   cx run --prefer work      # prefer "work", fall back if hot
   cx run --balance          # alternate between accounts
-  cx run -- -p "fix bug"   # pass args to claude after --
+  cx run -- -p "fix bug"   # explicit separator (optional for most flags)
 `

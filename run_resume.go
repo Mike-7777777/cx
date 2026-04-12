@@ -91,7 +91,7 @@ Usage:
 	accountName := selected.Account
 
 	if onAccount == "true" {
-		return fmt.Errorf("--on requires an account name (e.g. --on personal)")
+		return fmt.Errorf("--on requires an account name (e.g. --on work)")
 	}
 	if onAccount == "" {
 		// Interactive: if multiple accounts exist, ask which one to use.

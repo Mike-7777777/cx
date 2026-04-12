@@ -49,11 +49,11 @@ func TestParseFlags_KeyValue(t *testing.T) {
 }
 
 func TestParseFlags_SpaceSeparated(t *testing.T) {
-	args := []string{"--on", "personal", "some-term"}
+	args := []string{"--on", "work", "some-term"}
 	flags, pos := parseFlags(args, "on")
 
-	if flags["on"] != "personal" {
-		t.Errorf("on=%q, want personal", flags["on"])
+	if flags["on"] != "work" {
+		t.Errorf("on=%q, want work", flags["on"])
 	}
 	if len(pos) != 1 || pos[0] != "some-term" {
 		t.Errorf("positional=%v, want [some-term]", pos)

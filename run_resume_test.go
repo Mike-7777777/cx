@@ -206,9 +206,9 @@ func TestResume_LastFlag(t *testing.T) {
 
 func TestDeduplicateSessions(t *testing.T) {
 	sessions := []sessionEntry{
-		{ID: "session-1", Account: "work", Age: 2 * time.Minute, ConfigDir: "/a"},
-		{ID: "session-1", Account: "personal", Age: 1 * time.Minute, ConfigDir: "/b"},
-		{ID: "session-2", Account: "work", Age: 5 * time.Minute, ConfigDir: "/a"},
+		{ID: "session-1", Account: "acct1", Age: 2 * time.Minute, ConfigDir: "/a"},
+		{ID: "session-1", Account: "acct2", Age: 1 * time.Minute, ConfigDir: "/b"},
+		{ID: "session-2", Account: "acct1", Age: 5 * time.Minute, ConfigDir: "/a"},
 	}
 	got := deduplicateSessions(sessions)
 	if len(got) != 2 {
@@ -216,8 +216,8 @@ func TestDeduplicateSessions(t *testing.T) {
 	}
 	for _, s := range got {
 		if s.ID == "session-1" {
-			if s.Account != "personal" {
-				t.Errorf("session-1: expected account personal (smaller Age), got %s", s.Account)
+			if s.Account != "acct2" {
+				t.Errorf("session-1: expected account acct2 (smaller Age), got %s", s.Account)
 			}
 			if s.Age != 1*time.Minute {
 				t.Errorf("session-1: expected Age 1m, got %v", s.Age)

@@ -7,6 +7,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.5.0] - 2026-04-12
+
+### Added
+- **Flag pass-through** — unknown flags (`--remote-control`, `--verbose`, `-p`, etc.) now pass through to claude as-is; cx never needs updating when claude adds new flags
+- `-y` shorthand alias for `--dangerously-skip-permissions` in both `cx run` and `cx resume`
+- `parseRunArgs()` extracted as testable function with 12 new tests covering alias expansion, pass-through, mixed flags, `--` separator, and edge cases
+
+### Fixed
+- `--prefer` without a value now returns a clear error instead of silently passing to claude
+- `-y` works in `cx resume` (consistency with `cx run`)
+- Stale doc comment in `shortProjectName` (wrong example output)
+- Personal path examples replaced with generic `D--projects-myapp`
+
+### Changed
+- `runAliases` moved to package-level variable for clarity
+- README: Homebrew/Scoop install moved to "coming soon" (repos created but not yet populated)
+- CHANGELOG restructured with versioned entries and comparison links
+- GitHub Actions dependencies updated (checkout v6, setup-go v6)
+
 ## [0.4.0] - 2026-03-31
 
 ### Added
@@ -85,7 +104,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - CI pipeline: gofmt, golangci-lint, govulncheck, 3-platform tests with `-race`
 - 125+ tests across 8 packages
 
-[Unreleased]: https://github.com/Mike-7777777/cx/compare/v0.4.0...HEAD
+[Unreleased]: https://github.com/Mike-7777777/cx/compare/v0.5.0...HEAD
+[0.5.0]: https://github.com/Mike-7777777/cx/compare/v0.4.0...v0.5.0
 [0.4.0]: https://github.com/Mike-7777777/cx/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/Mike-7777777/cx/compare/v0.2.1...v0.3.0
 [0.2.1]: https://github.com/Mike-7777777/cx/compare/v0.2.0...v0.2.1

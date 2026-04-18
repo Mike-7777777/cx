@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added
+- `cx resume` now supports the same flag semantics as `cx run`: `--prefer <acct>` / `-pf` (soft selection with rate-limit fallback), `-y` / `--yolo` alias, and pass-through of unknown flags to claude (`--remote-control`, `--model sonnet`, etc.)
+- `parseResumeArgs()` extracted as a testable function with full coverage (help, last, on, prefer, yolo, passthrough, `--` separator, mutual exclusion, regression tests)
+
+### Fixed
+- `cx resume --rc --yolo --prefer QM` no longer fails with `no session matching "--rc"`. Unknown `--flags` previously fell into the positional search term; they now pass through to claude, and `--prefer` is recognised as a cx flag
+- `cx resume` interactive picker no longer silently caps the list at 15 sessions — every collected session is shown, and the collect step no longer caps at 50 either. Narrow large histories with a leading fuzzy term (`cx resume <term>`).
+
+### Changed
+- `cx resume` search term must now be the FIRST positional arg. This disambiguates cases like `cx resume --model sonnet` (passes `--model sonnet` to claude) from `cx resume fix-bug --model sonnet` (searches for `fix-bug`, passes `--model sonnet` to claude).
+- `--on` and `--prefer` in `cx resume` are mutually exclusive; passing both returns an explicit error instead of silently preferring one.
+
 ## [0.5.0] - 2026-04-12
 
 ### Added

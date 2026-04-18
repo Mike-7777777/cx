@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -201,6 +202,241 @@ func TestResume_LastFlag(t *testing.T) {
 	selected := &sessions[0]
 	if selected.ID == "" {
 		t.Error("selected session has empty ID")
+	}
+}
+
+func TestParseResumeArgs_Empty(t *testing.T) {
+	opts, err := parseResumeArgs(nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if opts.showHelp || opts.last || opts.on != "" || opts.prefer != "" ||
+		opts.searchTerm != "" || len(opts.claudeArgs) != 0 {
+		t.Errorf("empty args should be zero-valued: %+v", opts)
+	}
+}
+
+func TestParseResumeArgs_Help(t *testing.T) {
+	for _, a := range []string{"--help", "-h"} {
+		opts, err := parseResumeArgs([]string{a})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !opts.showHelp {
+			t.Errorf("%s should set showHelp", a)
+		}
+	}
+}
+
+func TestParseResumeArgs_Last(t *testing.T) {
+	opts, err := parseResumeArgs([]string{"--last"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !opts.last {
+		t.Error("--last should set last=true")
+	}
+}
+
+func TestParseResumeArgs_On(t *testing.T) {
+	cases := []struct {
+		args []string
+		want string
+	}{
+		{[]string{"--on", "work"}, "work"},
+		{[]string{"--on=work"}, "work"},
+	}
+	for _, tc := range cases {
+		opts, err := parseResumeArgs(tc.args)
+		if err != nil {
+			t.Fatalf("%v: %v", tc.args, err)
+		}
+		if opts.on != tc.want {
+			t.Errorf("%v: on=%q, want %q", tc.args, opts.on, tc.want)
+		}
+	}
+}
+
+func TestParseResumeArgs_OnMissingValue(t *testing.T) {
+	for _, args := range [][]string{{"--on"}, {"--on="}} {
+		if _, err := parseResumeArgs(args); err == nil {
+			t.Errorf("%v: expected error", args)
+		}
+	}
+}
+
+func TestParseResumeArgs_Prefer(t *testing.T) {
+	cases := []struct {
+		args []string
+		want string
+	}{
+		{[]string{"--prefer", "QM"}, "QM"},
+		{[]string{"--prefer=QM"}, "QM"},
+		{[]string{"-pf", "QM"}, "QM"},
+	}
+	for _, tc := range cases {
+		opts, err := parseResumeArgs(tc.args)
+		if err != nil {
+			t.Fatalf("%v: %v", tc.args, err)
+		}
+		if opts.prefer != tc.want {
+			t.Errorf("%v: prefer=%q, want %q", tc.args, opts.prefer, tc.want)
+		}
+	}
+}
+
+func TestParseResumeArgs_PreferMissingValue(t *testing.T) {
+	for _, args := range [][]string{{"--prefer"}, {"-pf"}, {"--prefer="}} {
+		if _, err := parseResumeArgs(args); err == nil {
+			t.Errorf("%v: expected error", args)
+		}
+	}
+}
+
+func TestParseResumeArgs_OnAndPreferMutuallyExclusive(t *testing.T) {
+	_, err := parseResumeArgs([]string{"--on", "a", "--prefer", "b"})
+	if err == nil || !strings.Contains(err.Error(), "mutually exclusive") {
+		t.Errorf("expected mutually-exclusive error, got %v", err)
+	}
+}
+
+func TestParseResumeArgs_YoloExpandsToDangerousFlag(t *testing.T) {
+	for _, a := range []string{"-y", "--yolo"} {
+		opts, err := parseResumeArgs([]string{a})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(opts.claudeArgs) != 1 || opts.claudeArgs[0] != "--dangerously-skip-permissions" {
+			t.Errorf("%s: claudeArgs=%v, want [--dangerously-skip-permissions]", a, opts.claudeArgs)
+		}
+	}
+}
+
+func TestParseResumeArgs_SearchTerm(t *testing.T) {
+	opts, err := parseResumeArgs([]string{"fix-bug"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if opts.searchTerm != "fix-bug" {
+		t.Errorf("searchTerm=%q, want fix-bug", opts.searchTerm)
+	}
+}
+
+func TestParseResumeArgs_UnknownFlagsPassToClaude(t *testing.T) {
+	// --model sonnet survives intact because the search-term-first rule means
+	// bare words after a flag are not treated as search terms.
+	opts, err := parseResumeArgs([]string{"--remote-control", "-rc", "--model", "sonnet"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if opts.searchTerm != "" {
+		t.Errorf("searchTerm=%q, want empty (no leading positional)", opts.searchTerm)
+	}
+	want := []string{"--remote-control", "-rc", "--model", "sonnet"}
+	if len(opts.claudeArgs) != len(want) {
+		t.Fatalf("claudeArgs=%v, want %v", opts.claudeArgs, want)
+	}
+	for i, v := range want {
+		if opts.claudeArgs[i] != v {
+			t.Errorf("claudeArgs[%d]=%q, want %q", i, opts.claudeArgs[i], v)
+		}
+	}
+}
+
+// TestParseResumeArgs_TermFirstThenClaudeFlagValue verifies that a leading
+// search term plus a value-bearing claude flag (--model sonnet) parses
+// unambiguously: term=fix-bug, claudeArgs=[--model, sonnet].
+func TestParseResumeArgs_TermFirstThenClaudeFlagValue(t *testing.T) {
+	opts, err := parseResumeArgs([]string{"fix-bug", "--model", "sonnet"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if opts.searchTerm != "fix-bug" {
+		t.Errorf("searchTerm=%q, want fix-bug", opts.searchTerm)
+	}
+	want := []string{"--model", "sonnet"}
+	if len(opts.claudeArgs) != len(want) {
+		t.Fatalf("claudeArgs=%v, want %v", opts.claudeArgs, want)
+	}
+	for i, v := range want {
+		if opts.claudeArgs[i] != v {
+			t.Errorf("claudeArgs[%d]=%q, want %q", i, opts.claudeArgs[i], v)
+		}
+	}
+}
+
+// TestParseResumeArgs_DoubleDashSeparator verifies explicit passthrough.
+func TestParseResumeArgs_DoubleDashSeparator(t *testing.T) {
+	opts, err := parseResumeArgs([]string{"--last", "--", "-p", "continue"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !opts.last {
+		t.Error("--last before -- should still be consumed")
+	}
+	if len(opts.claudeArgs) != 2 || opts.claudeArgs[0] != "-p" || opts.claudeArgs[1] != "continue" {
+		t.Errorf("claudeArgs=%v, want [-p continue]", opts.claudeArgs)
+	}
+}
+
+// TestParseResumeArgs_Regression_RcYoloPreferQM is the exact user bug report:
+// `cx resume --rc --yolo --prefer QM` used to fail with "no session matching
+// --rc". It must now parse as prefer=QM, claudeArgs=[--rc, --dangerously-skip-permissions].
+func TestParseResumeArgs_Regression_RcYoloPreferQM(t *testing.T) {
+	opts, err := parseResumeArgs([]string{"--rc", "--yolo", "--prefer", "QM"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if opts.prefer != "QM" {
+		t.Errorf("prefer=%q, want QM", opts.prefer)
+	}
+	if opts.searchTerm != "" {
+		t.Errorf("searchTerm=%q, want empty (not a search term)", opts.searchTerm)
+	}
+	want := []string{"--rc", "--dangerously-skip-permissions"}
+	if len(opts.claudeArgs) != len(want) {
+		t.Fatalf("claudeArgs=%v, want %v", opts.claudeArgs, want)
+	}
+	for i, v := range want {
+		if opts.claudeArgs[i] != v {
+			t.Errorf("claudeArgs[%d]=%q, want %q", i, opts.claudeArgs[i], v)
+		}
+	}
+}
+
+// TestParseResumeArgs_Regression_DashRc covers the `-rc` single-dash variant
+// (user's second attempt). Should also pass through unchanged.
+func TestParseResumeArgs_Regression_DashRc(t *testing.T) {
+	opts, err := parseResumeArgs([]string{"-rc", "--yolo", "--prefer", "QM"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if opts.prefer != "QM" {
+		t.Errorf("prefer=%q, want QM", opts.prefer)
+	}
+	if opts.searchTerm != "" {
+		t.Errorf("searchTerm=%q, want empty", opts.searchTerm)
+	}
+	// -rc goes to claudeArgs because it starts with - and is not in runAliases
+	// and is not known to cx.
+	if !slices.Contains(opts.claudeArgs, "-rc") {
+		t.Errorf("expected -rc in claudeArgs, got %v", opts.claudeArgs)
+	}
+}
+
+func TestParseResumeArgs_TermAndFlagsTogether(t *testing.T) {
+	opts, err := parseResumeArgs([]string{"fix-bug", "--prefer", "QM", "--remote-control"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if opts.searchTerm != "fix-bug" {
+		t.Errorf("searchTerm=%q, want fix-bug", opts.searchTerm)
+	}
+	if opts.prefer != "QM" {
+		t.Errorf("prefer=%q, want QM", opts.prefer)
+	}
+	if len(opts.claudeArgs) != 1 || opts.claudeArgs[0] != "--remote-control" {
+		t.Errorf("claudeArgs=%v, want [--remote-control]", opts.claudeArgs)
 	}
 }
 

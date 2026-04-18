@@ -437,3 +437,30 @@ func TestParseRunArgs_ClaudePromptFlag(t *testing.T) {
 		t.Errorf("claudeArgs=%v, want [-p fix the bug]", claudeArgs)
 	}
 }
+
+// TestParseRunArgs_DashRcYoloPreferQM verifies the symmetric behaviour with
+// cx resume: `cx run -rc --yolo --prefer QM` routes to QM with -rc and
+// --dangerously-skip-permissions forwarded to claude.
+func TestParseRunArgs_DashRcYoloPreferQM(t *testing.T) {
+	prefer, balance, claudeArgs, showHelp, err := parseRunArgs(
+		[]string{"-rc", "--yolo", "--prefer", "QM"},
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if showHelp || balance {
+		t.Errorf("unexpected cx state: showHelp=%v balance=%v", showHelp, balance)
+	}
+	if prefer != "QM" {
+		t.Errorf("prefer=%q, want QM", prefer)
+	}
+	want := []string{"-rc", "--dangerously-skip-permissions"}
+	if len(claudeArgs) != len(want) {
+		t.Fatalf("claudeArgs=%v, want %v", claudeArgs, want)
+	}
+	for i, v := range want {
+		if claudeArgs[i] != v {
+			t.Errorf("claudeArgs[%d]=%q, want %q", i, claudeArgs[i], v)
+		}
+	}
+}

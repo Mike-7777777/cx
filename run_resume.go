@@ -16,75 +16,158 @@ import (
 // resumeCmd implements Runner for the "resume" subcommand.
 type resumeCmd struct{}
 
-// Run resumes a CC session with smart matching.
-func (c *resumeCmd) Run(_ context.Context, app *App, args []string) error {
-	// Expand -y alias before parseFlags (consistent with cx run).
-	for i, a := range args {
-		if a == "-y" {
-			args[i] = "--yolo"
+// resumeOpts holds parsed arguments for cx resume.
+type resumeOpts struct {
+	showHelp   bool
+	last       bool
+	on         string
+	prefer     string
+	searchTerm string
+	claudeArgs []string
+}
+
+// parseResumeArgs splits args into cx-specific options, a fuzzy search term,
+// and claude pass-through args.
+//
+// cx consumes: --help/-h, --last, --on, --prefer/-pf, --yolo/-y.
+// The search term (if any) MUST be the first positional arg — this keeps
+// parsing unambiguous when claude flags take values (e.g. `--model sonnet`).
+// All other args (including unknown flags like --remote-control, --model)
+// are forwarded to claude as-is, mirroring cx run's behaviour. A literal "--"
+// separator forwards everything after it verbatim.
+//
+// --on and --prefer are mutually exclusive: --on forces an account (error if
+// missing), --prefer selects an account with rate-limit fallback.
+func parseResumeArgs(args []string) (opts resumeOpts, err error) {
+	// First bare positional arg (if present before any flag) is the search term.
+	start := 0
+	if len(args) > 0 && !strings.HasPrefix(args[0], "-") {
+		opts.searchTerm = args[0]
+		start = 1
+	}
+
+	for i := start; i < len(args); i++ {
+		a := args[i]
+		switch {
+		case a == "--help" || a == "-h":
+			opts.showHelp = true
+			return
+		case a == "--last":
+			opts.last = true
+		case a == "--on":
+			if i+1 >= len(args) {
+				err = fmt.Errorf("--on requires an account name")
+				return
+			}
+			opts.on = args[i+1]
+			i++
+		case strings.HasPrefix(a, "--on="):
+			opts.on = strings.TrimPrefix(a, "--on=")
+			if opts.on == "" {
+				err = fmt.Errorf("--on requires an account name")
+				return
+			}
+		case a == "--prefer" || a == "-pf":
+			if i+1 >= len(args) {
+				err = fmt.Errorf("%s requires an account name", a)
+				return
+			}
+			opts.prefer = args[i+1]
+			i++
+		case strings.HasPrefix(a, "--prefer="):
+			opts.prefer = strings.TrimPrefix(a, "--prefer=")
+			if opts.prefer == "" {
+				err = fmt.Errorf("--prefer requires an account name")
+				return
+			}
+		case a == "--":
+			opts.claudeArgs = append(opts.claudeArgs, args[i+1:]...)
+			return
+		default:
+			if mapped, ok := runAliases[a]; ok {
+				opts.claudeArgs = append(opts.claudeArgs, mapped)
+				continue
+			}
+			opts.claudeArgs = append(opts.claudeArgs, a)
 		}
 	}
-	flags, positional := parseFlags(args, "last", "on", "yolo")
+	if opts.on != "" && opts.prefer != "" {
+		err = fmt.Errorf("--on and --prefer are mutually exclusive")
+		return
+	}
+	return
+}
 
-	// Check for help flag.
-	for _, arg := range args {
-		if arg == "--help" || arg == "-h" {
-			fmt.Fprint(app.Stdout, `cx resume — resume a CC session with smart matching
+const resumeHelpText = `cx resume — resume a CC session with smart matching
 
 Usage:
-  cx resume              Interactive picker (numbered list)
-  cx resume <term>       Fuzzy match by slug, project, or account name
-  cx resume --last       Resume the most recent session (any account)
-  cx resume --on <acct>  Run session on a specific account (cross-account resume)
-  cx resume -y           Resume with --dangerously-skip-permissions (alias: --yolo)
-`)
-			return nil
-		}
+  cx resume [options] [term] [claude-flags...]
+
+cx-specific options:
+  --last                   Resume the most recent session (any account)
+  --on <acct>              Force a specific account (error if unknown)
+  -pf, --prefer <acct>     Prefer an account (falls back if 5h usage >= 80%)
+  -y, --yolo               Alias for --dangerously-skip-permissions
+  -h, --help               Show this help
+
+[term] (optional, must be FIRST) fuzzy-matches against session slug,
+project, account, or ID prefix. Putting the term first avoids ambiguity
+with claude flags that take values (e.g. --model sonnet).
+All other flags are forwarded to claude (e.g. --remote-control, --model).
+
+Examples:
+  cx resume                           # Interactive picker
+  cx resume fix-bug                   # Match session by slug
+  cx resume --last --prefer QM        # Most recent session, prefer QM
+  cx resume -y --remote-control       # Yolo + remote-control
+  cx resume -- -p "continue task"     # Explicit separator for claude args
+`
+
+// Run resumes a CC session with smart matching.
+func (c *resumeCmd) Run(_ context.Context, app *App, args []string) error {
+	opts, err := parseResumeArgs(args)
+	if err != nil {
+		return err
+	}
+	if opts.showHelp {
+		fmt.Fprint(app.Stdout, resumeHelpText)
+		return nil
 	}
 
-	_, isLast := flags["last"]
-	onAccount := flags["on"]
-	_, isYolo := flags["yolo"]
-
-	searchTerm := ""
-	if len(positional) > 0 {
-		searchTerm = positional[0]
-	}
-
-	// Collect sessions.
-	sessions := collectSessions(app.Registry, "", 50)
+	// Collect every session across every account. No limit: the picker
+	// needs the full list so users can pick older sessions, and fuzzy
+	// search benefits from matching across the whole history.
+	sessions := collectSessions(app.Registry, "", 0)
 	if len(sessions) == 0 {
 		return fmt.Errorf("no sessions found")
 	}
 
 	var selected *sessionEntry
 
-	if isLast {
+	switch {
+	case opts.last:
 		selected = &sessions[0]
-	} else if searchTerm != "" {
-		// Fuzzy match against slug, project, account, or ID.
+	case opts.searchTerm != "":
 		var matches []sessionEntry
-		term := strings.ToLower(searchTerm)
+		term := strings.ToLower(opts.searchTerm)
 		for _, s := range sessions {
 			if strings.Contains(strings.ToLower(s.Slug), term) ||
 				strings.Contains(strings.ToLower(s.Project), term) ||
 				strings.Contains(strings.ToLower(s.Account), term) ||
-				strings.HasPrefix(s.ID, searchTerm) {
+				strings.HasPrefix(s.ID, opts.searchTerm) {
 				matches = append(matches, s)
 			}
 		}
 
 		if len(matches) == 0 {
-			return fmt.Errorf("no session matching %q", searchTerm)
+			return fmt.Errorf("no session matching %q", opts.searchTerm)
 		}
 		if len(matches) == 1 {
 			selected = &matches[0]
 		} else {
-			// Multiple matches — show picker with filtered results.
 			selected = pickSession(matches, app.Registry, app.Stderr)
 		}
-	} else {
-		// No args — interactive picker.
+	default:
 		selected = pickSession(sessions, app.Registry, app.Stderr)
 	}
 
@@ -95,23 +178,34 @@ Usage:
 	// Determine which account to run on.
 	configDir := selected.ConfigDir
 	accountName := selected.Account
+	var preferReason string
 
-	if onAccount == "true" {
-		return fmt.Errorf("--on requires an account name (e.g. --on work)")
-	}
-	if onAccount == "" {
-		// Interactive: if multiple accounts exist, ask which one to use.
-		if app.Registry != nil && len(app.Registry.Accounts) > 1 {
-			configDir, accountName = pickAccount(app.Registry, selected.Account, app.Stderr)
-		}
-	} else {
+	switch {
+	case opts.on != "":
 		if app.Registry != nil {
-			dir, err := app.Registry.ResolveConfigDir(onAccount)
+			dir, err := app.Registry.ResolveConfigDir(opts.on)
 			if err != nil {
-				return fmt.Errorf("unknown account %q", onAccount)
+				return fmt.Errorf("unknown account %q", opts.on)
 			}
 			configDir = dir
-			accountName = onAccount
+			accountName = opts.on
+		}
+	case opts.prefer != "":
+		if app.Registry != nil {
+			scores := scoreAccounts(app.Registry)
+			scores = ensureAllAccounts(app.Registry, scores)
+			if len(scores) == 0 {
+				return fmt.Errorf("no accounts available")
+			}
+			chosen, reason := selectPreferred(scores, opts.prefer)
+			configDir = chosen.dir
+			accountName = chosen.name
+			preferReason = reason
+		}
+	default:
+		// No explicit account choice — ask interactively when ambiguous.
+		if app.Registry != nil && len(app.Registry.Accounts) > 1 {
+			configDir, accountName = pickAccount(app.Registry, selected.Account, app.Stderr)
 		}
 	}
 
@@ -140,13 +234,16 @@ Usage:
 		}
 	}
 
-	fmt.Fprintf(app.Stderr, "[cx] Resuming %q on account %s\n", displaySlug(selected), accountName)
+	if preferReason != "" {
+		fmt.Fprintf(app.Stderr, "[cx] Resuming %q on account %s %s\n",
+			displaySlug(selected), accountName, preferReason)
+	} else {
+		fmt.Fprintf(app.Stderr, "[cx] Resuming %q on account %s\n",
+			displaySlug(selected), accountName)
+	}
 
 	env := replaceOrAppendEnv(os.Environ(), "CLAUDE_CONFIG_DIR", configDir)
-	claudeArgs := []string{"--resume", selected.ID}
-	if isYolo {
-		claudeArgs = append(claudeArgs, "--dangerously-skip-permissions")
-	}
+	claudeArgs := append([]string{"--resume", selected.ID}, opts.claudeArgs...)
 	if err := platform.ExecProgram("claude", claudeArgs, env); err != nil {
 		return fmt.Errorf("failed to exec claude: %v", err)
 	}
@@ -193,12 +290,12 @@ func pickAccount(reg *config.Registry, defaultAccount string, w io.Writer) (stri
 }
 
 // pickSession shows a numbered list and reads user choice from stdin.
+// Every collected session is listed — no silent truncation — so the user
+// can reach older work. Narrow the list with a fuzzy `cx resume <term>`
+// when history grows large.
 func pickSession(sessions []sessionEntry, reg *config.Registry, w io.Writer) *sessionEntry {
 
 	max := len(sessions)
-	if max > 15 {
-		max = 15
-	}
 
 	fmt.Fprintln(w)
 	fmt.Fprintf(w, "       %-4s  %-8s  %s\n", "Acct", "Age", "Topic")
